@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hermes Provider Config"
+  short_description: "Configure Hermes profile URL/API credentials safely."
+  default_prompt: "Configure Hermes profiles to use the requested provider URL and API key, then verify wake-up with a smoke test."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multi Requirement Checklist"
+  short_description: "Track multi-step asks with per-item verification."
+  default_prompt: "Use this skill when a user gives multiple requirements in one request and you need a temporary markdown checklist with per-item verification and cleanup at the end."

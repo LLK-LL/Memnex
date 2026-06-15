@@ -1,0 +1,49 @@
+﻿{
+    "synced_at_utc":  "2026-06-15T10:08:07.9138589Z",
+    "repository":  "LLK-LL/AI-brain",
+    "system_layer":  "memory-system",
+    "data_layer":  "memory-data/current",
+    "latest_memory_export_source":  "C:\\Users\\Administrator\\.tam\\backups\\export_all_20260615_100536.json",
+    "sources":  {
+                    "tam_backups":  "C:\\Users\\Administrator\\.tam\\backups",
+                    "tam_database":  "C:\\Users\\Administrator\\.tam\\memory.db",
+                    "codex_memories":  "C:\\Users\\Administrator\\.codex\\memories",
+                    "codex_rules":  "C:\\Users\\Administrator\\.codex\\rules",
+                    "codex_skills":  "C:\\Users\\Administrator\\.codex\\skills",
+                    "agents_skills":  "C:\\Users\\Administrator\\.agents\\skills",
+                    "codex_templates":  "C:\\Users\\Administrator\\.codex\\templates",
+                    "codex_preferences":  [
+                                              "C:\\Users\\Administrator\\.codex\\AGENTS.md",
+                                              "C:\\Users\\Administrator\\.codex\\config.toml",
+                                              "C:\\Users\\Administrator\\.codex\\.codex-global-state.json"
+                                          ]
+                },
+    "safety":  {
+                   "excluded_directories":  [
+                                                ".git",
+                                                "__pycache__",
+                                                ".pytest_cache",
+                                                ".mypy_cache",
+                                                ".ruff_cache",
+                                                "node_modules"
+                                            ],
+                   "excluded_file_patterns":  [
+                                                  "*.log",
+                                                  "*.tmp",
+                                                  "*.bak",
+                                                  "*.sqlite-shm",
+                                                  "*.sqlite-wal"
+                                              ],
+                   "redacted_preference_keywords":  [
+                                                        "api_key",
+                                                        "token",
+                                                        "secret",
+                                                        "password",
+                                                        "credential",
+                                                        "auth",
+                                                        "bearer",
+                                                        "cookie",
+                                                        "session"
+                                                    ]
+               }
+}

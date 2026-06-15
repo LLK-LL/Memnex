@@ -1,0 +1,7 @@
+interface:
+  display_name: "Chinese_paper_writing"
+  short_description: "中文科技论文、中期报告与答辩材料写作"
+  default_prompt: "Use $chinese-paper-writing to plan, draft, polish, or review my Chinese scientific paper, thesis midterm report, or defense material."
+
+policy:
+  allow_implicit_invocation: true

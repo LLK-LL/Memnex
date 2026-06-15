@@ -1,0 +1,4 @@
+interface:
+  display_name: "Igor Remote Codex"
+  short_description: "Operate the remote server Codex CLI named ра╦Й╤Ш."
+  default_prompt: "Use $igor-remote-codex to check or operate ра╦Й╤Ш, the remote server Codex CLI."

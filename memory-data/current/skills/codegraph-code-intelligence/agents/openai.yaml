@@ -1,0 +1,4 @@
+interface:
+  display_name: "CodeGraph Code Intelligence"
+  short_description: "Use local CodeGraph for repo insight."
+  default_prompt: "Use CodeGraph to inspect this repository before broad manual file search."

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Memory RAG Optimization"
+  short_description: "Optimize memory recall for low-token RAG workflows."
+  default_prompt: "Use $memory-rag-optimization to reduce token-heavy memory recall while preserving useful context."
+
+policy:
+  allow_implicit_invocation: true

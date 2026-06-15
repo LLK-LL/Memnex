@@ -1,0 +1,7 @@
+interface:
+  display_name: "OpenRadioss K-File Compatibility"
+  short_description: "Repair LS-DYNA K files for OpenRadioss."
+  default_prompt: "Use $openradioss-kfile-compatibility to scan and conservatively repair this K file."
+
+policy:
+  allow_implicit_invocation: true

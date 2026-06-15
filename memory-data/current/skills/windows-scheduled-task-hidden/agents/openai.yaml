@@ -1,0 +1,7 @@
+interface:
+  display_name: "Windows Scheduled Task Hidden"
+  short_description: "Hide scheduled PowerShell task windows safely."
+  default_prompt: "Use $windows-scheduled-task-hidden to stop this scheduled task or watchdog from flashing a console window."
+
+policy:
+  allow_implicit_invocation: true
