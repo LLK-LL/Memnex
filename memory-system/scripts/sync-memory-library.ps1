@@ -175,7 +175,7 @@ $manifest = [ordered]@{
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $dataRoot "manifest.json") -Encoding UTF8
 
 Write-Step "Preparing git commit"
-git add README.md .gitignore memory-system memory-data
+git add README.md .gitignore .gitattributes memory-system memory-data
 $status = git status --porcelain
 if ([string]::IsNullOrWhiteSpace($status)) {
     Write-Step "No changes to commit"
