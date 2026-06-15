@@ -16,7 +16,7 @@ $action = New-ScheduledTaskAction `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$syncScript`" -RepositoryRoot `"$RepositoryRoot`""
 
 $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At $At
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel LeastPrivilege
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew
 
 Register-ScheduledTask `
