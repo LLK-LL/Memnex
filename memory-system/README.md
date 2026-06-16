@@ -1,10 +1,10 @@
 # Memory System
 
-This directory contains the durable system layer for the AI-brain memory vault.
+This directory contains the durable system layer for the Memnex memory vault.
 
 ## Layering
 
-AI-brain stores system logic and live knowledge separately:
+Memnex stores system logic and live knowledge separately:
 
 | Layer | Path | Purpose |
 | --- | --- | --- |

@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step {
     param([string]$Message)
-    Write-Host "[AI-brain] $Message"
+    Write-Host "[Memnex] $Message"
 }
 
 function New-CleanDirectory {

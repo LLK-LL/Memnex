@@ -1,5 +1,5 @@
 param(
-    [string]$TaskName = "AI-brain weekly memory sync",
+    [string]$TaskName = "Memnex weekly memory sync",
     [string]$RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path,
     [string]$At = "09:00"
 )
@@ -25,7 +25,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Principal $principal `
     -Settings $settings `
-    -Description "Weekly sync of AI-brain memory, rules, skills, and preferences to GitHub." `
+    -Description "Weekly sync of Memnex memory, rules, skills, and preferences to GitHub." `
     -Force | Out-Null
 
 Write-Host "Installed scheduled task '$TaskName' for every Monday at $At."

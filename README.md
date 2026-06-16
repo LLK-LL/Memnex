@@ -1,20 +1,20 @@
-# AI-brain
+# Memnex
 
 **Language:** English | [简体中文](README.zh-CN.md)
 
 **Repository:** [LLK-LL/AI-brain](https://github.com/LLK-LL/AI-brain)
 
-AI-brain is a lightweight local memory system for personal AI agents.
+**Memnex** is a lightweight local memory system for personal AI agents. The name comes from **Memory + Nexus**: memory means durable experience, preferences, rules, and skills; nexus means the connecting hub that links those fragments into a usable personal AI memory network.
 
-It is not a heavy enterprise agent platform, and it is not just a folder of chat summaries. AI-brain is closer to a personal "brain drive" for AI: it continuously organizes your experience, preferences, rules, skills, workflows, and hard-won lessons so that your AI assistant can remember how you work and reuse what you have already trained it to do.
+It is not a heavy enterprise agent platform, and it is not just a folder of chat summaries. Memnex is closer to a personal "brain drive" for AI: it continuously organizes your experience, preferences, rules, skills, workflows, and hard-won lessons so that your AI assistant can remember how you work and reuse what you have already trained it to do.
 
-If you use Codex-style agents, Claude, ChatGPT, local agents, or MCP memory tools every day, AI-brain helps solve a familiar problem:
+If you use Codex-style agents, Claude, ChatGPT, local agents, or MCP memory tools every day, Memnex helps solve a familiar problem:
 
 > Your AI gets smarter during a task, then forgets the useful parts when the next session starts.
 
-AI-brain turns that fragile local state into a reviewable, recoverable, and portable personal memory vault.
+Memnex turns that fragile local state into a reviewable, recoverable, and portable personal memory vault.
 
-## Why AI-brain?
+## Why Memnex?
 
 Most AI memory tools focus on one of several directions:
 
@@ -26,7 +26,7 @@ Most AI memory tools focus on one of several directions:
 | Local MCP memory layers | OpenMemory and similar tools | Sharing memory across AI clients | Often focused on storing and retrieving memories only |
 | Personal knowledge RAG | Obsidian AI, Khoj, local document assistants | Asking questions over notes and documents | Great for document search, less focused on agent behavior, rules, and skills |
 
-AI-brain takes a smaller and more personal route.
+Memnex takes a smaller and more personal route.
 
 It does not try to become another large AI platform. Instead, it preserves the training assets that already live on your machine: memories, rules, skills, preferences, templates, exports, and snapshots. That makes it especially useful for individuals who want a personal AI assistant that becomes more aligned over time without requiring a complex backend.
 
@@ -34,7 +34,7 @@ It does not try to become another large AI platform. Instead, it preserves the t
 
 ### Lightweight enough for personal use
 
-AI-brain is built around local files, structured exports, Git versioning, and scheduled sync.
+Memnex is built around local files, structured exports, Git versioning, and scheduled sync.
 
 - Local-first and user-controlled.
 - Easy to inspect with normal file tools.
@@ -46,7 +46,7 @@ This makes it practical for everyday users: researchers, developers, writers, bu
 
 ### It remembers how you work, not just what you said
 
-Many memory systems store facts, summaries, or conversation snippets. AI-brain stores the operational layer around your AI usage:
+Many memory systems store facts, summaries, or conversation snippets. Memnex stores the operational layer around your AI usage:
 
 - `memories/`: facts, lessons, decisions, fixes, and reflections.
 - `rules/`: behavior rules the agent should follow.
@@ -56,11 +56,11 @@ Many memory systems store facts, summaries, or conversation snippets. AI-brain s
 - `templates/`: governance templates for memory, rule, skill, and workflow iteration.
 - `manifest.json`: machine-readable sync provenance.
 
-In other words, AI-brain does not only preserve what the AI learned. It preserves the way you trained the AI to work.
+In other words, Memnex does not only preserve what the AI learned. It preserves the way you trained the AI to work.
 
 ### Reviewable, recoverable, and portable
 
-Hidden memory databases are convenient, but they can become opaque over time. AI-brain keeps the system layer and data layer separate:
+Hidden memory databases are convenient, but they can become opaque over time. Memnex keeps the system layer and data layer separate:
 
 ```text
 memory-system/      # sync scripts, scheduling, architecture, governance notes
@@ -87,38 +87,38 @@ The sync workflow is intentionally conservative. It excludes obvious caches, log
 - `cookie`
 - `session`
 
-You should still review the first sync before making a repository public, but AI-brain is designed with personal safety in mind from the start.
+You should still review the first sync before making a repository public, but Memnex is designed with personal safety in mind from the start.
 
 ## Supported Agent Platforms
 
-AI-brain is strongest today in the Codex + local MCP memory ecosystem, but its storage model is platform-neutral. Any agent that can read Markdown, rules, JSON exports, local files, or MCP tools can use AI-brain as a personal memory source.
+Memnex is strongest today in the Codex + local MCP memory ecosystem, but its storage model is platform-neutral. Any agent that can read Markdown, rules, JSON exports, local files, or MCP tools can use Memnex as a personal memory source.
 
-| Platform | Current support level | What AI-brain provides | Configuration method |
+| Platform | Current support level | What Memnex provides | Configuration method |
 | --- | --- | --- | --- |
 | Codex CLI / Codex Desktop / Codex App | Native | `AGENTS.md`, `.codex/memories`, `.codex/rules`, `.codex/skills`, `.codex/templates`, redacted `.codex/config.toml` snapshots | Keep global guidance in `~/.codex/AGENTS.md`, project guidance in repository `AGENTS.md`, store reusable workflows as Codex skills, then run `memory-system/scripts/sync-memory-library.ps1` to snapshot the local Codex state. |
-| Codex in VS Code / Cursor / Windsurf | Native through Codex extension behavior | Same Codex memory, rules, and skills layer | Install/use Codex in the editor, keep the same `AGENTS.md` and `.codex/skills` structure, and sync AI-brain from the shared local Codex home. |
-| `.agents` skill ecosystem | Native | `agent-skills/` layer for cross-agent skills and platform routers | Put shared skills under `~/.agents/skills`, then run the AI-brain sync script so they are copied into `memory-data/.../agent-skills`. |
-| MCP memory tools / Total Agent Memory style exports | Native export/archive support | Structured memory exports under `memory-data/.../exports` | Export or back up MCP memory into the configured local backup directory, then let AI-brain collect the latest export and record provenance in `manifest.json`. |
-| Claude Code / Claude Desktop | Easy adapter | Long-term memories, rules, skills, and workflow notes can be translated into Claude instructions and MCP-backed memory | Convert high-level AI-brain rules into `CLAUDE.md`, project-scoped rules into `.claude/rules/`, and expose memory exports through an MCP server or manually referenced Markdown files. |
-| Cursor | Easy adapter | Project conventions, workflow rules, and reusable task guidance | Convert AI-brain rules or selected memories into Cursor Rules, such as project rules under `.cursor/rules/`, user rules in Cursor settings, or `AGENTS.md` where supported. |
-| Continue | Easy adapter | Rules, prompts, tools, and MCP-readable memory exports | Add AI-brain-derived rules to Continue local/global config, and connect memory search through an MCP server listed in Continue's tools/MCP configuration. |
-| Windsurf / Cascade | Easy adapter | Memories, rules, and optional MCP-backed retrieval | Convert selected AI-brain rules into Windsurf/Cascade Rules, add stable facts to Memories, and connect a memory MCP server through Cascade MCP settings when retrieval is needed. |
-| Cline / Roo-style coding agents | Easy adapter | Memory-bank style Markdown context, project decisions, active context, and rules | Convert AI-brain memories into Memory Bank files, add the operating instructions to `.clinerules/`, and optionally expose structured exports through MCP. |
-| OpenAI Agents SDK | Developer integration | External memory source, retrieval tool, policy/rule source, skill registry | Load `memory-data/` from application code, index selected memories for retrieval, or wrap AI-brain search as an MCP/tool call used by the agent. |
+| Codex in VS Code / Cursor / Windsurf | Native through Codex extension behavior | Same Codex memory, rules, and skills layer | Install/use Codex in the editor, keep the same `AGENTS.md` and `.codex/skills` structure, and sync Memnex from the shared local Codex home. |
+| `.agents` skill ecosystem | Native | `agent-skills/` layer for cross-agent skills and platform routers | Put shared skills under `~/.agents/skills`, then run the Memnex sync script so they are copied into `memory-data/.../agent-skills`. |
+| MCP memory tools / Total Agent Memory style exports | Native export/archive support | Structured memory exports under `memory-data/.../exports` | Export or back up MCP memory into the configured local backup directory, then let Memnex collect the latest export and record provenance in `manifest.json`. |
+| Claude Code / Claude Desktop | Easy adapter | Long-term memories, rules, skills, and workflow notes can be translated into Claude instructions and MCP-backed memory | Convert high-level Memnex rules into `CLAUDE.md`, project-scoped rules into `.claude/rules/`, and expose memory exports through an MCP server or manually referenced Markdown files. |
+| Cursor | Easy adapter | Project conventions, workflow rules, and reusable task guidance | Convert Memnex rules or selected memories into Cursor Rules, such as project rules under `.cursor/rules/`, user rules in Cursor settings, or `AGENTS.md` where supported. |
+| Continue | Easy adapter | Rules, prompts, tools, and MCP-readable memory exports | Add Memnex-derived rules to Continue local/global config, and connect memory search through an MCP server listed in Continue's tools/MCP configuration. |
+| Windsurf / Cascade | Easy adapter | Memories, rules, and optional MCP-backed retrieval | Convert selected Memnex rules into Windsurf/Cascade Rules, add stable facts to Memories, and connect a memory MCP server through Cascade MCP settings when retrieval is needed. |
+| Cline / Roo-style coding agents | Easy adapter | Memory-bank style Markdown context, project decisions, active context, and rules | Convert Memnex memories into Memory Bank files, add the operating instructions to `.clinerules/`, and optionally expose structured exports through MCP. |
+| OpenAI Agents SDK | Developer integration | External memory source, retrieval tool, policy/rule source, skill registry | Load `memory-data/` from application code, index selected memories for retrieval, or wrap Memnex search as an MCP/tool call used by the agent. |
 | LangChain / LangGraph / LlamaIndex / AutoGen / CrewAI | Developer integration | File-backed long-term memory and workflow knowledge | Parse `memory-data/exports`, `memories`, `rules`, and `skills` into your framework's memory/retriever/tool layer; MCP adapters can be used where the framework supports MCP. |
 | Obsidian / Khoj / local knowledge-base tools | Knowledge-base integration | Human-readable long-term notes, templates, and workflow records | Import or link `memory-data/.../memories` and selected templates into the knowledge base, then use the tool's normal search/RAG layer over those files. |
 
 ## Current Memory Network
 
-The images below visualize the current AI-brain memory network. They show how many small pieces of experience, rules, skills, and workflow knowledge form a connected personal memory layer.
+The images below visualize the current Memnex memory network. They show how many small pieces of experience, rules, skills, and workflow knowledge form a connected personal memory layer.
 
-![AI-brain memory network overview](assets/memory-network-overview.png)
+![Memnex memory network overview](assets/memory-network-overview.png)
 
-![AI-brain memory network map](assets/memory-network-map.png)
+![Memnex memory network map](assets/memory-network-map.png)
 
 ## How It Works
 
-AI-brain follows a simple loop:
+Memnex follows a simple loop:
 
 ```text
 Collect -> Retrieve -> Self-iterate
@@ -136,13 +136,13 @@ During real work, AI produces valuable reusable knowledge:
 - mistakes that should not be repeated;
 - skills that should be triggered in specific situations.
 
-AI-brain collects these assets from local memory exports, file-backed memories, rules, skills, preferences, and templates into a consistent `memory-data/` structure.
+Memnex collects these assets from local memory exports, file-backed memories, rules, skills, preferences, and templates into a consistent `memory-data/` structure.
 
 The point is simple: useful experience should not disappear when a chat ends.
 
 ### 2. Retrieve
 
-AI-brain is not meant to dump all history into every prompt. That would waste context and add noise.
+Memnex is not meant to dump all history into every prompt. That would waste context and add noise.
 
 Instead, the agent should retrieve the relevant memory, rule, skill, or preference for the current task:
 
@@ -155,7 +155,7 @@ The AI does not need to memorize the whole diary. It needs to open the right not
 
 ### 3. Self-iterate
 
-The most important part of AI-brain is not a single memory write. It is the long-term iteration loop.
+The most important part of Memnex is not a single memory write. It is the long-term iteration loop.
 
 After each task, new experience can be folded back into the system:
 
@@ -178,9 +178,9 @@ task experience
   -> new experience
 ```
 
-AI-brain does not retrain the base model. It trains the local memory, rules, and skills around the model so your assistant becomes increasingly aligned with your way of working.
+Memnex does not retrain the base model. It trains the local memory, rules, and skills around the model so your assistant becomes increasingly aligned with your way of working.
 
-## How AI-brain Differs from Traditional RAG
+## How Memnex Differs from Traditional RAG
 
 Traditional RAG is usually:
 
@@ -188,17 +188,17 @@ Traditional RAG is usually:
 question -> retrieve document chunks -> answer
 ```
 
-AI-brain is closer to:
+Memnex is closer to:
 
 ```text
 task -> retrieve memories/rules/skills/preferences -> work in your style -> capture new experience -> improve the memory system
 ```
 
-Traditional RAG helps an AI answer from documents. AI-brain helps an AI become a better personal working partner.
+Traditional RAG helps an AI answer from documents. Memnex helps an AI become a better personal working partner.
 
 ## Who Is It For?
 
-AI-brain is useful for:
+Memnex is useful for:
 
 - people who use AI agents frequently;
 - developers who want AI to remember project conventions;
@@ -247,4 +247,4 @@ The sync script rebuilds `memory-data/current/`, copies approved memory-related 
 
 ## One-Sentence Summary
 
-**AI-brain is a lightweight local memory vault for personal AI users: it turns your experience, preferences, rules, and skills into a reviewable, portable, self-iterating AI memory system.**
+**Memnex is a lightweight local memory vault for personal AI users: it turns your experience, preferences, rules, and skills into a reviewable, portable, self-iterating AI memory system.**
