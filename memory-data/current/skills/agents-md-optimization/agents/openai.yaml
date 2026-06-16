@@ -1,4 +1,0 @@
-interface:
-  display_name: "AGENTS.md Optimization"
-  short_description: "Restructure AGENTS.md into a concise routing-first layout."
-  default_prompt: "Use $agents-md-optimization to reorganize AGENTS.md with the established routing-first structure."

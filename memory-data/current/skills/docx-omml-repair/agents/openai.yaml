@@ -1,7 +1,0 @@
-interface:
-  display_name: "DOCX OMML Repair"
-  short_description: "Repair Word DOCX equations and OMML safely."
-  default_prompt: "Use $docx-omml-repair to fix and validate DOCX formula or OMML issues."
-
-policy:
-  allow_implicit_invocation: true

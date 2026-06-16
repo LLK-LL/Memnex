@@ -1,0 +1,7 @@
+﻿interface:
+  display_name: "Memory RAG Optimization"
+# REDACTED: sensitive-looking memory line
+# REDACTED: sensitive-looking memory line
+
+policy:
+  allow_implicit_invocation: true

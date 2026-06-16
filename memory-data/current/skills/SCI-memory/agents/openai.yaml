@@ -1,7 +1,0 @@
-interface:
-  display_name: "SCI Memory"
-  short_description: "Record and apply SCI paper memory without auto-iteration."
-  default_prompt: "Use $sci-memory to revise this manuscript section and record any explicit paper-memory update into 40_Paper_Memories without starting the thinking automation."
-
-policy:
-  allow_implicit_invocation: true

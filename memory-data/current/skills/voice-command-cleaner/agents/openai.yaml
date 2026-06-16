@@ -1,4 +1,0 @@
-interface:
-  display_name: "Voice Command Cleaner"
-  short_description: "Clean dictated Codex commands"
-  default_prompt: "Clean this dictated instruction, extract the intent, and execute the resulting Codex command."

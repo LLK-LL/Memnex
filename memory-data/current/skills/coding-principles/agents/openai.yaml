@@ -1,4 +1,0 @@
-interface:
-  display_name: "Coding Principles"
-  short_description: "Simple, explicit coding rules"
-  default_prompt: "Use this skill for coding tasks that need explicit reasoning, simple solutions, precise edits, and verifiable outcomes."

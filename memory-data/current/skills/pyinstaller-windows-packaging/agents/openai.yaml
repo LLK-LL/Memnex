@@ -1,7 +1,0 @@
-interface:
-  display_name: "PyInstaller Windows Packaging"
-  short_description: "Package Windows Python apps with PyInstaller."
-  default_prompt: "Use $pyinstaller-windows-packaging to build or debug this Windows PyInstaller executable."
-
-policy:
-  allow_implicit_invocation: true

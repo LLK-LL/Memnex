@@ -1,12 +1,13 @@
 ﻿{
-    "synced_at_utc":  "2026-06-15T10:08:51.8093094Z",
+    "synced_at_utc":  "2026-06-16T05:00:11.3108253Z",
+    "snapshot_id":  "20260616T050011Z",
     "repository":  "LLK-LL/AI-brain",
     "system_layer":  "memory-system",
-    "data_layer":  "memory-data/current",
+    "data_layer":  "memory-data/snapshots/20260616T050011Z",
     "latest_memory_export_source":  "C:\\Users\\Administrator\\.tam\\backups\\export_all_20260615_100536.json",
     "sources":  {
                     "tam_backups":  "C:\\Users\\Administrator\\.tam\\backups",
-                    "tam_database":  "C:\\Users\\Administrator\\.tam\\memory.db",
+                    "tam_database":  "not uploaded",
                     "codex_memories":  "C:\\Users\\Administrator\\.codex\\memories",
                     "codex_rules":  "C:\\Users\\Administrator\\.codex\\rules",
                     "codex_skills":  "C:\\Users\\Administrator\\.codex\\skills",
@@ -25,7 +26,8 @@
                                                 ".pytest_cache",
                                                 ".mypy_cache",
                                                 ".ruff_cache",
-                                                "node_modules"
+                                                "node_modules",
+                                                "fixtures"
                                             ],
                    "excluded_file_patterns":  [
                                                   "*.log",
@@ -44,6 +46,8 @@
                                                         "bearer",
                                                         "cookie",
                                                         "session"
-                                                    ]
+                                                    ],
+                   "database_snapshot_uploaded":  false,
+                   "high_risk_secret_scan":  "required before commit"
                }
 }
