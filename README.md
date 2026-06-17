@@ -2,17 +2,39 @@
 
 **Language:** English | [简体中文](README.zh-CN.md)
 
-**Repository:** [LLK-LL/AI-brain](https://github.com/LLK-LL/AI-brain)
+**Repository:** [LLK-LL/Memnex](https://github.com/LLK-LL/Memnex)
 
-**Memnex** is a lightweight local memory system for personal AI agents. The name comes from **Memory + Nexus**: memory means durable experience, preferences, rules, and skills; nexus means the connecting hub that links those fragments into a usable personal AI memory network.
+Memnex is a local-first memory vault for personal AI agents. It helps Codex, Claude, Cursor, MCP tools, and local agents preserve the useful parts of your work across sessions: memories, rules, skills, preferences, workflows, exports, and snapshots.
 
-It is not a heavy enterprise agent platform, and it is not just a folder of chat summaries. Memnex is closer to a personal "brain drive" for AI: it continuously organizes your experience, preferences, rules, skills, workflows, and hard-won lessons so that your AI assistant can remember how you work and reuse what you have already trained it to do.
+> Your AI agent learns during a task, then forgets the useful parts when the next session starts.
 
-If you use Codex-style agents, Claude, ChatGPT, local agents, or MCP memory tools every day, Memnex helps solve a familiar problem:
+Memnex turns that fragile local state into a reviewable, recoverable, portable, and self-iterating memory system.
 
-> Your AI gets smarter during a task, then forgets the useful parts when the next session starts.
+![Memnex memory network overview](assets/memory-network-overview.png)
 
-Memnex turns that fragile local state into a reviewable, recoverable, and portable personal memory vault.
+## What It Saves
+
+Memnex is not another chat-history dump. It preserves the operational layer around your AI work:
+
+| Asset | What it captures | Why it matters |
+| --- | --- | --- |
+| `memories/` | Facts, lessons, decisions, fixes, and reflections | The durable experience your agent should remember |
+| `rules/` | Behavior rules and working constraints | How the agent should act next time |
+| `skills/` | Reusable Codex skills and workflows | Repeatable task procedures |
+| `agent-skills/` | Cross-agent skill layers and routers | Shared workflows across agent ecosystems |
+| `preferences/` | Redacted preference and configuration snapshots | Stable working preferences without obvious secrets |
+| `templates/` | Governance templates for memory, rule, and skill iteration | A repeatable way to improve the memory system |
+| `manifest.json` | Sync provenance and safety metadata | What was collected, when, and how |
+
+## Before and After
+
+| Without Memnex | With Memnex |
+| --- | --- |
+| Each AI session starts from a blank working memory. | The next session can reuse relevant memories, rules, and skills. |
+| Useful debugging lessons disappear into old chats. | Fixes and lessons become file-backed memory assets. |
+| Prompt rules are scattered across clients and projects. | Rules are versioned, inspectable, and portable. |
+| Local memory databases become opaque over time. | Memory state can be reviewed, diffed, rolled back, and migrated. |
+| Personal workflows are retrained repeatedly by hand. | Successful workflows can become reusable skills. |
 
 ## Why Memnex?
 
@@ -26,95 +48,7 @@ Most AI memory tools focus on one of several directions:
 | Local MCP memory layers | OpenMemory and similar tools | Sharing memory across AI clients | Often focused on storing and retrieving memories only |
 | Personal knowledge RAG | Obsidian AI, Khoj, local document assistants | Asking questions over notes and documents | Great for document search, less focused on agent behavior, rules, and skills |
 
-Memnex takes a smaller and more personal route.
-
-It does not try to become another large AI platform. Instead, it preserves the training assets that already live on your machine: memories, rules, skills, preferences, templates, exports, and snapshots. That makes it especially useful for individuals who want a personal AI assistant that becomes more aligned over time without requiring a complex backend.
-
-## Key Advantages
-
-### Lightweight enough for personal use
-
-Memnex is built around local files, structured exports, Git versioning, and scheduled sync.
-
-- Local-first and user-controlled.
-- Easy to inspect with normal file tools.
-- Can be backed up to GitHub.
-- Does not require an enterprise memory stack.
-- Works well as a long-term personal training loop.
-
-This makes it practical for everyday users: researchers, developers, writers, builders, and anyone who repeatedly trains AI through real work.
-
-### It remembers how you work, not just what you said
-
-Many memory systems store facts, summaries, or conversation snippets. Memnex stores the operational layer around your AI usage:
-
-- `memories/`: facts, lessons, decisions, fixes, and reflections.
-- `rules/`: behavior rules the agent should follow.
-- `skills/`: reusable task workflows and Codex skills.
-- `agent-skills/`: agent-level skill layers.
-- `preferences/`: redacted preference and configuration snapshots.
-- `templates/`: governance templates for memory, rule, skill, and workflow iteration.
-- `manifest.json`: machine-readable sync provenance.
-
-In other words, Memnex does not only preserve what the AI learned. It preserves the way you trained the AI to work.
-
-### Reviewable, recoverable, and portable
-
-Hidden memory databases are convenient, but they can become opaque over time. Memnex keeps the system layer and data layer separate:
-
-```text
-memory-system/      # sync scripts, scheduling, architecture, governance notes
-memory-data/        # memories, rules, skills, preferences, templates, snapshots
-```
-
-Because the memory state is versioned, you can:
-
-- inspect what the AI remembers;
-- compare memory changes across time;
-- roll back to an earlier snapshot;
-- migrate your memory system to another machine;
-- share or archive your personal AI training assets.
-
-### Privacy-aware by default
-
-The sync workflow is intentionally conservative. It excludes obvious caches, logs, temporary files, and transient database files. Preference and configuration snapshots are redacted for sensitive-looking keywords such as:
-
-- `token`
-- `password`
-- `secret`
-- `api_key`
-- `credential`
-- `cookie`
-- `session`
-
-You should still review the first sync before making a repository public, but Memnex is designed with personal safety in mind from the start.
-
-## Supported Agent Platforms
-
-Memnex is strongest today in the Codex + local MCP memory ecosystem, but its storage model is platform-neutral. Any agent that can read Markdown, rules, JSON exports, local files, or MCP tools can use Memnex as a personal memory source.
-
-| Platform | Current support level | What Memnex provides | Configuration method |
-| --- | --- | --- | --- |
-| Codex CLI / Codex Desktop / Codex App | Native | `AGENTS.md`, `.codex/memories`, `.codex/rules`, `.codex/skills`, `.codex/templates`, redacted `.codex/config.toml` snapshots | Keep global guidance in `~/.codex/AGENTS.md`, project guidance in repository `AGENTS.md`, store reusable workflows as Codex skills, then run `memory-system/scripts/sync-memory-library.ps1` to snapshot the local Codex state. |
-| Codex in VS Code / Cursor / Windsurf | Native through Codex extension behavior | Same Codex memory, rules, and skills layer | Install/use Codex in the editor, keep the same `AGENTS.md` and `.codex/skills` structure, and sync Memnex from the shared local Codex home. |
-| `.agents` skill ecosystem | Native | `agent-skills/` layer for cross-agent skills and platform routers | Put shared skills under `~/.agents/skills`, then run the Memnex sync script so they are copied into `memory-data/.../agent-skills`. |
-| MCP memory tools / Total Agent Memory style exports | Native export/archive support | Structured memory exports under `memory-data/.../exports` | Export or back up MCP memory into the configured local backup directory, then let Memnex collect the latest export and record provenance in `manifest.json`. |
-| Claude Code / Claude Desktop | Easy adapter | Long-term memories, rules, skills, and workflow notes can be translated into Claude instructions and MCP-backed memory | Convert high-level Memnex rules into `CLAUDE.md`, project-scoped rules into `.claude/rules/`, and expose memory exports through an MCP server or manually referenced Markdown files. |
-| Cursor | Easy adapter | Project conventions, workflow rules, and reusable task guidance | Convert Memnex rules or selected memories into Cursor Rules, such as project rules under `.cursor/rules/`, user rules in Cursor settings, or `AGENTS.md` where supported. |
-| Continue | Easy adapter | Rules, prompts, tools, and MCP-readable memory exports | Add Memnex-derived rules to Continue local/global config, and connect memory search through an MCP server listed in Continue's tools/MCP configuration. |
-| Windsurf / Cascade | Easy adapter | Memories, rules, and optional MCP-backed retrieval | Convert selected Memnex rules into Windsurf/Cascade Rules, add stable facts to Memories, and connect a memory MCP server through Cascade MCP settings when retrieval is needed. |
-| Cline / Roo-style coding agents | Easy adapter | Memory-bank style Markdown context, project decisions, active context, and rules | Convert Memnex memories into Memory Bank files, add the operating instructions to `.clinerules/`, and optionally expose structured exports through MCP. |
-| OpenAI Agents SDK | Developer integration | External memory source, retrieval tool, policy/rule source, skill registry | Load `memory-data/` from application code, index selected memories for retrieval, or wrap Memnex search as an MCP/tool call used by the agent. |
-| LangChain / LangGraph / LlamaIndex / AutoGen / CrewAI | Developer integration | File-backed long-term memory and workflow knowledge | Parse `memory-data/exports`, `memories`, `rules`, and `skills` into your framework's memory/retriever/tool layer; MCP adapters can be used where the framework supports MCP. |
-| Obsidian / Khoj / local knowledge-base tools | Knowledge-base integration | Human-readable long-term notes, templates, and workflow records | Import or link `memory-data/.../memories` and selected templates into the knowledge base, then use the tool's normal search/RAG layer over those files. |
-
-## Current Memory Network
-
-The images below visualize the current Memnex memory network. They show how many small pieces of experience, rules, skills, and workflow knowledge form a connected personal memory layer.
-
-![Memnex memory network overview](assets/memory-network-overview.png)
-
-![Memnex memory network map](assets/memory-network-map.png)
+Memnex takes a smaller and more personal route. It does not try to become another large AI platform. Instead, it preserves the training assets that already live on your machine so your assistant can become more aligned over time without a complex backend.
 
 ## How It Works
 
@@ -126,23 +60,21 @@ Collect -> Retrieve -> Self-iterate
 
 ### 1. Collect
 
-During real work, AI produces valuable reusable knowledge:
+During real work, AI produces reusable knowledge:
 
-- your preferred writing and coding style;
+- preferred writing and coding style;
 - project-specific conventions;
 - debugging lessons;
 - research workflows;
 - reliable tool commands;
 - mistakes that should not be repeated;
-- skills that should be triggered in specific situations.
+- skills that should trigger in specific situations.
 
 Memnex collects these assets from local memory exports, file-backed memories, rules, skills, preferences, and templates into a consistent `memory-data/` structure.
 
-The point is simple: useful experience should not disappear when a chat ends.
-
 ### 2. Retrieve
 
-Memnex is not meant to dump all history into every prompt. That would waste context and add noise.
+Memnex is not meant to dump all history into every prompt. That wastes context and adds noise.
 
 Instead, the agent should retrieve the relevant memory, rule, skill, or preference for the current task:
 
@@ -151,11 +83,7 @@ Instead, the agent should retrieve the relevant memory, rule, skill, or preferen
 - writing tasks can retrieve tone, structure, and style preferences;
 - automation tasks can retrieve tested commands and recovery paths.
 
-The AI does not need to memorize the whole diary. It needs to open the right notes at the right time.
-
 ### 3. Self-iterate
-
-The most important part of Memnex is not a single memory write. It is the long-term iteration loop.
 
 After each task, new experience can be folded back into the system:
 
@@ -178,34 +106,61 @@ task experience
   -> new experience
 ```
 
-Memnex does not retrain the base model. It trains the local memory, rules, and skills around the model so your assistant becomes increasingly aligned with your way of working.
+Memnex does not retrain the base model. It trains the local memory, rules, and skills around the model.
 
-## How Memnex Differs from Traditional RAG
+## Quick Start
 
-Traditional RAG is usually:
+Memnex currently ships with a PowerShell sync workflow for Windows.
 
-```text
-question -> retrieve document chunks -> answer
+Run a manual sync from the repository root:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\memory-system\scripts\sync-memory-library.ps1
 ```
 
-Memnex is closer to:
+Install the weekly local Windows task:
 
-```text
-task -> retrieve memories/rules/skills/preferences -> work in your style -> capture new experience -> improve the memory system
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\memory-system\scripts\install-weekly-task.ps1
 ```
 
-Traditional RAG helps an AI answer from documents. Memnex helps an AI become a better personal working partner.
+The sync script rebuilds `memory-data/current/`, copies approved memory-related sources, applies conservative redaction, writes `memory-data/manifest.json`, and commits/pushes changes when there is a diff.
 
-## Who Is It For?
+## Example Workflow
 
-Memnex is useful for:
+```text
+1. Finish a real AI-assisted task.
+2. Keep the useful lesson, rule, command, or workflow in your local memory layer.
+3. Run the Memnex sync script.
+4. Review the generated memory-data/ snapshot.
+5. Let future agents retrieve the relevant memory instead of relearning it.
+```
 
-- people who use AI agents frequently;
-- developers who want AI to remember project conventions;
-- researchers who repeat literature, writing, and review workflows;
-- builders who want to preserve automation and debugging lessons;
-- personal users who do not want to run a heavy memory platform;
-- anyone who wants their AI assistant to improve through repeated use.
+See the examples:
+
+- [Codex memory sync](examples/codex-memory-sync.md)
+- [Claude adapter](examples/claude-adapter.md)
+- [Cursor rules adapter](examples/cursor-rules.md)
+- [MCP memory export](examples/mcp-memory-export.md)
+
+## Supported Agent Platforms
+
+Memnex is strongest today in the Codex + local MCP memory ecosystem, but its storage model is platform-neutral. Any agent that can read Markdown, rules, JSON exports, local files, or MCP tools can use Memnex as a personal memory source.
+
+| Platform | Current support level | What Memnex provides |
+| --- | --- | --- |
+| Codex CLI / Codex Desktop / Codex App | Native | `AGENTS.md`, `.codex/memories`, `.codex/rules`, `.codex/skills`, `.codex/templates`, redacted `.codex/config.toml` snapshots |
+| Codex in VS Code / Cursor / Windsurf | Native through Codex extension behavior | Same Codex memory, rules, and skills layer |
+| `.agents` skill ecosystem | Native | `agent-skills/` layer for cross-agent skills and platform routers |
+| MCP memory tools / Total Agent Memory style exports | Native export/archive support | Structured memory exports under `memory-data/.../exports` |
+| Claude Code / Claude Desktop | Easy adapter | Long-term memories, rules, skills, and workflow notes translated into Claude instructions or MCP-backed memory |
+| Cursor | Easy adapter | Project conventions, workflow rules, and reusable task guidance converted into Cursor Rules |
+| Continue | Easy adapter | Rules, prompts, tools, and MCP-readable memory exports |
+| Windsurf / Cascade | Easy adapter | Memories, rules, and optional MCP-backed retrieval |
+| Cline / Roo-style coding agents | Easy adapter | Memory-bank style Markdown context, project decisions, active context, and rules |
+| OpenAI Agents SDK | Developer integration | External memory source, retrieval tool, policy/rule source, skill registry |
+| LangChain / LangGraph / LlamaIndex / AutoGen / CrewAI | Developer integration | File-backed long-term memory and workflow knowledge |
+| Obsidian / Khoj / local knowledge-base tools | Knowledge-base integration | Human-readable long-term notes, templates, and workflow records |
 
 ## Repository Layout
 
@@ -229,21 +184,33 @@ memory-data/
   manifest.json                    # sync metadata and safety records
 ```
 
-## Quick Start
+## Privacy and Safety
 
-Run a manual sync from the repository root:
+Memnex is intentionally conservative. It excludes obvious caches, logs, temporary files, and transient database files. Preference and configuration snapshots are redacted for sensitive-looking keywords such as:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\memory-system\scripts\sync-memory-library.ps1
-```
+- `token`
+- `password`
+- `secret`
+- `api_key`
+- `credential`
+- `cookie`
+- `session`
 
-Install the weekly local Windows task:
+You should still review the first sync before making a repository public. For details, see [Security and redaction](docs/security-and-redaction.md).
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\memory-system\scripts\install-weekly-task.ps1
-```
+## Roadmap
 
-The sync script rebuilds `memory-data/current/`, copies approved memory-related sources, applies conservative redaction, writes `memory-data/manifest.json`, and commits/pushes changes when there is a diff.
+- Add macOS/Linux sync scripts.
+- Add a demo GIF for the end-to-end memory sync loop.
+- Add a lightweight retrieval helper for selected memories/rules/skills.
+- Add more adapter examples for Claude, Cursor, Continue, Windsurf, Cline, and MCP servers.
+- Add tests for redaction behavior and sync path handling.
+
+## Contributing
+
+Memnex is early and deliberately small. Good contributions are adapter examples, redaction improvements, cross-platform sync support, and clear documentation for real agent workflows.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the current contribution guide.
 
 ## One-Sentence Summary
 
