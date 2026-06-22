@@ -1,0 +1,56 @@
+[
+  {
+    "name": "golden_memory_recall_default_rag",
+    "type": "recall",
+    "query": "memory_recall 默认 RAG server.py include_cognitive rag_fallback_index",
+    "project": "total-agent-memory",
+    "expected_ids": [100, 101],
+    "expected_terms": ["memory_recall", "默认 RAG", "server.py"],
+    "k": 5
+  },
+  {
+    "name": "golden_representation_queue_drain",
+    "type": "recall",
+    "query": "representations queue summary keywords compressed pending drain",
+    "project": "total-agent-memory",
+    "expected_ids": [101, 93],
+    "expected_terms": ["representation", "summary", "keywords", "compressed"],
+    "k": 5
+  },
+  {
+    "name": "golden_igor_remote_codex",
+    "type": "recall",
+    "query": "Igor remote server Codex CLI SSH alias ig",
+    "project": "codexcli-cli",
+    "expected_ids": [213],
+    "expected_terms": ["Igor", "remote", "Codex CLI"],
+    "k": 5
+  },
+  {
+    "name": "golden_openradioss_kfile_compatibility",
+    "type": "recall",
+    "query": "OpenRadioss LS-DYNA k file compatibility unsupported keyword",
+    "project": "OpenRadioss",
+    "expected_ids": [22],
+    "expected_terms": ["OpenRadioss", "LS-DYNA", ".k"],
+    "k": 5
+  },
+  {
+    "name": "golden_tial_polishing_connectors",
+    "type": "recall",
+    "query": "Ti-Al explosive welding Chinese polishing causal connectors introduction",
+    "project": "Ti-Al explosive welding SPH-FEM analysis",
+    "expected_ids": [62],
+    "expected_terms": ["Chinese polishing", "causal", "connectors"],
+    "k": 5
+  },
+  {
+    "name": "golden_global_layer_cleanup",
+    "type": "recall",
+    "query": "layer cleanup preference rule AGENTS global memory governance",
+    "project": "global",
+    "expected_ids": [352],
+    "expected_terms": ["layer cleanup", "AGENTS", "global"],
+    "k": 5
+  }
+]

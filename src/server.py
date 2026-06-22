@@ -6586,20 +6586,7 @@ async def _do(name, a):
                 ("eval-recall fixture redis cluster failover playbook",
                  "fact", "redis cluster"),
             ]
-            for content, ktype, _q in seed_pairs:
-                try:
-                    store.save_knowledge(
-                        sid=getattr(__import__("server"), "SID", "eval-session"),
-                        content=content, ktype=ktype, project="memory_eval_recall",
-                    )
-                except Exception:
-                    pass
-            builtin = [
-                {"name": f"recall_{i}", "type": "recall", "query": q,
-                 "project": "memory_eval_recall", "must_contain": [q.split()[0]],
-                 "k": top_k}
-                for i, (_, _, q) in enumerate(seed_pairs)
-            ]
+            builtin = []
 
         with _EvalModeContext(mode):
             try:
@@ -6612,6 +6599,26 @@ async def _do(name, a):
             try:
                 if builtin is not None:
                     from eval_harness import EvalHarness
+                    builtin = []
+                    for i, (content, ktype, q) in enumerate(seed_pairs):
+                        rid, *_ = store.save_knowledge(
+                            sid=globals().get("SID", "eval-session"),
+                            content=content,
+                            ktype=ktype,
+                            project="memory_eval_recall",
+                            skip_dedup=True,
+                            skip_quality=True,
+                            tags=["eval-fixture"],
+                        )
+                        builtin.append({
+                            "name": f"recall_{i}",
+                            "type": "recall",
+                            "query": q,
+                            "project": "memory_eval_recall",
+                            "expected_ids": [rid] if rid else [],
+                            "expected_terms": [q.split()[0]],
+                            "k": top_k,
+                        })
                     h = EvalHarness(
                         recall_fn=lambda q, p: [
                             it

@@ -180,7 +180,21 @@ def test_memory_eval_recall_builtin_fixture(wired_server):
     assert REQUIRED_KEYS - set(payload.keys()) == set(), payload
     assert payload["mode"] == "fast"
     assert payload["scenarios_total"] >= 1
+    assert payload["scenarios_passed"] == payload["scenarios_total"]
+    assert payload["recall_at_5"] == 1.0
+    assert payload["mrr"] == 1.0
     assert payload.get("dataset") == "builtin"
+
+
+def test_golden_memory_queries_fixture_loads():
+    from eval_harness import EvalHarness
+
+    path = Path(__file__).parent.parent / "evals" / "golden_memory_queries.json"
+    scenarios = EvalHarness().load_scenarios(path)
+    assert len(scenarios) >= 5
+    assert all(s.get("type") == "recall" for s in scenarios)
+    assert all(s.get("expected_ids") for s in scenarios)
+    assert all(s.get("expected_terms") for s in scenarios)
 
 
 def test_memory_eval_recall_golden_diagnostics_and_report(wired_server, tmp_path):

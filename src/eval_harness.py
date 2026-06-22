@@ -74,14 +74,14 @@ class EvalHarness:
         scenarios: list[dict[str, Any]] = []
         if path.is_dir():
             for f in sorted(path.glob("*.json")):
-                with open(f) as fh:
+                with open(f, encoding="utf-8") as fh:
                     data = json.load(fh)
                     if isinstance(data, list):
                         scenarios.extend(data)
                     elif isinstance(data, dict):
                         scenarios.append(data)
         elif path.is_file():
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
                 scenarios = data if isinstance(data, list) else [data]
         return scenarios
