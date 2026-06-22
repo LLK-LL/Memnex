@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "Banana PPT Workflow"
+  short_description: "Use verified Banana Slides workflows for PPT generation"
+  default_prompt: "Use banana to generate a PPT with the verified local Banana Slides workflow."

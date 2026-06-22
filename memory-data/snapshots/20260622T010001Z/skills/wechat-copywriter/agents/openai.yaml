@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "WeChat Copywriter"
+  short_description: "Write and polish WeChat public account articles"
+  default_prompt: "Write or improve a WeChat public account article from my topic, audience, viewpoint, and style requirements."

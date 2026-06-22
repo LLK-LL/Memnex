@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "Project Research Explainer"
+  short_description: "Research GitHub projects and explain them clearly"
+  default_prompt: "Use $project-research-explainer to find a project and explain its value, principles, and deployment."

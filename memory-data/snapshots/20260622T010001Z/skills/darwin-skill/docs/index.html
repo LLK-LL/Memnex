@@ -1,0 +1,1059 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鑷富鎶€鑳戒紭鍖栫郴缁?/title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --accent: #D4532B;
+    --black: #111111;
+    --dark: #1a1a1a;
+    --mid: #666666;
+    --light: #999999;
+    --border: #d0d0d0;
+    --bg: #fafafa;
+    --white: #ffffff;
+    --col: calc((100% - 11 * 24px) / 12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--black);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 48px;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?HERO 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .hero {
+    padding: 120px 0 80px;
+    border-bottom: 1px solid var(--black);
+  }
+
+  .hero-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 32px;
+  }
+
+  .hero h1 {
+    font-size: 88px;
+    font-weight: 900;
+    line-height: 0.95;
+    letter-spacing: -3px;
+    margin-bottom: 40px;
+    max-width: 900px;
+  }
+
+  .hero-subtitle {
+    font-size: 20px;
+    font-weight: 400;
+    color: var(--mid);
+    line-height: 1.5;
+    max-width: 640px;
+    margin-bottom: 56px;
+  }
+
+  .hero-subtitle strong {
+    color: var(--black);
+    font-weight: 600;
+  }
+
+  .hero-quote {
+    border-left: 3px solid var(--accent);
+    padding: 20px 0 20px 24px;
+    max-width: 600px;
+  }
+
+  .hero-quote p {
+    font-size: 16px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--dark);
+    line-height: 1.7;
+  }
+
+  .hero-quote cite {
+    display: block;
+    margin-top: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-style: normal;
+    color: var(--light);
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?SECTION HEADERS 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .section {
+    padding: 80px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section:last-child {
+    border-bottom: none;
+  }
+
+  .section-num {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent);
+    margin-bottom: 16px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .section-title {
+    font-size: 48px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -1.5px;
+    margin-bottom: 16px;
+  }
+
+  .section-lead {
+    font-size: 17px;
+    color: var(--mid);
+    max-width: 560px;
+    line-height: 1.6;
+    margin-bottom: 48px;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?PRINCIPLES 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .principles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  .principle {
+    padding: 32px 32px 32px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .principle:nth-child(even) {
+    padding-left: 32px;
+    border-left: 1px solid var(--border);
+  }
+
+  .principle:nth-child(1),
+  .principle:nth-child(2) {
+    border-top: 1px solid var(--black);
+  }
+
+  .principle-num {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 12px;
+    line-height: 1;
+  }
+
+  .principle h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+
+  .principle p {
+    font-size: 14px;
+    color: var(--mid);
+    line-height: 1.6;
+  }
+
+  .principle--full {
+    grid-column: 1 / -1;
+    padding-left: 0;
+    border-left: none;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?RUBRIC 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .rubric-header {
+    display: flex;
+    gap: 48px;
+    margin-bottom: 48px;
+  }
+
+  .rubric-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .rubric-stat-num {
+    font-size: 64px;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+
+  .rubric-stat-num--accent {
+    color: var(--accent);
+  }
+
+  .rubric-stat-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--mid);
+  }
+
+  .rubric-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 40px;
+  }
+
+  .rubric-table caption {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--light);
+    padding-bottom: 16px;
+  }
+
+  .rubric-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--light);
+    padding: 12px 16px 12px 0;
+    border-bottom: 2px solid var(--black);
+  }
+
+  .rubric-table td {
+    padding: 14px 16px 14px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    vertical-align: top;
+  }
+
+  .rubric-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .rubric-table .dim-num {
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    width: 36px;
+  }
+
+  .rubric-table .dim-name {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .rubric-table .dim-weight {
+    font-weight: 800;
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    width: 60px;
+    color: var(--dark);
+  }
+
+  .rubric-table .dim-desc {
+    color: var(--mid);
+    line-height: 1.5;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?PHASES 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .phases {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .phase {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 40px;
+    padding: 40px 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .phase:first-child {
+    border-top: 1px solid var(--black);
+  }
+
+  .phase-id {
+    font-size: 48px;
+    font-weight: 900;
+    color: var(--accent);
+    line-height: 1;
+    letter-spacing: -1px;
+  }
+
+  .phase-id span {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--light);
+    margin-top: 8px;
+  }
+
+  .phase-body h3 {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.3px;
+  }
+
+  .phase-body p {
+    font-size: 14px;
+    color: var(--mid);
+    line-height: 1.6;
+    margin-bottom: 16px;
+    max-width: 560px;
+  }
+
+  .phase-steps {
+    list-style: none;
+    counter-reset: step;
+  }
+
+  .phase-steps li {
+    counter-increment: step;
+    padding: 8px 0 8px 32px;
+    position: relative;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--dark);
+  }
+
+  .phase-steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    top: 9px;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?RATCHET 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .ratchet-viz {
+    display: flex;
+    align-items: flex-end;
+    gap: 0;
+    padding: 48px 0;
+    position: relative;
+  }
+
+  .ratchet-viz::before {
+    content: '';
+    position: absolute;
+    bottom: 48px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .ratchet-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  .ratchet-bar {
+    width: 80px;
+    background: var(--black);
+    position: relative;
+    z-index: 1;
+  }
+
+  .ratchet-bar--revert {
+    background: none;
+    border: 2px solid var(--border);
+  }
+
+  .ratchet-score {
+    font-size: 36px;
+    font-weight: 900;
+    margin-bottom: 8px;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .ratchet-score--revert {
+    color: var(--light);
+    text-decoration: line-through;
+    text-decoration-color: var(--accent);
+    text-decoration-thickness: 2px;
+  }
+
+  .ratchet-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 12px;
+    padding: 4px 10px;
+  }
+
+  .ratchet-label--keep {
+    background: var(--black);
+    color: var(--white);
+  }
+
+  .ratchet-label--revert {
+    background: none;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+
+  .ratchet-label--baseline {
+    background: var(--accent);
+    color: var(--white);
+  }
+
+  .ratchet-arrow {
+    position: absolute;
+    top: 50%;
+    right: -12px;
+    width: 24px;
+    height: 2px;
+    background: var(--border);
+    z-index: 2;
+  }
+
+  .ratchet-arrow::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: -4px;
+    border: solid var(--border);
+    border-width: 0 2px 2px 0;
+    padding: 3px;
+    transform: rotate(-45deg);
+  }
+
+  .ratchet-round {
+    font-size: 12px;
+    color: var(--light);
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?COMPARISON 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  .comparison-col {
+    padding: 40px;
+    border: 1px solid var(--border);
+  }
+
+  .comparison-col:first-child {
+    border-right: none;
+  }
+
+  .comparison-col--highlight {
+    background: var(--black);
+    color: var(--white);
+    border-color: var(--black);
+  }
+
+  .comparison-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .comparison-col:first-child .comparison-tag {
+    color: var(--light);
+  }
+
+  .comparison-col--highlight .comparison-tag {
+    color: var(--accent);
+  }
+
+  .comparison-col h3 {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 20px;
+    letter-spacing: -0.5px;
+  }
+
+  .comparison-list {
+    list-style: none;
+  }
+
+  .comparison-list li {
+    padding: 10px 0;
+    font-size: 14px;
+    line-height: 1.5;
+    border-bottom: 1px solid;
+  }
+
+  .comparison-col:first-child .comparison-list li {
+    border-color: var(--border);
+    color: var(--mid);
+  }
+
+  .comparison-col--highlight .comparison-list li {
+    border-color: #333;
+    color: #ccc;
+  }
+
+  .comparison-list li:last-child {
+    border-bottom: none;
+  }
+
+  .comparison-list li strong {
+    color: var(--black);
+  }
+
+  .comparison-col--highlight .comparison-list li strong {
+    color: var(--white);
+  }
+
+  .check-icon {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?MAPPING TABLE 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .mapping-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .mapping-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 16px 24px 16px 0;
+    border-bottom: 2px solid var(--black);
+  }
+
+  .mapping-table th:first-child {
+    color: var(--light);
+  }
+
+  .mapping-table th:nth-child(2) {
+    color: var(--accent);
+  }
+
+  .mapping-table th:last-child {
+    color: var(--light);
+  }
+
+  .mapping-table td {
+    padding: 16px 24px 16px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    vertical-align: top;
+  }
+
+  .mapping-table td:first-child {
+    font-weight: 600;
+    color: var(--dark);
+    white-space: nowrap;
+  }
+
+  .mapping-table td:nth-child(2) {
+    font-weight: 600;
+    color: var(--black);
+  }
+
+  .mapping-table td:last-child {
+    color: var(--mid);
+    line-height: 1.5;
+  }
+
+  .mapping-arrow {
+    display: inline-block;
+    color: var(--accent);
+    font-weight: 400;
+    margin: 0 4px;
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?FOOTER 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  .footer {
+    padding: 48px 0;
+    border-top: 1px solid var(--black);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer-left {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--light);
+  }
+
+  .footer-right {
+    font-size: 12px;
+    color: var(--light);
+  }
+
+  /* 鈺愨晲鈺愨晲鈺愨晲鈺?RESPONSIVE 鈺愨晲鈺愨晲鈺愨晲鈺?*/
+  @media (max-width: 768px) {
+    .container { padding: 0 24px; }
+    .hero { padding: 64px 0 48px; }
+    .hero h1 { font-size: 48px; letter-spacing: -1.5px; }
+    .hero-subtitle { font-size: 17px; }
+    .section { padding: 48px 0; }
+    .section-title { font-size: 32px; }
+    .principles-grid { grid-template-columns: 1fr; }
+    .principle:nth-child(even) { padding-left: 0; border-left: none; }
+    .principle:nth-child(2) { border-top: 1px solid var(--border); }
+    .phase { grid-template-columns: 1fr; gap: 16px; }
+    .comparison { grid-template-columns: 1fr; }
+    .comparison-col:first-child { border-right: 1px solid var(--border); border-bottom: none; }
+    .ratchet-viz { flex-wrap: wrap; gap: 24px; }
+    .ratchet-step { flex: none; width: calc(33% - 16px); }
+    .rubric-stat-num { font-size: 48px; }
+    .mapping-table td:first-child { white-space: normal; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?HERO 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="hero">
+    <div class="hero-label">鑷富鎶€鑳戒紭鍖栫郴缁?/div>
+    <h1>Auto Skill<br>Optimizer</h1>
+    <p class="hero-subtitle">
+      <strong>璇勪及</strong> &rarr; <strong>鏀硅繘</strong> &rarr; <strong>瀹炴祴楠岃瘉</strong> &rarr; <strong>浜虹被纭</strong> &rarr; <strong>淇濈暀鎴栧洖婊?/strong>
+    </p>
+    <div class="hero-quote">
+      <p>銆宎utoresearch 鐨勬牳蹇冩兂娉曞緢绠€鍗曪細璁╃郴缁熻嚜涓昏繍琛屽疄楠岋紝璇勪及缁撴灉锛屽彧淇濈暀鏈夋晥鐨勬敼杩涖€備竴涓彧鑳藉悜鍓嶈浆鐨勬杞€傘€?/p>
+      <cite>Andrej Karpathy &mdash; 璋堣嚜涓诲疄楠屽惊鐜?/cite>
+    </div>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?01 PRINCIPLES 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="section">
+    <div class="section-num">01</div>
+    <h2 class="section-title">鏍稿績鍘熷垯</h2>
+    <p class="section-lead">浜旀潯瑙勫垯锛岄槻姝紭鍖栧櫒鍋忕Щ鏂瑰悜銆佽嚜鎴戝埛鍒嗘垨寮曞叆閫€鍖栥€?/p>
+
+    <div class="principles-grid">
+      <div class="principle">
+        <div class="principle-num">01</div>
+        <h3>鍗曚竴鍙紪杈戣祫浜?/h3>
+        <p>姣忚疆浼樺寲鍙拡瀵逛竴涓?SKILL.md 鏂囦欢銆備竴娆′慨鏀癸紝涓€娆℃祴閲忥紝涓€娆″喅绛栥€備笉鍋氳法鏂囦欢缂栬緫锛岄伩鍏嶅綊鍥犳ā绯娿€?/p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">02</div>
+        <h3>鍙岄噸璇勪及</h3>
+        <p>闈欐€佺粨鏋勫垎鏋愭崟鎹夋牸寮忓拰瀹屾暣鎬ч棶棰樸€傚疄娴嬫墽琛屾崟鎹夎涓洪€€鍖栥€備袱鑰呯己涓€涓嶅彲銆?/p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">03</div>
+        <h3>妫樿疆鏈哄埗</h3>
+        <p>鎻愬崌鎬诲垎鐨勬敼杩涜 commit銆傞檷浣庡垎鏁扮殑淇敼鑷姩 revert銆傚垎鏁板彧鑳戒笂鍗囨垨鎸佸钩锛屾案杩滀笉浼氫笅闄嶃€?/p>
+      </div>
+      <div class="principle">
+        <div class="principle-num">04</div>
+        <h3>鐙珛璇勫垎</h3>
+        <p>缂栬緫 Skill 鐨?Agent 姘歌繙涓嶄负鑷繁鎵撳垎銆傜敱鐙珛鐨勫瓙 Agent 璇勪及杈撳嚭璐ㄩ噺锛岄槻姝㈣嚜鎴戣〃鎵亸宸€?/p>
+      </div>
+      <div class="principle principle--full">
+        <div class="principle-num">05</div>
+        <h3>浜哄湪鍥炶矾</h3>
+        <p>姣忎釜 Skill 鐨勪紭鍖栧惊鐜畬鎴愬悗锛岀郴缁熸殏鍋溿€傚悜浜虹被灞曠ず diff 鎽樿銆佸垎鏁板彉鍖栧拰娴嬭瘯杈撳嚭瀵规瘮銆傛病鏈夋槑纭‘璁わ紝浠讳綍鏀瑰姩閮戒笉浼氱敓鏁堛€?/p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?02 RUBRIC 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="section">
+    <div class="section-num">02</div>
+    <h2 class="section-title">8缁村害<br>璇勪及浣撶郴</h2>
+    <p class="section-lead">100鍒嗚瘎浼颁綋绯汇€傜粨鏋勭淮搴︽崟鎹変綘鑳界湅鍒扮殑闂锛屾晥鏋滅淮搴︽崟鎹夊彧鏈夎繍琛屾椂鎵嶈兘鎰熺煡鐨勯棶棰樸€?/p>
+
+    <div class="rubric-header">
+      <div class="rubric-stat">
+        <div class="rubric-stat-num">60</div>
+        <div class="rubric-stat-label">缁撴瀯<br>鍒嗗€?/div>
+      </div>
+      <div class="rubric-stat">
+        <div class="rubric-stat-num rubric-stat-num--accent">40</div>
+        <div class="rubric-stat-label">鏁堟灉<br>鍒嗗€?/div>
+      </div>
+    </div>
+
+    <table class="rubric-table">
+      <caption>缁撴瀯缁村害 &mdash; 闈欐€佸垎鏋?/caption>
+      <thead>
+        <tr>
+          <th style="width:36px">#</th>
+          <th style="width:180px">缁村害</th>
+          <th style="width:60px">鏉冮噸</th>
+          <th>璇勫垎鏍囧噯</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="dim-num">1</td>
+          <td class="dim-name">Frontmatter璐ㄩ噺</td>
+          <td class="dim-weight">8</td>
+          <td class="dim-desc">鍚嶇О姝ｇ‘锛屾弿杩板寘鍚姛鑳?瑙﹀彂鏉′欢/浣跨敤鍦烘櫙锛屼笉瓒呰繃1024瀛楃</td>
+        </tr>
+        <tr>
+          <td class="dim-num">2</td>
+          <td class="dim-name">宸ヤ綔娴佹竻鏅板害</td>
+          <td class="dim-weight">15</td>
+          <td class="dim-desc">姝ラ鏈夌紪鍙枫€佸彲鎵ц锛屾瘡姝ラ兘鏈夋槑纭殑杈撳叆/杈撳嚭</td>
+        </tr>
+        <tr>
+          <td class="dim-num">3</td>
+          <td class="dim-name">杈圭晫鏉′欢瑕嗙洊</td>
+          <td class="dim-weight">10</td>
+          <td class="dim-desc">閿欒澶勭悊銆侀檷绾ф柟妗堛€佸父瑙佹晠闅滄仮澶?/td>
+        </tr>
+        <tr>
+          <td class="dim-num">4</td>
+          <td class="dim-name">妫€鏌ョ偣璁捐</td>
+          <td class="dim-weight">7</td>
+          <td class="dim-desc">鍏抽敭鍐崇瓥鍓嶉渶鐢ㄦ埛纭锛岄槻姝㈣嚜涓诲け鎺?/td>
+        </tr>
+        <tr>
+          <td class="dim-num">5</td>
+          <td class="dim-name">鎸囦护鍏蜂綋鎬?/td>
+          <td class="dim-weight">15</td>
+          <td class="dim-desc">鏃犳涔夛紝鍏蜂綋鐨勫弬鏁?鏍煎紡/绀轰緥锛屽彲鐩存帴鎵ц</td>
+        </tr>
+        <tr>
+          <td class="dim-num">6</td>
+          <td class="dim-name">璧勬簮鏁村悎搴?/td>
+          <td class="dim-weight">5</td>
+          <td class="dim-desc">鎵€鏈夊紩鐢ㄧ殑鑴氭湰/璧勪骇璺緞瀛樺湪涓斿彲璁块棶</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="rubric-table">
+      <caption>鏁堟灉缁村害 &mdash; 闇€瑕佸疄娴?/caption>
+      <thead>
+        <tr>
+          <th style="width:36px">#</th>
+          <th style="width:180px">缁村害</th>
+          <th style="width:60px">鏉冮噸</th>
+          <th>璇勫垎鏍囧噯</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="dim-num">7</td>
+          <td class="dim-name">鏁翠綋鏋舵瀯</td>
+          <td class="dim-weight">15</td>
+          <td class="dim-desc">灞傛娓呮櫚锛屾棤鍐椾綑鎴栭仐婕忥紝绗﹀悎鐢熸€佺郴缁熺害瀹?/td>
+        </tr>
+        <tr>
+          <td class="dim-num">8</td>
+          <td class="dim-name">瀹炴祴琛ㄧ幇</td>
+          <td class="dim-weight">25</td>
+          <td class="dim-desc">杩愯2-3涓祴璇曟彁绀鸿瘝锛屽姣斿惎鐢?Skill 鍜?baseline 鐨勮緭鍑鸿川閲?/td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?03 PHASES 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="section">
+    <div class="section-num">03</div>
+    <h2 class="section-title">浼樺寲寰幆</h2>
+    <p class="section-lead">浠庡垵濮嬪寲鍒版渶缁堟姤鍛婄殑浜斾釜闃舵銆傜郴缁熷湪姣忎釜闃舵鍐呰嚜涓昏繍琛岋紝浣嗗湪闃舵涔嬮棿鏆傚仠绛夊緟浜虹被瀹℃煡銆?/p>
+
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-id">
+          0
+          <span>鍒濆鍖?/span>
+        </div>
+        <div class="phase-body">
+          <h3>鑼冨洿涓庡垎鏀缃?/h3>
+          <p>纭畾浼樺寲鑼冨洿锛屽垱寤虹増鏈帶鍒跺熀纭€璁炬柦锛屽姞杞藉巻鍙茶褰曘€?/p>
+          <ol class="phase-steps">
+            <li>纭鑼冨洿锛氬叏閮?Skill 杩樻槸鐢ㄦ埛鎸囧畾瀛愰泦</li>
+            <li>鎵弿 .claude/skills/*/SKILL.md 鑾峰彇鐩爣鍒楄〃</li>
+            <li>鍒涘缓 git 鍒嗘敮锛歛uto-optimize/YYYYMMDD-HHMM</li>
+            <li>鍒濆鍖栨垨鍔犺浇 results.tsv 鐢ㄤ簬鍘嗗彶杩借釜</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">
+          0.5
+          <span>璁捐</span>
+        </div>
+        <div class="phase-body">
+          <h3>娴嬭瘯鎻愮ず璇嶅伐绋?/h3>
+          <p>鍦ㄤ换浣曡瘎鍒嗕箣鍓嶏紝鍏堣璁＄敤浜庤　閲忔晥鏋滅殑娴嬭瘯鎻愮ず璇嶃€傛病鏈夊ソ鐨勬祴璇曪紝浼樺寲鍣ㄥ氨鏄洸椋炪€?/p>
+          <ol class="phase-steps">
+            <li>闃呰姣忎釜 SKILL.md锛岀悊瑙ｅ叾澹版槑鐨勮兘鍔?/li>
+            <li>涓烘瘡涓?Skill 璁捐2-3涓彁绀鸿瘝锛氫竴涓甯歌矾寰勶紝涓€涓ā绯婂満鏅?/li>
+            <li>淇濆瓨鍒版瘡涓?Skill 鐩綍涓嬬殑 test-prompts.json</li>
+            <li>鍦ㄧ户缁箣鍓嶏紝灏嗘墍鏈夋祴璇曟彁绀鸿瘝鎻愪氦浜虹被瀹℃壒</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">
+          1
+          <span>鍩虹嚎</span>
+        </div>
+        <div class="phase-body">
+          <h3>鍏ㄧ淮搴﹁瘎鍒?/h3>
+          <p>涓烘瘡涓?Skill 寤虹珛璧峰鍒嗘暟銆傜粨鏋勮瘎鍒嗙敱涓?Agent 瀹屾垚锛屾晥鏋滆瘎鍒嗙敱鐙珛瀛?Agent 瀹屾垚銆?/p>
+          <ol class="phase-steps">
+            <li>闃呰 SKILL.md锛屼负缁村害1-7璇勫垎骞堕檮鐞嗙敱</li>
+            <li>鍚姩瀛?Agent锛氬垎鍒湪鍚敤鍜屾湭鍚敤 Skill 鐨勬儏鍐典笅杩愯娴嬭瘯鎻愮ず璇?/li>
+            <li>瀵规瘮杈撳嚭锛屼负缁村害8璇勫垎锛堝瀛?Agent 涓嶅彲鐢ㄥ垯鏍囪 dry_run锛?/li>
+            <li>璁＄畻鍔犳潈鎬诲垎锛岃褰曞埌 results.tsv</li>
+            <li>灞曠ず璇勫垎鍗★紝鏆傚仠绛夊緟浜虹被纭</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">
+          2
+          <span>浼樺寲</span>
+        </div>
+        <div class="phase-body">
+          <h3>Hill-Climbing 寰幆</h3>
+          <p>鎸夊垎鏁颁粠浣庡埌楂樺鐞?Skill銆傛瘡杞細璇婃柇鏈€寮辩淮搴︼紝鎻愬嚭涓€涓拡瀵规€т慨澶嶏紝鎵ц锛岄噸鏂拌瘎鍒嗭紝鍋氬嚭鍐冲畾銆?/p>
+          <ol class="phase-steps">
+            <li>鎵惧嚭璇?Skill 寰楀垎鏈€浣庣殑缁村害</li>
+            <li>鐢熸垚涓€椤瑰叿浣撴敼杩涳紙鏀逛粈涔堬紝涓轰粈涔堟敼锛岄鏈熷垎鏁板彉鍖栵級</li>
+            <li>缂栬緫 SKILL.md锛岀敤缁撴瀯鍖栨秷鎭?git commit</li>
+            <li>閲嶆柊璇勫垎锛氱粨鏋勭敱涓?Agent锛屾晥鏋滅敱鐙珛瀛?Agent</li>
+            <li>鏂板垎 > 鏃у垎锛氫繚鐣欍€傚惁鍒欙細git revert锛岃繘鍏ヤ笅涓€涓?Skill</li>
+            <li>姣忎釜 Skill 瀹屾垚鍚庯細灞曠ず diff + 鍒嗘暟鍙樺寲锛岀瓑寰呬汉绫荤‘璁?/li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-id">
+          3
+          <span>鎶ュ憡</span>
+        </div>
+        <div class="phase-body">
+          <h3>鎬荤粨涓庢寚鏍?/h3>
+          <p>灏嗘墍鏈夌粨鏋滄眹鎬讳负鏈€缁堜紭鍖栨姤鍛婏紝鍖呭惈浼樺寲鍓嶅悗鍒嗘暟銆佸疄楠屾鏁板拰鍏抽敭鏀硅繘銆?/p>
+          <ol class="phase-steps">
+            <li>缁熻鎬诲疄楠屾鏁般€佷繚鐣欐鏁般€佸洖婊氭鏁板拰娴嬭瘯妯″紡</li>
+            <li>鐢熸垚姣忎釜 Skill 鐨勪紭鍖栧墠鍚庡垎鏁板姣旇〃</li>
+            <li>鍒楀嚭褰卞搷鏈€澶х殑鏀硅繘鍙婂叾瀵瑰簲缁村害</li>
+            <li>褰掓。 results.tsv 渚涙湭鏉?baseline 鍙傝€?/li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?04 RATCHET 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="section">
+    <div class="section-num">04</div>
+    <h2 class="section-title">妫樿疆鏈哄埗</h2>
+    <p class="section-lead">鍒嗘暟鍙兘涓婂崌銆傛瘡杞涔堟敼杩?Skill锛岃涔堝共鍑€鍦板洖婊氥€備笉浼氶殢鏃堕棿绉疮灞€閮ㄩ€€鍖栥€?/p>
+
+    <div class="ratchet-viz">
+      <div class="ratchet-step">
+        <div class="ratchet-score">72</div>
+        <div style="height:144px" class="ratchet-bar"></div>
+        <div class="ratchet-label ratchet-label--baseline">鍩虹嚎</div>
+        <div class="ratchet-round">杞 0</div>
+        <div class="ratchet-arrow"></div>
+      </div>
+      <div class="ratchet-step">
+        <div class="ratchet-score">78</div>
+        <div style="height:156px" class="ratchet-bar"></div>
+        <div class="ratchet-label ratchet-label--keep">淇濈暀</div>
+        <div class="ratchet-round">杞 1</div>
+        <div class="ratchet-arrow"></div>
+      </div>
+      <div class="ratchet-step">
+        <div class="ratchet-score ratchet-score--revert">75</div>
+        <div style="height:150px" class="ratchet-bar ratchet-bar--revert"></div>
+        <div class="ratchet-label ratchet-label--revert">鍥炴粴</div>
+        <div class="ratchet-round">杞 2</div>
+        <div class="ratchet-arrow"></div>
+      </div>
+      <div class="ratchet-step">
+        <div class="ratchet-score">84</div>
+        <div style="height:168px" class="ratchet-bar"></div>
+        <div class="ratchet-label ratchet-label--keep">Keep</div>
+        <div class="ratchet-round">杞 3</div>
+        <div class="ratchet-arrow"></div>
+      </div>
+      <div class="ratchet-step">
+        <div class="ratchet-score">87</div>
+        <div style="height:174px" class="ratchet-bar"></div>
+        <div class="ratchet-label ratchet-label--keep">Keep</div>
+        <div class="ratchet-round">杞 4</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?05 COMPARISON 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="section">
+    <div class="section-num">05</div>
+    <h2 class="section-title">涓轰粈涔堥渶瑕?br>鍙岄噸璇勪及</h2>
+    <p class="section-lead">鍗曠湅缁撴瀯鏃犳硶鍒ゆ柇 Skill 鏄惁鐪熸濂界敤銆傚崟鐪嬫晥鏋滄棤娉曞垽鏂畠涓轰綍澶辫触銆?/p>
+
+    <div class="comparison">
+      <div class="comparison-col">
+        <div class="comparison-tag">浼犵粺鏂规硶</div>
+        <h3>绾粨鏋勫鏌?/h3>
+        <ul class="comparison-list">
+          <li>妫€鏌?frontmatter 鏄惁瀛樺湪涓旀牸寮忔纭?/li>
+          <li>楠岃瘉姝ラ鏄惁鏈夌紪鍙峰拰鎻忚堪</li>
+          <li>纭鏂囦欢璺緞鍜屽紩鐢ㄦ槸鍚︽湁鏁?/li>
+          <li>鏃犳硶妫€娴?Skill 鏄惁<strong>鐪熸鎻愬崌浜?/strong>杈撳嚭璐ㄩ噺</li>
+          <li>鏃犳硶妫€娴?strong>鐪嬩技姝ｇ‘</strong>瀹炲垯浜х敓宸粨鏋滅殑璇鎬ф寚浠?/li>
+          <li>鏃犳硶妫€娴?strong>寮婂ぇ浜庡埄</strong>鐨勮繃搴︾害鏉?/li>
+        </ul>
+      </div>
+      <div class="comparison-col comparison-col--highlight">
+        <div class="comparison-tag">Auto Skill Optimizer</div>
+        <h3>鍙岄噸璇勪及</h3>
+        <ul class="comparison-list">
+          <li><strong>缁撴瀯璇勫垎</strong>鎹曟崏鏍煎紡銆佸畬鏁存€у拰鍙鎬ч棶棰?/li>
+          <li><strong>瀹炴祴鎵ц</strong>鎻ず鐪熷疄鍦烘櫙涓嬬殑琛屼负褰卞搷</li>
+          <li><strong>鍩虹嚎瀵规瘮</strong>琛￠噺 Skill 鏄鍊艰繕鏄噺鍊?/li>
+          <li><strong>鐙珛瀛?Agent</strong>闃叉鑷垜琛ㄦ壃鐨勮瘎鍒嗗亸宸?/li>
+          <li><strong>娴嬭瘯鎻愮ず璇嶈璁?/strong>纭繚璇勪及閽堝鐪熷疄鐢ㄦ埛鍦烘櫙</li>
+          <li><strong>Dry-run 闄嶇骇</strong>鍦ㄥ疄娴嬩笉鍙敤鏃舵彁渚涜鐩?/li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?06 MAPPING 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <section class="section">
+    <div class="section-num">06</div>
+    <h2 class="section-title">姒傚康鏄犲皠</h2>
+    <p class="section-lead">autoresearch 鐨勬牳蹇冩娊璞″浣曡浆鍖栦负 Skill 浼樺寲銆傚悓涓€鍙版満鍣紝涓嶅悓鐨勯鍩熴€?/p>
+
+    <table class="mapping-table">
+      <thead>
+        <tr>
+          <th style="width:220px">Autoresearch</th>
+          <th style="width:220px">Skill Optimizer</th>
+          <th>瀹炵幇缁嗚妭</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>鐮旂┒璁烘枃鑽夌</td>
+          <td>SKILL.md 鏂囦欢</td>
+          <td>鍞竴鐨勫彲缂栬緫浜х墿銆傛墍鏈夋敼杩涢兘琛ㄧ幇涓哄杩欎竴涓枃浠剁殑缂栬緫銆?/td>
+        </tr>
+        <tr>
+          <td>璇勪及鎸囨爣</td>
+          <td>8缁村害璇勪及浣撶郴</td>
+          <td>璺ㄧ粨鏋勶紙60鍒嗭級鍜屾晥鏋滐紙40鍒嗭級鐨勫姞鏉冭瘎鍒嗭紝鎬昏100鍒嗐€?/td>
+        </tr>
+        <tr>
+          <td>瀹為獙寰幆</td>
+          <td>闃舵2 hill-climbing</td>
+          <td>璇婃柇鏈€寮辩淮搴︼紝鎻愬嚭淇锛屾墽琛岋紝閲嶆柊璇勫垎锛屼繚鐣欐垨鍥炴粴銆傛瘡涓?Skill 鏈€澶?杞€?/td>
+        </tr>
+        <tr>
+          <td>鐗堟湰鎺у埗</td>
+          <td>Git 鍒嗘敮 + revert</td>
+          <td>姣忔缂栬緫閮芥槸涓€娆?commit銆傞€€鍖栭€氳繃 revert锛堟柊 commit锛夊洖婊氥€傚畬鏁村璁¤褰曘€?/td>
+        </tr>
+        <tr>
+          <td>鑷姩鍖栬瘎浼?/td>
+          <td>瀛?Agent 娴嬭瘯鎵ц</td>
+          <td>鐙珛 Agent 鍒嗗埆鍦ㄥ惎鐢ㄥ拰鏈惎鐢?Skill 鐨勬儏鍐典笅杩愯娴嬭瘯鎻愮ず璇嶏紝瀵规瘮杈撳嚭璐ㄩ噺銆?/td>
+        </tr>
+        <tr>
+          <td>浜虹被瀹℃煡鍏冲崱</td>
+          <td>闃舵杞崲鏆傚仠</td>
+          <td>绯荤粺鍦ㄥ熀绾胯瘎鍒嗗悗鍜屾瘡涓?Skill 浼樺寲鍚庢殏鍋溿€傚睍绀?diff + 鍒嗘暟鍙樺寲銆?/td>
+        </tr>
+        <tr>
+          <td>鎺㈢储 vs 鍒╃敤</td>
+          <td>闃舵2.5鎺㈢储鎬ч噸鍐?/td>
+          <td>褰?hill-climbing 鍋滄粸锛堣繛缁?娆″湪绗?杞氨涓柇锛夛紝鎻愬嚭瀹屾暣鐨勭粨鏋勯噸鍐欍€?/td>
+        </tr>
+        <tr>
+          <td>瀹為獙鏃ュ織</td>
+          <td>results.tsv</td>
+          <td>甯︽椂闂存埑鐨勮褰曪細commit 鍝堝笇銆丼kill 鍚嶇О銆佹柊鏃у垎鏁般€佷繚鐣?鍥炴粴鐘舵€併€佽瘎浼版ā寮忋€?/td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<!-- 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?FOOTER 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?-->
+<div class="container">
+  <footer class="footer">
+    <div class="footer-left">Auto Skill Optimizer</div>
+    <div class="footer-right">鐏垫劅婧愯嚜 Karpathy autoresearch &mdash; 涓?Claude Code Skill 鐢熸€佽€屽缓</div>
+  </footer>
+</div>
+
+</body>
+</html>

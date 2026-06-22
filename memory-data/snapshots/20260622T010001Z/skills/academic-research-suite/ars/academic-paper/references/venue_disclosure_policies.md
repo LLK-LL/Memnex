@@ -1,0 +1,121 @@
+﻿# AI-Usage Disclosure Policy Database 鈥?v1
+
+**Snapshot date**: 2026-04-09
+**Scope**: v1 covers 6 ML/NLP-focused venues. Education/QA journals deferred to v2.
+**Maintenance**: policies drift. Before submission, the user should verify against the venue's current page. The "source URL" and "access date" below record when ARS last verified each policy.
+
+---
+
+## How to use this file
+
+This file is consumed by `disclosure_mode_protocol.md`. The mode looks up the venue by name, reads the structured fields below, and generates a tailored disclosure. Do NOT use this file as a standalone template 鈥?use disclosure mode.
+
+If the venue is not listed here, the mode halts and asks the user to paste the current policy.
+
+---
+
+## Venue: ICLR (International Conference on Learning Representations)
+
+| Field | Value |
+|---|---|
+# REDACTED: sensitive-looking memory line
+| Access date | 2026-04-09 |
+# REDACTED: sensitive-looking memory line
+# REDACTED: sensitive-looking memory line
+| Preferred disclosure location | Paper body 鈥?a dedicated paragraph in the paper, typically at the end of the Introduction or in Acknowledgements |
+| Prohibited uses | None explicitly prohibited, but fabricated citations or results would violate general scientific integrity policies |
+# REDACTED: sensitive-looking memory line
+
+---
+
+## Venue: NeurIPS (Conference on Neural Information Processing Systems)
+
+| Field | Value |
+|---|---|
+| Source URL | https://neurips.cc/public/EthicsGuidelines |
+| Access date | 2026-04-09 |
+# REDACTED: sensitive-looking memory line
+# REDACTED: sensitive-looking memory line
+| Preferred disclosure location | Acknowledgements section or a separate "Use of AI Tools" subsection before References |
+# REDACTED: sensitive-looking memory line
+# REDACTED: sensitive-looking memory line
+
+---
+
+## Venue: Nature (Nature Publishing Group)
+
+**Policy-source dedup pointer:** Nature's substantive AI policy text is co-cited by the #108 policy-anchor renderer (`policy_anchor_table.md` Nature section, verbatim quotes per 16 fields). Both consumers reference the canonical source pointer `shared/policy_data/nature_policy.md` so a future single-source-of-truth refactor can extract Nature's policy text without breaking either consumer's substantive content. Dedup invariant lint: `verify_nature_dedup_with_venue` in `scripts/check_policy_anchor_table.py`.
+
+# REDACTED: sensitive-looking memory line
+
+| Field | Value |
+|---|---|
+| Source URL | https://www.nature.com/nature/editorial-policies/ai |
+| Access date | 2026-04-09 |
+# REDACTED: sensitive-looking memory line
+# REDACTED: sensitive-looking memory line
+| Preferred disclosure location | **Methods section** (recommended by Nature) or Acknowledgements. Also mention in the cover letter. |
+| Prohibited uses | AI-generated text or images cannot be presented as original human work without disclosure. Fabrication of references or data is prohibited under general integrity policy. |
+# REDACTED: sensitive-looking memory line
+| Notes | Lu et al. (2026, Nature 651:914-919) provides a worked example: their AI Scientist paper includes full disclosure in Methods and Ethics Statement, with explicit IRB-style approval for the human reviewer participation. |
+
+---
+
+## Venue: Science (AAAS)
+
+| Field | Value |
+|---|---|
+| Source URL | https://www.science.org/content/page/science-journals-editorial-policies |
+| Access date | 2026-04-09 |
+# REDACTED: sensitive-looking memory line
+# REDACTED: sensitive-looking memory line
+| Preferred disclosure location | **Acknowledgements** (preferred) or **Materials and Methods** |
+| Prohibited uses | AI-generated text submitted without disclosure violates editorial policy. Fabricated figures or data are prohibited. |
+# REDACTED: sensitive-looking memory line
+
+---
+
+## Venue: ACL (Association for Computational Linguistics)
+
+| Field | Value |
+|---|---|
+| Source URL | https://www.aclweb.org/portal/content/acl-policy-use-ai-writing-assistance |
+| Access date | 2026-04-09 |
+# REDACTED: sensitive-looking memory line
+| Required phrasing elements | Must name the tool. Must describe "the extent of use" 鈥?was it for drafting, editing, or brainstorming? ACL distinguishes between minor editing and substantive drafting. |
+| Preferred disclosure location | A dedicated **"Use of AI Assistance"** subsection, placed after "Limitations" and before "References" |
+| Prohibited uses | Submitting AI-generated text as the primary intellectual contribution without disclosure |
+# REDACTED: sensitive-looking memory line
+| Notes | ACL's "Use of AI Assistance" section is formatted separately from Acknowledgements. The tool should produce both sections if both apply. |
+
+---
+
+## Venue: EMNLP (Empirical Methods in Natural Language Processing)
+
+| Field | Value |
+|---|---|
+| Source URL | https://2026.emnlp.org/calls/main-conference-papers (follows ACL policy) |
+| Access date | 2026-04-09 |
+| Policy summary | EMNLP follows the ACL policy. Same requirements apply. |
+| Required phrasing elements | Same as ACL |
+| Preferred disclosure location | Same as ACL: **"Use of AI Assistance"** subsection |
+| Prohibited uses | Same as ACL |
+# REDACTED: sensitive-looking memory line
+| Notes | EMNLP is co-located with ACL and adopts ACL's policies wholesale. Any update to ACL policy applies here. |
+
+---
+
+## Adding a new venue (v2 and beyond)
+
+To add a venue to this database:
+
+1. Find the venue's current AI-usage policy page (not a third-party summary).
+2. Copy the structured fields above.
+3. Fill in each field with verbatim or closely-paraphrased policy text.
+4. Record the source URL and date accessed.
+5. Add the venue entry to this file in alphabetical order.
+6. Update the "Scope" line at the top.
+
+For venues without a published AI policy: record "No explicit AI-usage policy found as of {date}" and flag this in disclosure mode output so the user knows they are using the generic template as fallback.
+
+**Education/QA journals** targeted for v2: Higher Education, Quality in Higher Education, Studies in Higher Education, Assessment & Evaluation in Higher Education, Journal of Higher Education Policy and Management. These will require separate research as their policies are less standardized than ML/NLP venues.
