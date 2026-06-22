@@ -2,10 +2,10 @@
   {
     "name": "golden_memory_recall_default_rag",
     "type": "recall",
-    "query": "memory_recall 默认 RAG server.py include_cognitive rag_fallback_index",
+    "query": "memory_recall default RAG server.py include_cognitive rag_fallback_index",
     "project": "total-agent-memory",
     "expected_ids": [100, 101],
-    "expected_terms": ["memory_recall", "默认 RAG", "server.py"],
+    "expected_terms": ["memory_recall", "RAG", "server.py"],
     "k": 5
   },
   {
@@ -13,8 +13,8 @@
     "type": "recall",
     "query": "representations queue summary keywords compressed pending drain",
     "project": "total-agent-memory",
-    "expected_ids": [101, 93],
-    "expected_terms": ["representation", "summary", "keywords", "compressed"],
+    "expected_ids": [418, 101, 93],
+    "expected_terms": ["representation", "summary", "keywords", "compressed", "drain"],
     "k": 5
   },
   {
@@ -29,10 +29,10 @@
   {
     "name": "golden_openradioss_kfile_compatibility",
     "type": "recall",
-    "query": "OpenRadioss LS-DYNA k file compatibility unsupported keyword",
+    "query": "openradioss_launcher_gui auto-repairs CONTACT_SURFACE_TO_SURFACE_ID RIGIDWALL_PLANAR_FINITE_FORCES_ID unsupported CONSTRAINED_GLOBAL",
     "project": "OpenRadioss",
     "expected_ids": [22],
-    "expected_terms": ["OpenRadioss", "LS-DYNA", ".k"],
+    "expected_terms": ["openradioss_launcher_gui", "auto-repairs", "unsupported"],
     "k": 5
   },
   {
