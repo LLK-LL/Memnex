@@ -1,20 +1,20 @@
 [
   {
-    "name": "prevent_sqlite_locked",
+    "name": "prevent_server_optional_dependency_import",
     "type": "prevention",
     "file": "src/server.py",
-    "project": "claude-total-memory",
+    "project": "total-agent-memory",
     "must_warn_about": [
-      "sqlite"
+      "sentence_transformers"
     ]
   },
   {
-    "name": "prevent_fts_corruption",
+    "name": "prevent_server_multi_process_sqlite_risk",
     "type": "prevention",
     "file": "src/server.py",
-    "project": "claude-total-memory",
+    "project": "total-agent-memory",
     "must_warn_about": [
-      "fts"
+      "SQLite"
     ]
   }
 ]

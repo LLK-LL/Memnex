@@ -174,9 +174,17 @@ def test_memory_eval_locomo_returns_structured_payload(wired_server, tmp_path):
 def test_memory_eval_recall_builtin_fixture(wired_server):
     """memory_eval_recall with no dataset_path uses the built-in fixture and
     returns the same structured shape."""
+    before = wired_server.store.db.execute(
+        "SELECT COUNT(*) FROM knowledge WHERE project='memory_eval_recall'"
+    ).fetchone()[0]
+
     payload = _call(wired_server, "memory_eval_recall", {
         "top_k": 5, "mode": "fast",
     })
+
+    after = wired_server.store.db.execute(
+        "SELECT COUNT(*) FROM knowledge WHERE project='memory_eval_recall'"
+    ).fetchone()[0]
     assert REQUIRED_KEYS - set(payload.keys()) == set(), payload
     assert payload["mode"] == "fast"
     assert payload["scenarios_total"] >= 1
@@ -184,6 +192,44 @@ def test_memory_eval_recall_builtin_fixture(wired_server):
     assert payload["recall_at_5"] == 1.0
     assert payload["mrr"] == 1.0
     assert payload.get("dataset") == "builtin"
+    assert payload["cleanup_removed"] >= 2
+    assert after == before
+
+
+def test_memory_eval_long_context_cleans_fixture_records(wired_server):
+    before = wired_server.store.db.execute(
+        "SELECT COUNT(*) FROM knowledge WHERE project='memory_eval_long_context'"
+    ).fetchone()[0]
+
+    payload = _call(wired_server, "memory_eval_long_context", {
+        "n_records": 10,
+        "top_k": 5,
+        "mode": "fast",
+    })
+
+    after = wired_server.store.db.execute(
+        "SELECT COUNT(*) FROM knowledge WHERE project='memory_eval_long_context'"
+    ).fetchone()[0]
+    assert payload["scenarios_total"] == 1
+    assert payload["scenarios_passed"] == 1, payload
+    assert payload["cleanup_removed"] >= payload["n_records"] + 1
+    assert after == before
+
+
+def test_memory_reflect_now_drain_dispatches_to_agent(wired_server, monkeypatch):
+    class DummyReflection:
+        async def run_drain(self):
+            return {"scope": "drain", "representations": {"processed": 1}}
+
+    def fake_get_v5(name, db):
+        assert name == "reflection"
+        assert db is wired_server.store.db
+        return DummyReflection()
+
+    monkeypatch.setattr(wired_server, "_get_v5", fake_get_v5)
+    payload = _call(wired_server, "memory_reflect_now", {"scope": "drain"})
+    assert payload["scope"] == "drain"
+    assert payload["representations"]["processed"] == 1
 
 
 def test_golden_memory_queries_fixture_loads():

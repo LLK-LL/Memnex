@@ -386,6 +386,9 @@ def test_memory_perf_report_has_counters(wired_server):
     assert "search_total_ms" in counters
     # embedding_cache stats present.
     assert "embedding_cache_v11" in payload
+    assert payload["embedding_cache_v11"]["hot_path"] == "not_connected"
+    assert payload["embedding_cache_hot_path"]["name"] == "v9_cache"
+    assert "stats" in payload["embedding_cache_hot_path"]
 
 
 def test_memory_rebuild_fts_idempotent(wired_server):

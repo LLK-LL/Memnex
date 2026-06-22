@@ -4474,8 +4474,8 @@ async def list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "scope": {"type": "string", "enum": ["quick", "full", "weekly"], "default": "full",
-                              "description": "quick=dedup only, full=digest+synthesize, weekly=deep analysis"},
+                    "scope": {"type": "string", "enum": ["quick", "full", "weekly", "drain"], "default": "full",
+                              "description": "quick=dedup only, drain=queues only, full=digest+synthesize, weekly=deep analysis"},
                 },
             },
         ),
@@ -4864,6 +4864,7 @@ async def list_tools():
                     "include_diagnostics": {"type": "boolean", "default": False},
                     "write_report": {"type": "boolean", "default": False},
                     "report_path": {"type": "string"},
+                    "cleanup_fixture": {"type": "boolean", "default": True},
                 },
             },
         ),
@@ -4914,6 +4915,7 @@ async def list_tools():
                     "n_records": {"type": "integer", "default": 200},
                     "top_k": {"type": "integer", "default": 5},
                     "mode": {"type": "string", "enum": ["fast", "balanced", "deep"], "default": "fast"},
+                    "cleanup_fixture": {"type": "boolean", "default": True},
                 },
             },
         ),
@@ -5267,6 +5269,45 @@ def _eval_summary_payload(
     if report_path:
         payload["report_path"] = report_path
     return payload
+
+
+def _cleanup_eval_records(record_ids: list[int]) -> int:
+    if not record_ids:
+        return 0
+    ids = [int(rid) for rid in record_ids if isinstance(rid, int) or str(rid).isdigit()]
+    if not ids:
+        return 0
+    qmarks = ",".join("?" for _ in ids)
+    removed = 0
+    try:
+        removed += int(store.db.execute(
+            f"DELETE FROM knowledge_fts WHERE rowid IN ({qmarks})", ids,
+        ).rowcount or 0)
+    except Exception:
+        pass
+    try:
+        cur = store.db.execute(
+            f"DELETE FROM knowledge WHERE id IN ({qmarks})", ids,
+        )
+        removed = max(removed, int(cur.rowcount or 0))
+        store.db.commit()
+    except Exception as exc:
+        LOG(f"eval cleanup failed: {exc}")
+    try:
+        if store.chroma is not None:
+            store.chroma.delete(ids=[str(rid) for rid in ids])
+    except Exception:
+        pass
+    try:
+        if getattr(store, "v9_cache", None) is not None:
+            for rid in ids:
+                store.v9_cache.invalidate_by_id(rid)
+        if store.cache is not None:
+            store.cache.invalidate(project="memory_eval_recall")
+            store.cache.invalidate(project="memory_eval_long_context")
+    except Exception:
+        pass
+    return removed
 
 
 async def _do(name, a):
@@ -6051,6 +6092,8 @@ async def _do(name, a):
         scope = a.get("scope", "full")
         if scope == "quick":
             result = await ra.run_quick()
+        elif scope == "drain":
+            result = await ra.run_drain()
         elif scope == "weekly":
             result = await ra.run_weekly()
         else:
@@ -6407,9 +6450,26 @@ async def _do(name, a):
             report["counters_error"] = str(e)
         try:
             from memory_core import embedding_cache as _v11_ec
-            report["embedding_cache_v11"] = _v11_ec.stats(store.db)
+            report["embedding_cache_v11"] = {
+                **_v11_ec.stats(store.db),
+                "hot_path": "not_connected",
+            }
         except Exception as e:
             report["embedding_cache_v11_error"] = str(e)
+        try:
+            v9_cache = getattr(store, "v9_cache", None)
+            if v9_cache is not None:
+                report["embedding_cache_hot_path"] = {
+                    "name": "v9_cache",
+                    "stats": v9_cache.stats(),
+                }
+            else:
+                report["embedding_cache_hot_path"] = {
+                    "name": "none",
+                    "stats": {},
+                }
+        except Exception as e:
+            report["embedding_cache_hot_path_error"] = str(e)
         # Optional benchmark snapshot from docs/v11/benchmark.md.
         try:
             from pathlib import Path as _P
@@ -6575,6 +6635,8 @@ async def _do(name, a):
         include_diagnostics = bool(a.get("include_diagnostics", False))
         write_report = bool(a.get("write_report", False))
         report_path = a.get("report_path")
+        cleanup_fixture = bool(a.get("cleanup_fixture", True))
+        created_eval_ids: list[int] = []
 
         # Built-in fixture when no dataset_path: a tiny self-test that seeds
         # two records and asks for them back. Deterministic; no LLM.
@@ -6610,6 +6672,8 @@ async def _do(name, a):
                             skip_quality=True,
                             tags=["eval-fixture"],
                         )
+                        if rid:
+                            created_eval_ids.append(int(rid))
                         builtin.append({
                             "name": f"recall_{i}",
                             "type": "recall",
@@ -6651,6 +6715,10 @@ async def _do(name, a):
             llm_delta, net_delta = _eval_perf_snapshot_delta(before)
 
         report = run["report"]
+        cleanup_removed = (
+            _cleanup_eval_records(created_eval_ids)
+            if cleanup_fixture else 0
+        )
         explanations: dict[str, dict] = {}
         if include_diagnostics:
             for scenario in report.get("scenarios", []):
@@ -6703,7 +6771,7 @@ async def _do(name, a):
                 "scenarios": report.get("scenarios", []),
             }, report_path)
 
-        return J(_eval_summary_payload(
+        payload = _eval_summary_payload(
             report=report,
             mode=mode,
             llm_delta=llm_delta,
@@ -6711,7 +6779,10 @@ async def _do(name, a):
             dataset="builtin" if builtin is not None else dataset_path,
             diagnostics=diagnostics,
             report_path=saved_report_path,
-        ))
+        )
+        if builtin is not None:
+            payload["cleanup_removed"] = cleanup_removed
+        return J(payload)
 
     elif name == "memory_eval_temporal":
         mode = a.get("mode", "fast")
@@ -6976,6 +7047,8 @@ async def _do(name, a):
         mode = a.get("mode", "fast")
         n_records = max(10, int(a.get("n_records", 200)))
         top_k = int(a.get("top_k", 5))
+        cleanup_fixture = bool(a.get("cleanup_fixture", True))
+        created_eval_ids: list[int] = []
 
         with _EvalModeContext(mode):
             try:
@@ -6986,23 +7059,31 @@ async def _do(name, a):
                 before = {}
 
             project = "memory_eval_long_context"
-            # Seed a haystack of N filler records + 1 needle at the tail.
             for i in range(n_records):
                 try:
-                    store.save_knowledge(
-                        sid=getattr(__import__("server"), "SID", "eval-session"),
-                        content=f"long-context filler {i} — generic noise about caches and queues",
+                    rid, *_ = store.save_knowledge(
+                        sid=globals().get("SID", "eval-session"),
+                        content=f"long-context filler {i} - generic noise about caches and queues",
                         ktype="fact", project=project,
+                        skip_dedup=True, skip_quality=True,
+                        tags=["eval-fixture"],
                     )
+                    if rid:
+                        created_eval_ids.append(int(rid))
                 except Exception:
                     pass
             needle_phrase = "tachyon-aluminium hyperspecific marker"
+            needle_id = None
             try:
-                store.save_knowledge(
-                    sid=getattr(__import__("server"), "SID", "eval-session"),
-                    content=f"NEEDLE — {needle_phrase}",
+                needle_id, *_ = store.save_knowledge(
+                    sid=globals().get("SID", "eval-session"),
+                    content=f"NEEDLE - {needle_phrase}",
                     ktype="fact", project=project,
+                    skip_dedup=True, skip_quality=True,
+                    tags=["eval-fixture"],
                 )
+                if needle_id:
+                    created_eval_ids.append(int(needle_id))
             except Exception:
                 pass
 
@@ -7011,7 +7092,8 @@ async def _do(name, a):
                 "type": "recall",
                 "query": needle_phrase,
                 "project": project,
-                "must_contain": ["tachyon"],
+                "expected_ids": [needle_id] if needle_id else [],
+                "expected_terms": ["tachyon"],
                 "k": top_k,
             }]
             from eval_harness import EvalHarness
@@ -7033,6 +7115,10 @@ async def _do(name, a):
 
             llm_delta, net_delta = _eval_perf_snapshot_delta(before)
 
+        cleanup_removed = (
+            _cleanup_eval_records(created_eval_ids)
+            if cleanup_fixture else 0
+        )
         recall_block = report.get("recall", {})
         return J({
             "scenarios_total": int(report.get("total", 0)),
@@ -7044,7 +7130,9 @@ async def _do(name, a):
             "llm_calls_during_eval": int(llm_delta),
             "network_calls_during_eval": int(net_delta),
             "n_records": n_records,
+            "cleanup_removed": cleanup_removed,
         })
+
 
     # ── v11.0 W3 dispatch ──────────────────────────────────────────────
     elif name == "memory_recall_iterative":

@@ -1,32 +1,29 @@
 [
   {
-    "name": "recall_binary_quantization",
+    "name": "recall_memory_rag_default",
     "type": "recall",
-    "query": "binary quantization vector search",
-    "project": "claude-total-memory",
-    "must_contain": [
-      "binary quantization"
-    ],
+    "query": "memory_recall default RAG server.py include_cognitive rag_fallback_index",
+    "project": "total-agent-memory",
+    "expected_ids": [100, 101],
+    "expected_terms": ["memory_recall", "RAG", "server.py"],
     "k": 5
   },
   {
-    "name": "recall_temporal_kg",
+    "name": "recall_igor_remote_codex",
     "type": "recall",
-    "query": "temporal knowledge graph point-in-time",
-    "project": "claude-total-memory",
-    "must_contain": [
-      "temporal"
-    ],
+    "query": "Igor remote server Codex CLI SSH alias ig",
+    "project": "codexcli-cli",
+    "expected_ids": [213],
+    "expected_terms": ["Igor", "remote", "Codex CLI"],
     "k": 5
   },
   {
-    "name": "recall_procedural_memory",
+    "name": "recall_openradioss_kfile",
     "type": "recall",
-    "query": "procedural memory workflow outcome",
-    "project": "claude-total-memory",
-    "must_contain": [
-      "workflow"
-    ],
+    "query": "OpenRadioss LS-DYNA k file compatibility unsupported keyword",
+    "project": "OpenRadioss",
+    "expected_ids": [22],
+    "expected_terms": ["OpenRadioss", "LS-DYNA", ".k"],
     "k": 5
   }
 ]
