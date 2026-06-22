@@ -1,10 +1,10 @@
 ﻿{
-    "synced_at_utc":  "2026-06-22T01:00:01.9885504Z",
-    "snapshot_id":  "20260622T010001Z",
+    "synced_at_utc":  "2026-06-22T05:41:45.9684594Z",
+    "snapshot_id":  "20260622T054145Z",
     "repository":  "LLK-LL/AI-brain",
     "system_layer":  "memory-system",
-    "data_layer":  "memory-data/snapshots/20260622T010001Z",
-    "latest_memory_export_source":  "C:\\Users\\Administrator\\.tam\\backups\\export_all_20260615_100536.json",
+    "data_layer":  "memory-data/snapshots/20260622T054145Z",
+    "latest_memory_export_source":  "C:\\Users\\Administrator\\.tam\\backups\\export_all_20260622_054137.json",
     "sources":  {
                     "tam_backups":  "C:\\Users\\Administrator\\.tam\\backups",
                     "tam_database":  "not uploaded",

@@ -1,0 +1,564 @@
+{
+  "generatedAt": "2026-03-19T06:55:52.419Z",
+  "lookbackHours": 24,
+  "x": [
+    {
+      "source": "x",
+      "name": "Andrej Karpathy",
+      "handle": "karpathy",
+      "bio": "I like to train large deep neural nets. Previously Director of AI @ Tesla, founding team @ OpenAI, PhD @ Stanford.",
+      "tweets": [
+        {
+          "id": "2034329390377762848",
+          "text": "Ugh X breaks time links, it’s at 26:17",
+          "createdAt": "2026-03-18T18:01:37.000Z",
+          "url": "https://x.com/karpathy/status/2034329390377762848",
+          "likes": 231,
+          "retweets": 3,
+          "replies": 15,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034325950310355072",
+          "text": "(link to blast from the past)\nhttps://t.co/gAP4YPV5uR",
+          "createdAt": "2026-03-18T17:47:57.000Z",
+          "url": "https://x.com/karpathy/status/2034325950310355072",
+          "likes": 473,
+          "retweets": 27,
+          "replies": 5,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034325423358955981",
+          "text": "The signature is alluding to NVIDIA GTC 2015, where Jensen excitedly told an audience of, at the time, mostly gamers and scientific computing professionals that Deep Learning is The Next Big Thing, citing among other examples my PhD thesis (one of the first image captioning systems that coupled image recognition ConvNet to an autoregressive RNN language model, trained end to end). This was back when most people were still unaware and somewhat skeptical but of course - Jensen was 1000% correct, highly prescient and locked in very early.",
+          "createdAt": "2026-03-18T17:45:51.000Z",
+          "url": "https://x.com/karpathy/status/2034325423358955981",
+          "likes": 1025,
+          "retweets": 45,
+          "replies": 22,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Swyx",
+      "handle": "swyx",
+      "bio": "achieve ambition with intentionality, intensity, integrity & insanity.\n\naffiliations:\n- @dxtipshq \n- @cognition\n- @temporalio\n- @aidotengineer\n- @latentspacepod",
+      "tweets": [
+        {
+          "id": "2034348118267891734",
+          "text": "im getting absolutely mogged by @tmtlongshort fml https://t.co/Ryg5HIR6FR https://t.co/9Zl1XJRGcK",
+          "createdAt": "2026-03-18T19:16:02.000Z",
+          "url": "https://x.com/swyx/status/2034348118267891734",
+          "likes": 14,
+          "retweets": 1,
+          "replies": 6,
+          "isQuote": true,
+          "quotedTweetId": "2034212482009469296"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Josh Woodward",
+      "handle": "joshwoodward",
+      "bio": "VP, @Google @GoogleLabs @GeminiApp @GoogleAIStudio",
+      "tweets": [
+        {
+          "id": "2034501260536394003",
+          "text": "Let's go Matt! 🚀 https://t.co/Eqbm4YMQKF",
+          "createdAt": "2026-03-19T05:24:34.000Z",
+          "url": "https://x.com/joshwoodward/status/2034501260536394003",
+          "likes": 21,
+          "retweets": 1,
+          "replies": 1,
+          "isQuote": true,
+          "quotedTweetId": "2034280059146830047"
+        },
+        {
+          "id": "2034342669808443896",
+          "text": "Huge Stitch update today!\n\nMy favorite new feature: Stitch Live\n\nYou can now click and *talk* to your designs (\"change this screen\") or use Stitch as a sounding board for real-time design critiques, and it gets to work on your changes. https://t.co/jhAWVdHQA6",
+          "createdAt": "2026-03-18T18:54:23.000Z",
+          "url": "https://x.com/joshwoodward/status/2034342669808443896",
+          "likes": 163,
+          "retweets": 10,
+          "replies": 10,
+          "isQuote": true,
+          "quotedTweetId": "2034332847893574080"
+        },
+        {
+          "id": "2034324178044871002",
+          "text": "Show us what you're building with these Gemini API updates! https://t.co/2kFLcICBeQ",
+          "createdAt": "2026-03-18T17:40:54.000Z",
+          "url": "https://x.com/joshwoodward/status/2034324178044871002",
+          "likes": 118,
+          "retweets": 8,
+          "replies": 10,
+          "isQuote": true,
+          "quotedTweetId": "2034309073651347821"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Peter Yang",
+      "handle": "petergyang",
+      "bio": "I share extremely practical AI tutorials and interviews | Join 140K+ readers at https://t.co/XYKTmGVH14 | Product at Roblox",
+      "tweets": [
+        {
+          "id": "2034486251873821125",
+          "text": "This is what a modern slot machine looks like.\n\nExcept 100x more addictive 🥹 https://t.co/QBq5h0NOSs",
+          "createdAt": "2026-03-19T04:24:56.000Z",
+          "url": "https://x.com/petergyang/status/2034486251873821125",
+          "likes": 30,
+          "retweets": 1,
+          "replies": 4,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034481402100814063",
+          "text": "Never could I have imagined that I'll be writing blog posts via the terminal one day",
+          "createdAt": "2026-03-19T04:05:39.000Z",
+          "url": "https://x.com/petergyang/status/2034481402100814063",
+          "likes": 2,
+          "retweets": 0,
+          "replies": 1,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034457243572469939",
+          "text": "Screw the haters, I am long @figma",
+          "createdAt": "2026-03-19T02:29:39.000Z",
+          "url": "https://x.com/petergyang/status/2034457243572469939",
+          "likes": 75,
+          "retweets": 1,
+          "replies": 26,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Thariq",
+      "handle": "trq212",
+      "bio": "Claude Code @anthropicai.   prev YC W20, mit media lab. \n\ntowards machines of loving grace",
+      "tweets": [
+        {
+          "id": "2034431951101440440",
+          "text": "It will be streamed from this X account, here's a calendar invite you can add: https://t.co/p6l9cdy8xS",
+          "createdAt": "2026-03-19T00:49:09.000Z",
+          "url": "https://x.com/trq212/status/2034431951101440440",
+          "likes": 116,
+          "retweets": 3,
+          "replies": 13,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034431949474091140",
+          "text": "I'm going to be doing a skills livestream tomorrow, Thursday March 19th @ 11:30am PT to talk live about skills and how to use them. Come with questions!\n\nSpecial guest @hudaman from Uber to share how Uber is using skills. https://t.co/a0kbhdHdyf",
+          "createdAt": "2026-03-19T00:49:09.000Z",
+          "url": "https://x.com/trq212/status/2034431949474091140",
+          "likes": 1846,
+          "retweets": 84,
+          "replies": 51,
+          "isQuote": true,
+          "quotedTweetId": "2033949937936085378"
+        },
+        {
+          "id": "2034324975554117898",
+          "text": "hope to see you there! https://t.co/Ul2YBhrWwI",
+          "createdAt": "2026-03-18T17:44:04.000Z",
+          "url": "https://x.com/trq212/status/2034324975554117898",
+          "likes": 400,
+          "retweets": 8,
+          "replies": 46,
+          "isQuote": true,
+          "quotedTweetId": "2034308517964956051"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Google Labs",
+      "handle": "GoogleLabs",
+      "bio": "Google’s home for our latest AI tools and experiments.",
+      "tweets": [
+        {
+          "id": "2034337527293944228",
+          "text": "Introducing the new @stitchbygoogle, Google’s vibe design platform that transforms natural language into high-fidelity designs in one seamless flow.\n\n🎨Create with a smarter design agent: Describe a new business concept or app vision and see it take shape on an AI-native canvas.\n⚡️ Iterate quickly: Stitch screens together into interactive prototypes and manage your brand with a portable design system.\n🎤 Collaborate with voice: Use hands-free voice interactions to update layouts and explore new variations in real-time.\n\nTry it now (Age 18+ only. Currently available in English and in countries where Gemini is supported.) → https://t.co/pmT9iHEpZa",
+          "createdAt": "2026-03-18T18:33:57.000Z",
+          "url": "https://x.com/GoogleLabs/status/2034337527293944228",
+          "likes": 10469,
+          "retweets": 1230,
+          "replies": 250,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Amjad Masad",
+      "handle": "amasad",
+      "bio": "ceo @replit. civilizationist",
+      "tweets": [
+        {
+          "id": "2034520291049975903",
+          "text": "Yup https://t.co/CvLoBK4D8z",
+          "createdAt": "2026-03-19T06:40:11.000Z",
+          "url": "https://x.com/amasad/status/2034520291049975903",
+          "likes": 10,
+          "retweets": 1,
+          "replies": 3,
+          "isQuote": true,
+          "quotedTweetId": "2034451419420344459"
+        },
+        {
+          "id": "2034381885129073018",
+          "text": "“The best seller at Replit had previously never sold a day in his life.” https://t.co/mz8p7L8Jru",
+          "createdAt": "2026-03-18T21:30:13.000Z",
+          "url": "https://x.com/amasad/status/2034381885129073018",
+          "likes": 131,
+          "retweets": 8,
+          "replies": 3,
+          "isQuote": true,
+          "quotedTweetId": "2034296825159553289"
+        },
+        {
+          "id": "2034379488948269379",
+          "text": "More than just the MRR this is impressive growth rate — can compound quickly! https://t.co/HyYNW59szs",
+          "createdAt": "2026-03-18T21:20:41.000Z",
+          "url": "https://x.com/amasad/status/2034379488948269379",
+          "likes": 109,
+          "retweets": 2,
+          "replies": 9,
+          "isQuote": true,
+          "quotedTweetId": "2034353314897465836"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Guillermo Rauch",
+      "handle": "rauchg",
+      "bio": "@vercel CEO",
+      "tweets": [
+        {
+          "id": "2034383612414754983",
+          "text": "Next.js 16.2 “Snow Leopard” 🐆 \n\ni.e.: sheer focus on performance, agentic developer experience, robustness https://t.co/rjN7uSPiWt",
+          "createdAt": "2026-03-18T21:37:04.000Z",
+          "url": "https://x.com/rauchg/status/2034383612414754983",
+          "likes": 441,
+          "retweets": 8,
+          "replies": 30,
+          "isQuote": true,
+          "quotedTweetId": "2034357341894906321"
+        },
+        {
+          "id": "2034378740197912625",
+          "text": "It’s an honor to welcome Mitchell Hashimoto to the @vercel board.\n\nMitchell built both an incredible company and foundational infrastructure, always putting open source and developers first. \n\nAs the world is rebuilt with AI, I can’t think of a better person than an exceptional thinker like Mitchell to help us define the Agentic Infrastructure of the future.\n\nI can tell you the hype is real btw. Just having worked closely with him only for a few weeks, I see the magic. \n\nAnd, it also doesn’t hurt to have a *checks notes* direct line to ask for Ghostty features like session restoration and vertical tabs 😆",
+          "createdAt": "2026-03-18T21:17:43.000Z",
+          "url": "https://x.com/rauchg/status/2034378740197912625",
+          "likes": 514,
+          "retweets": 15,
+          "replies": 27,
+          "isQuote": true,
+          "quotedTweetId": "2034353376939614719"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Alex Albert",
+      "handle": "alexalbert__",
+      "bio": "Research @AnthropicAI. Opinions are my own!",
+      "tweets": [
+        {
+          "id": "2034276253994508453",
+          "text": "Link to signup: https://t.co/pWI7OfMHZs",
+          "createdAt": "2026-03-18T14:30:28.000Z",
+          "url": "https://x.com/alexalbert__/status/2034276253994508453",
+          "likes": 88,
+          "retweets": 2,
+          "replies": 5,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034276242317566107",
+          "text": "We're hosting a webinar today at 10am PT that should be very helpful for folks trying to learn how to apply AI to their work.\n\nWe'll be sharing best practices on how to use new products like Claude for Excel/Powerpoint.\n\nAttendees will also get one month free of Claude Pro.",
+          "createdAt": "2026-03-18T14:30:25.000Z",
+          "url": "https://x.com/alexalbert__/status/2034276242317566107",
+          "likes": 701,
+          "retweets": 29,
+          "replies": 42,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Aaron Levie",
+      "handle": "levie",
+      "bio": "ceo @box - your business lives in content. unleash it with AI",
+      "tweets": [
+        {
+          "id": "2034484203522261293",
+          "text": "Had meetings and a dinner with 20+ enterprise AI and IT leaders today. Lots of interesting conversations around the state of AI in large enterprises, especially regulated businesses. \n\nHere are some of general trends:\n\n* Agents are clearly the big thing. Enterprises moving from talking about chatbots to agents, though we’re still very early. Coding is still the dominant agentic use-case being adopted thus far, with other categories of across knowledge work starting to emerge. Lots of agentic work moving from pilots and PoCs into production, and some enterprises had lots of active live use-cases.\n\n* Agentic use-cases span every part of a business, from back office operations to client facing experiences from sales to customer onboarding workflows. General feeling is that agentic workflows will hit every part of an organization, often with biggest focus on delivering better for customers, getting better insights and intelligence from data and documents, speeding up high ROI workflows with agents, and so on. Very limited discussion on pure cost cutting.\n\n* Data and AI governance still remain core challenges. Getting data and content into a spot that agents can securely and easily operate on remains a huge task for more organizations. Years of data management fragmentation that wasn’t a problem now is an issue for enterprises looking to adopt agents. And governing what agents can do with data in a workflow still a major topic.\n\n* Identity emerging as a big topic. Can the agent have access to everything you have? In a world of dozens of agents working on behalf, potentially too much data exposure and scope for the agents. How do we manage agents with partitioned level of access to your information?\n\n* Lots of emerging questions on how we will budget for tokens across use-cases and teams. Companies don’t want to constrain use-cases, but equally need to be mindful of ultimate token budgets. This is going to become a bigger part of OpEx over time, and probably won’t make sense to be considered an IT budget anymore. Likely needs to be factored into the rest of operating expenses.\n\n* Interoperability is key. Every enterprise is deploying multiple AI systems right now, and it’s unlikely that there’s going to be a single platform to rule them all. Customers are getting savvier on how to handle agent interoperability, and this will be one of the biggest drivers of an AI stack going forward. \n\nLots more takeaways than just this, but needless to say the momentum is building but equally enterprises are acutely aware of the change management and work ahead. Lots of opportunity right now.",
+          "createdAt": "2026-03-19T04:16:47.000Z",
+          "url": "https://x.com/levie/status/2034484203522261293",
+          "likes": 319,
+          "retweets": 28,
+          "replies": 46,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034283304401113453",
+          "text": "Agents will outnumber human users on the web by orders of magnitude. Just like people, they will need a way to pay for services they use. \n\nThey may run into propriety health or finance data they need to pay for when doing a deep research task, or make a tool call to a bespoke web API for some functionality.\n\nBut unlike people, agents experience no friction when making a payment, so they can pay for things in much smaller units and increments than people will. An agent may need to call an API that they only need to use on a one-time basis or pay for information that they need without signing up for a subscription. \n\nThis means all forms of revenue streams can emerge for technology and information providers that wouldn’t have been possible before. To make this all work, we need will need new infra and tools for agents to do this, and it’s cool to see MPP from stripe and tempo.",
+          "createdAt": "2026-03-18T14:58:29.000Z",
+          "url": "https://x.com/levie/status/2034283304401113453",
+          "likes": 234,
+          "retweets": 27,
+          "replies": 34,
+          "isQuote": true,
+          "quotedTweetId": "2034260302171431227"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Garry Tan",
+      "handle": "garrytan",
+      "bio": "President & CEO @ycombinator —Founder https://t.co/7aoJjp1iIK—designer/engineer who helps founders—SF Dem accelerating the boom loop—haters not allowed in my sauna",
+      "tweets": [
+        {
+          "id": "2034520955645784409",
+          "text": "This one goes out to the HN commenters who never thought GStack would amount to anything https://t.co/jnwsLgrZYr",
+          "createdAt": "2026-03-19T06:42:50.000Z",
+          "url": "https://x.com/garrytan/status/2034520955645784409",
+          "likes": 1,
+          "retweets": 0,
+          "replies": 3,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034506222859362619",
+          "text": "Open source, learn with me how to make your own software factory (I'm not there yet but we should get there sometime in the next few months... might need the next model rev!)\n\nhttps://t.co/VPvWDzV5c0",
+          "createdAt": "2026-03-19T05:44:17.000Z",
+          "url": "https://x.com/garrytan/status/2034506222859362619",
+          "likes": 29,
+          "retweets": 3,
+          "replies": 5,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034505852074496455",
+          "text": "This should work well, it just pops a browser and then you just tell claude when you're done and it takes care of the rest. https://t.co/PfcyJ9C5Hh",
+          "createdAt": "2026-03-19T05:42:49.000Z",
+          "url": "https://x.com/garrytan/status/2034505852074496455",
+          "likes": 1,
+          "retweets": 0,
+          "replies": 1,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Zara Zhang",
+      "handle": "zarazhangrui",
+      "bio": "Builder. Dangerously skips permissions. Harvard’17. YouTube: https://t.co/8xzbGWtf6w Substack: https://t.co/dDPEWGiuBW",
+      "tweets": [
+        {
+          "id": "2034458982551814549",
+          "text": "So cool! https://t.co/FZjPv3KFgj",
+          "createdAt": "2026-03-19T02:36:34.000Z",
+          "url": "https://x.com/zarazhangrui/status/2034458982551814549",
+          "likes": 19,
+          "retweets": 0,
+          "replies": 2,
+          "isQuote": true,
+          "quotedTweetId": "2034306846283182552"
+        },
+        {
+          "id": "2034379412997919096",
+          "text": "Holy shit I just got OpenClaw to turning a meeting transcript into a video using the @Remotion skill. It produced a 2-min explainer video that captures the meeting's key points, complete with script, visuals, voiceover, animation...\n\nImagine sending someone a 2-min meeting recap video instead of a 1000-word summary that nobody will read.",
+          "createdAt": "2026-03-18T21:20:23.000Z",
+          "url": "https://x.com/zarazhangrui/status/2034379412997919096",
+          "likes": 201,
+          "retweets": 10,
+          "replies": 35,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034331675363279338",
+          "text": "Wow my frontend-slides skill now has 10k stars on GitHub \n\nSo many people have turned this into their default way of making slides\n\nBye powerpoint https://t.co/mfaA1B2qwr https://t.co/L6RgRTDVOU",
+          "createdAt": "2026-03-18T18:10:42.000Z",
+          "url": "https://x.com/zarazhangrui/status/2034331675363279338",
+          "likes": 546,
+          "retweets": 33,
+          "replies": 27,
+          "isQuote": true,
+          "quotedTweetId": "2016337615843434646"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Nikunj Kothari",
+      "handle": "nikunj",
+      "bio": "partner @fpvventures - investing in seed/A. previous: early hire @meter, @opendoor, @atlassian & others. love @shimoleejhaveri + 👦👧",
+      "tweets": [
+        {
+          "id": "2034267921489519009",
+          "text": "Random models that are so good and yet still somewhat underrated..\n\n> Gemini 3 Flash for long context and structured outputs. For the cost, this thing is so freaking good. Even Claude was like yeah one shot it bro, this multi agent orchestration is unnecessary. I have agents running this continuously and I barely spend any money. \n\n> GPT 5.4 Pro for problems that require really hard thinking. The latency sucks, only available on ChatGPT but the output is beautiful. No model comes close to how smart it is and how human like the reasoning output is. API wen!?\n\n> NotebookLM for slides. The ability for it to compress huge number of sources into beautiful slides is unparalleled. I use it regularly to explain research papers. It uses nano banana under the hood so you get a frontier model mostly for free. \n\n> Open source - If you didn’t know, open router has a bunch of free models and inference. It’s fun to try them just to we what shape each model has and where it’s good. Minimax 2.5 and GLM (both not free) are quite incredible for the price. I’m excited for DeepSeek 4 and Kimi’s next models.\n\nIf there’s a model and use case that has surprised you, drop it here!",
+          "createdAt": "2026-03-18T13:57:22.000Z",
+          "url": "https://x.com/nikunj/status/2034267921489519009",
+          "likes": 100,
+          "retweets": 4,
+          "replies": 13,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Peter Steinberger",
+      "handle": "steipete",
+      "bio": "Polyagentmorous ClawFather. Came back from retirement to mess with AI and help a lobster take over the world @openclaw🦞",
+      "tweets": [
+        {
+          "id": "2034416944074613174",
+          "text": "Hear me out... https://t.co/HtY9uHuKK4",
+          "createdAt": "2026-03-18T23:49:31.000Z",
+          "url": "https://x.com/steipete/status/2034416944074613174",
+          "likes": 1655,
+          "retweets": 78,
+          "replies": 188,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034401076204679324",
+          "text": "It supports every token dealer under the sun now... *insert name joke here* https://t.co/O2ONTSpryI https://t.co/80ttLsJGn6",
+          "createdAt": "2026-03-18T22:46:28.000Z",
+          "url": "https://x.com/steipete/status/2034401076204679324",
+          "likes": 653,
+          "retweets": 34,
+          "replies": 46,
+          "isQuote": true,
+          "quotedTweetId": "2034391666459541537"
+        },
+        {
+          "id": "2034400645630058792",
+          "text": "I helped a bit with the new community page for codex.\nSign up to become an ambassador, if you're a fan! https://t.co/UCtJLot1Ft",
+          "createdAt": "2026-03-18T22:44:45.000Z",
+          "url": "https://x.com/steipete/status/2034400645630058792",
+          "likes": 426,
+          "retweets": 23,
+          "replies": 27,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Dan Shipper",
+      "handle": "danshipper",
+      "bio": "ceo @every — the only subscription you need to stay at the edge of AI",
+      "tweets": [
+        {
+          "id": "2034370526102053139",
+          "text": "it's a hard life https://t.co/ZANb1RiVUA",
+          "createdAt": "2026-03-18T20:45:04.000Z",
+          "url": "https://x.com/danshipper/status/2034370526102053139",
+          "likes": 25,
+          "retweets": 2,
+          "replies": 4,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034368436554326394",
+          "text": "something you should know:\n\ncodex threads can now message each other! really useful if for example you want to have one chat thread to handle stacked prod deployments.\n\njust paste the thread id to your other codex chats and it'll message the deployment thread to take over! https://t.co/APLcGce9eY",
+          "createdAt": "2026-03-18T20:36:46.000Z",
+          "url": "https://x.com/danshipper/status/2034368436554326394",
+          "likes": 178,
+          "retweets": 8,
+          "replies": 14,
+          "isQuote": false,
+          "quotedTweetId": null
+        },
+        {
+          "id": "2034332104188727759",
+          "text": "new status symbol is getting Jensen to sign your server https://t.co/gKFhpF76Z7",
+          "createdAt": "2026-03-18T18:12:24.000Z",
+          "url": "https://x.com/danshipper/status/2034332104188727759",
+          "likes": 26,
+          "retweets": 2,
+          "replies": 2,
+          "isQuote": true,
+          "quotedTweetId": "2034291235041554871"
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Aditya Agarwal",
+      "handle": "adityaag",
+      "bio": "General Partner @SouthPkCommons, Co-Founder @Bevel_Health | Ex: Early Eng @facebook, CTO @Dropbox, Board @Flipkart | Optimist, Builder, Dad",
+      "tweets": [
+        {
+          "id": "2034303320480006371",
+          "text": "Been spending time with hard tech founders lately.  \n\nThe ones winning all share something in common: they're obsessed with the story their hardware tells.  \n\nIt's not enough for the robot to work. It needs to *mean something*. \n\nThe best hardware companies are telling a story about the future that makes people want to live in it.  \n\nThe ones struggling are the ones that lead with specs. \n\nNobody cares about your actuator resolution. They care about what it means.",
+          "createdAt": "2026-03-18T16:18:01.000Z",
+          "url": "https://x.com/adityaag/status/2034303320480006371",
+          "likes": 64,
+          "retweets": 4,
+          "replies": 9,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    },
+    {
+      "source": "x",
+      "name": "Claude",
+      "handle": "claudeai",
+      "bio": "Claude is an AI assistant built by @anthropicai to be safe, accurate, and secure. Talk to Claude on https://t.co/ZhTwG8dz3D or download the app.",
+      "tweets": [
+        {
+          "id": "2034308517964956051",
+          "text": "Our developer conference Code with Claude returns this spring, this time in San Francisco, London, and Tokyo. \n\nJoin us for a full day of workshops, demos, and 1:1 office hours with teams behind Claude.\n\nRegister to watch from anywhere or apply to attend: https://t.co/i8qfUNl3BS https://t.co/9QTQMWj4T9",
+          "createdAt": "2026-03-18T16:38:40.000Z",
+          "url": "https://x.com/claudeai/status/2034308517964956051",
+          "likes": 6179,
+          "retweets": 664,
+          "replies": 306,
+          "isQuote": false,
+          "quotedTweetId": null
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "xBuilders": 17,
+    "totalTweets": 38
+  }
+}

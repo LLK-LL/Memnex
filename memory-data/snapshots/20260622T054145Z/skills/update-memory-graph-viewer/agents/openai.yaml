@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "Update Memory Graph Viewer"
+  short_description: "Refresh the local Total Agent Memory graph visualization."
+  default_prompt: "Use $update-memory-graph-viewer to 更新记忆库的可视化内容."

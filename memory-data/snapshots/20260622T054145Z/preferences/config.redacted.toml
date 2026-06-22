@@ -1,0 +1,134 @@
+﻿sandbox_mode = "danger-full-access"
+approval_policy = "never"
+model_provider = "custom"
+model = "gpt-5.5"
+model_reasoning_effort = "medium"
+disable_response_storage = true
+
+notify = [ "C:\\Users\\Administrator\\AppData\\Local\\OpenAI\\Codex\\runtimes\\cua_node\\a89897d3d9baa117\\bin\\node_modules\\@oai\\sky\\bin\\windows\\codex-computer-use.exe", "turn-ended" ]
+[model_providers.custom]
+# REDACTED: sensitive-looking configuration line
+base_url = "https://api.0029.org"
+wire_api = "responses"
+# REDACTED: sensitive-looking configuration line
+# REDACTED: sensitive-looking configuration line
+[mcp_servers]
+
+[mcp_servers.memory]
+enabled = true
+command = "C:/Users/Administrator/total-agent-memory/.venv/Scripts/python.exe"
+args = ["C:/Users/Administrator/total-agent-memory/src/server.py"]
+required = true
+startup_timeout_sec = 120
+tool_timeout_sec = 120
+
+[mcp_servers.memory.env]
+CLAUDE_MEMORY_DIR = "C:/Users/Administrator/.tam"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+MEMORY_TRIPLE_TIMEOUT_SEC = "120"
+MEMORY_ENRICH_TIMEOUT_SEC = "90"
+MEMORY_REPR_TIMEOUT_SEC = "120"
+MEMORY_TRIPLE_MAX_PREDICT = "512"
+
+[mcp_servers.memory.tools.self_error_log]
+approval_mode = "approve"
+
+[mcp_servers.memory.tools.file_context]
+approval_mode = "approve"
+
+[mcp_servers.node_repl]
+args = []
+command = 'C:\Users\Administrator\AppData\Local\OpenAI\Codex\runtimes\cua_node\a89897d3d9baa117\bin\node_repl.exe'
+startup_timeout_sec = 120
+
+[mcp_servers.node_repl.env]
+NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS = "1000"
+NODE_REPL_NODE_MODULE_DIRS = 'C:\Users\Administrator\AppData\Local\OpenAI\Codex\runtimes\cua_node\a89897d3d9baa117\bin\node_modules'
+NODE_REPL_NODE_PATH = 'C:\Users\Administrator\AppData\Local\OpenAI\Codex\runtimes\cua_node\a89897d3d9baa117\bin\node.exe'
+NODE_REPL_TRUSTED_CODE_PATHS = 'C:\Users\Administrator\.codex'
+CODEX_HOME = 'C:\Users\Administrator\.codex'
+NODE_REPL_TRUSTED_BROWSER_CLIENT_SHA256S = "4cfaeb70b54d114e1cd56bc0f85d04e1b344a5049cddb729e2b1161b9ff3008a,566be6ef352eb3de899adc56a9cd7b5e46c8f65b00e56b5630dd7a580e10cbea"
+BROWSER_USE_AVAILABLE_BACKENDS = "chrome,iab"
+NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER = "Control the in-app browser in conjunction with the Browser Plugin."
+NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME = "Control the Chrome browser in conjunction with the Chrome Plugin. Prefer this method of controlling Chrome over alternatives (such as Computer Use) unless the user explicitly mentions an alternative."
+BROWSER_USE_CODEX_APP_BUILD_FLAVOR = "prod"
+BROWSER_USE_CODEX_APP_VERSION = "26.616.41845"
+SKY_CUA_NATIVE_PIPE = "1"
+SKY_CUA_NATIVE_PIPE_DIRECTORY = '\\.\pipe\codex-computer-use-8a8652f2-1aed-4509-a6f5-f98629db7ef2'
+CODEX_CLI_PATH = 'C:\Users\Administrator\AppData\Local\OpenAI\Codex\bin\8e55c2dd143b6354\codex.exe'
+
+[marketplaces.openai-bundled]
+last_updated = "2026-06-22T05:38:31Z"
+source_type = "local"
+source = '\\?\C:\Users\Administrator\.codex\.tmp\bundled-marketplaces\openai-bundled'
+
+[features]
+js_repl = false
+
+[windows]
+sandbox = "elevated"
+
+[projects.'f:\users\administrator\desktop\韫囧啳鍓伴悺锝堝晿']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-16\superpower']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-16\llk-ll-ai-brain-https-github']
+trust_level = "trusted"
+
+[projects.'f:\users\administrator\desktop\闁芥盯鎽戦悥鍡欏仮閻掑﹥甯撮悾宀勬桨濞夈垻鍎规繅鎴炩偓褑鈧箑鎮巗ph-fem閸掑棙鐎?]
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-17\anysearch-c-users-administrator-codex-skills']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-17\new-chat']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-17\livekit-agent']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-17\claude-md']
+trust_level = "trusted"
+
+[projects.'f:\users\administrator\desktop\jarvis']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-17\coding-principle-skill']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-17\d']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-18\files-mentioned-by-the-user-codex']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-18\coding-principles']
+trust_level = "trusted"
+
+[projects.'f:\users\administrator\desktop\閽涢摑鐖嗙偢鐒婃帴鐣岄潰娉㈢儹濉戞€ц€﹀悎sph-fem鍒嗘瀽']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-18\files-mentioned-by-the-user-codex-2']
+trust_level = "trusted"
+
+[projects.'f:\users\administrator\desktop\瀹㈡埛淇℃伅鎶撳彇agent']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-19\new-chat']
+trust_level = "trusted"
+
+[projects.'c:\users\administrator\documents\codex\2026-06-15\llk-ll-ai-brain-https-github\repo']
+trust_level = "trusted"
+
+[[skills.config]]
+path = 'C:\Users\Administrator\.codex\skills\codex-hermes-jarvis-bridge\SKILL.md'
+enabled = false
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."superpowers@openai-api-curated"]
+enabled = true
+

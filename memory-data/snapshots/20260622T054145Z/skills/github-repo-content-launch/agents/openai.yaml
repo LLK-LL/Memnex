@@ -1,0 +1,7 @@
+﻿interface:
+  display_name: "GitHub Repo Content Launch"
+  short_description: "Optimize GitHub repositories for public display, sharing, releases, and star conversion."
+  default_prompt: "Use $github-repo-content-launch to optimize this GitHub repository for public display, sharing, and star conversion."
+
+policy:
+  allow_implicit_invocation: true

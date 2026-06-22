@@ -1,0 +1,145 @@
+﻿# Design 鈥?#111 slr_lineage emission on systematic-review 鈫?academic-paper full handoff
+
+**Date**: 2026-05-15
+**Issue**: #111 (parented to #108 PR #110 commit 70c8678)
+**Status**: implemented (commit 7a2f789 on feat/111-slr-lineage-emission; pending PR)
+**Scope**: pipeline plumbing only. NO change to #108 referee, anchor table, protocol doc, or v3.2 venue track.
+
+---
+
+## 1. Problem
+
+`disclosure` mode with `--policy-anchor=prisma-trAIce` reads `slr_lineage: bool` at renderer time per the G2 invariant track gate (`policy_anchor_disclosure_protocol.md` 搂3.1). When the user runs the documented `deep-research systematic-review 鈫?academic-paper full 鈫?disclosure --policy-anchor=prisma-trAIce` pipeline path, the renderer currently sees `slr_lineage=false` because no upstream component sets it. The user must manually supply `mode=systematic-review` to dispatch 鈥?defeating the intended automatic SLR dispatch.
+
+# REDACTED: sensitive-looking memory line
+
+## 2. Decision Doc anchors (frozen, do not re-litigate)
+
+- 搂4.3 G2 invariant 鈥?SLR mode dispatches to PRISMA-trAIce track; non-SLR modes dispatch to general track
+- 搂4.4 #1 鈥?track-selection lookup resolved as **(b) explicit `slr_lineage` input** (impl-spec 搂3 row #1, user-chosen)
+- 搂4.4 #11 + impl-spec 搂3 row #11 鈥?G1 invariant scoped to *corpus entry schema* (`literature_corpus_entry.schema.json`); non-renderer code changes for pipeline plumbing **permitted**
+
+## 3. Boundary distinction (load-bearing)
+
+| Schema | G1 status |
+|---|---|
+| `literature_corpus_entry.schema.json` (corpus entry, per-source row) | **FROZEN** 鈥?no fields added |
+| Schema 9 Material Passport (run-level provenance) | **PERMITTED** 鈥?extended in v3.6.3 (`reset_boundary[]`), v3.6.4 (`literature_corpus[]`), v3.6.7 (`audit_artifact[]`) per the same pattern |
+
+Adding `slr_lineage` to Schema 9 Material Passport top-level is **not** a corpus entry schema mutation and is **not** a G1 invariant violation. The lint and audit trail must treat the distinction explicitly so future audit rounds don't false-flag.
+
+## 4. Design 鈥?three pieces
+
+### 4.1 Schema 9 extension
+
+Add one top-level optional field to Material Passport (Schema 9):
+
+| Field | Type | Description |
+|---|---|---|
+| `slr_lineage` | boolean | `true` iff any pipeline stage in this run history was deep-research `systematic-review` mode. Set by `pipeline_orchestrator_agent` at the documented handoff point. Omittable; absence is semantically equivalent to `false` (renderer treats unset as cold-start). |
+
+Backward compat: passports written by pre-#111 runs lack the field; renderer defaults to cold-start path (requires explicit `mode=` per 搂3.1 G2 invariant fallback rule, identical to current behavior).
+
+### 4.2 Emission point
+
+`pipeline_orchestrator_agent.md` emits `slr_lineage` at the Stage 1 鈫?Stage 2 handoff (the only transition where new deep-research lineage can enter the run). After Stage 1/2/3 schema validation, the orchestrator computes:
+
+```
+slr_lineage_out = bool(incoming_passport.slr_lineage) or any(
+    stage.skill == "deep-research" and stage.mode in {"systematic-review", "slr"}
+    for stage in state_tracker.stages.values()
+)
+```
+
+# REDACTED: sensitive-looking memory line
+
+# REDACTED: sensitive-looking memory line
+
+**Import ergonomics (codex round-2 [P2] closure):** `scripts/slr_lineage.py` uses a `try: from scripts.policy_anchor_disclosure_referee import SLR_MODES; except ImportError: from policy_anchor_disclosure_referee import SLR_MODES` dual-path import. The repo has both namespace-style callers (`from scripts.<module>` per `test_check_sprint_contract.py`) and sibling-style callers (sys.path-prepending per `test_slr_lineage_emission.py`). Both paths resolve to the same module 鈥?single source of truth for `SLR_MODES` preserved.
+
+`origin_mode` on each artifact's passport remains as today (records the *directly-producing* skill's mode). `slr_lineage` is run-level provenance, not artifact-level, so it sits at passport top-level alongside `origin_skill` / `version_label`.
+
+Pattern precedent: this mirrors the v3.7.1 Cite-Time Provenance Finalizer (line 605 of `pipeline_orchestrator_agent.md`) 鈥?orchestrator computes a derived signal at a stage transition and persists it for downstream consumers.
+
+### 4.3 Handoff contract documentation
+
+`shared/handoff_schemas.md` Schema 9 gains an optional-fields row + a short subsection describing:
+- semantics (run-level, derived from any-SLR-stage scan)
+- producer (`pipeline_orchestrator_agent` at handoff transitions)
+- consumer (`disclosure` mode renderer via `policy_anchor_disclosure_referee.RendererInputs.slr_lineage`)
+- backward compat (absence = cold-start, identical to pre-#111 behavior)
+- G1 boundary note (passport-level vs corpus-entry-level distinction)
+
+### 4.4 e2e fixture
+
+One conformance test under `scripts/` (mirroring `test_policy_anchor_disclosure.py` shape) exercising:
+
+1. Build a synthetic passport with `stages["1"].mode = "systematic-review"`, `stages["2"].mode = "full"`
+2. Run orchestrator handoff logic (or its computational equivalent 鈥?see 搂6 implementation note)
+3. Assert outgoing passport carries `slr_lineage: true`
+4. Pass that passport to `policy_anchor_disclosure_referee` with `--policy-anchor=prisma-trAIce`
+5. Assert no `G2 TrackGateError`, no manual `mode=` supplied
+
+Plus three negative cases:
+- Stage 1 mode = `full` (non-SLR) 鈫?passport `slr_lineage: false` 鈫?`prisma-trAIce` selector errors with G2 (existing behavior preserved)
+- Pre-#111 passport (no field) 鈫?renderer cold-start path (existing behavior preserved)
+- Pipeline with no Stage 1 (mid-entry from Stage 2) 鈫?no `systematic-review` evidence 鈫?`slr_lineage: false`
+
+## 5. Files touched
+
+| File | Change kind |
+|---|---|
+| `shared/handoff_schemas.md` | additive 鈥?optional field row + subsection |
+| `academic-pipeline/agents/pipeline_orchestrator_agent.md` | additive 鈥?emission step in 搂4 Transition Management |
+| `scripts/test_slr_lineage_emission.py` (new) | e2e conformance fixture |
+| `CHANGELOG.md` | append release note under v3.7.x |
+
+### Files explicitly NOT touched (matches #111 搂Scope out-of-scope)
+
+| File | Reason |
+|---|---|
+| `scripts/policy_anchor_disclosure_referee.py` | #108 referee 鈥?contract already correct |
+| `academic-paper/references/policy_anchor_disclosure_protocol.md` | #108 protocol 鈥?contract already correct |
+| `academic-paper/references/policy_anchor_table.md` | #108 anchor table |
+| `academic-paper/references/disclosure_mode_protocol.md` | v3.2 venue track + #108 anchor track dispatch 鈥?already references `slr_lineage` as pipeline-supplied |
+| `shared/contracts/passport/literature_corpus_entry.schema.json` | G1 frozen (corpus entry schema, not passport schema) |
+| Any test under `scripts/test_policy_anchor_*.py` | #108 conformance baseline (1053 tests must stay green) |
+
+## 6. Implementation note 鈥?orchestrator is LLM prose, not Python
+
+`pipeline_orchestrator_agent.md` is an LLM-orchestrated agent prompt, not Python. The "emission logic" lives in prose instruction to the LLM at the handoff step.
+
+The e2e fixture under 搂4.4 cannot dispatch the actual agent; instead it tests:
+
+- (a) the *resolution function* (whether `slr_lineage` would be true given a `state_tracker.stages` snapshot) as a small pure Python helper under `scripts/`, callable by both the conformance test and (optionally) future Python tooling
+- (b) the *renderer integration* 鈥?passport with `slr_lineage: true` 鈫?referee accepts `--policy-anchor=prisma-trAIce` without `mode=`
+
+Discipline: keep the helper minimal. No new orchestration framework, no Python wrapper around the LLM agent. Resolution is one any() over a dict.
+
+## 7. Regression budget
+
+- 1053 baseline tests must stay green (no #108 contract drift)
+- +4 new tests minimum (1 positive + 3 negative per 搂4.4)
+- No new lint
+- No frontmatter change to existing skills
+
+## 8. Open questions
+
+None at design time. All 搂4.4 Decision Doc concerns are frozen by impl-spec; the only branch is 搂4 / B1 above (Schema 9 top-level field), and it is selected.
+
+## 9. Out of scope (defer to future issues)
+
+- v3.7.x other lineage signals beyond SLR (no demonstrated need)
+- Replacing v3.7.1 finalizer pattern with a generic "derived signal" framework (premature abstraction)
+- Cold-start manual `mode=` UX improvements (#111 is auto-dispatch path; cold-start is correct as-is)
+
+---
+
+## Related
+
+- Parent: #108 (closed) + PR #110 merged 70c8678
+- Decision Doc: `docs/design/2026-05-14-ai-disclosure-schema-decision.md` 搂4.3 G2 + 搂4.4 #1 + #11
+- Impl spec: `docs/design/2026-05-14-ai-disclosure-impl-spec.md` 搂3 row #1 + #11
+- Protocol: `academic-paper/references/policy_anchor_disclosure_protocol.md` 搂3.1
+- Referee: `scripts/policy_anchor_disclosure_referee.py` `RendererInputs.slr_lineage`
+- v3.7.1 pattern precedent: `academic-pipeline/agents/pipeline_orchestrator_agent.md` 搂"Cite-Time Provenance Finalizer (v3.7.1)" line 603
