@@ -183,6 +183,47 @@ def test_memory_eval_recall_builtin_fixture(wired_server):
     assert payload.get("dataset") == "builtin"
 
 
+def test_memory_eval_recall_golden_diagnostics_and_report(wired_server, tmp_path):
+    scen = tmp_path / "golden.json"
+    report_path = tmp_path / "trend.jsonl"
+    scen.write_text(json.dumps([
+        {
+            "name": "missing_expected_id",
+            "type": "recall",
+            "query": "golden diagnostics marker",
+            "project": "memory_eval_test",
+            "expected_ids": [999999],
+            "expected_terms": ["golden diagnostics"],
+            "k": 5,
+        },
+    ]))
+    wired_server.store.save_knowledge(
+        sid="s1",
+        content="golden diagnostics marker for eval reporting",
+        ktype="fact",
+        project="memory_eval_test",
+    )
+
+    payload = _call(wired_server, "memory_eval_recall", {
+        "dataset_path": str(scen),
+        "top_k": 5,
+        "mode": "fast",
+        "include_diagnostics": True,
+        "write_report": True,
+        "report_path": str(report_path),
+    })
+
+    assert payload["scenarios_total"] == 1
+    assert payload["scenarios_passed"] == 0
+    assert payload["mrr"] >= 0.0
+    assert payload["failure_diagnostics"][0]["missing_ids"] == [999999]
+    assert "explain" in payload["failure_diagnostics"][0]
+    assert payload["report_path"] == str(report_path)
+    assert report_path.exists()
+    saved = json.loads(report_path.read_text().splitlines()[0])
+    assert saved["dataset"] == str(scen)
+
+
 # ──────────────────────────────────────────────
 # (B) Fast mode must produce zero LLM / network calls
 # ──────────────────────────────────────────────

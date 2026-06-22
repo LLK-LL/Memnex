@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -117,28 +118,53 @@ class EvalHarness:
             return False, {"error": "recall_fn not configured"}
         query = scenario["query"]
         must_contain = scenario.get("must_contain", [])
+        expected_terms = scenario.get("expected_terms", [])
+        expected_ids = [int(i) for i in scenario.get("expected_ids", [])]
+        required_terms = list(dict.fromkeys([*must_contain, *expected_terms]))
         k = scenario.get("k", 5)
         params = {
             "project": scenario.get("project"),
-            "limit": max(k, len(must_contain) or 1),
+            "limit": max(k, len(required_terms) or len(expected_ids) or 1),
         }
         hits = self.recall_fn(query, params) or []
-        hit_texts = [str(h.get("content", "")) for h in hits[:k]]
+        top_hits = hits[:k]
+        hit_texts = [str(h.get("content", "")) for h in top_hits]
+        hit_ids = [
+            int(h["id"]) for h in top_hits
+            if isinstance(h.get("id"), int) or str(h.get("id", "")).isdigit()
+        ]
         blob = " ".join(hit_texts).lower()
-        missing = [m for m in must_contain if m.lower() not in blob]
-        # rank of first match
-        rank = None
+        missing_terms = [m for m in required_terms if m.lower() not in blob]
+        missing_ids = [i for i in expected_ids if i not in hit_ids]
+
+        id_rank = None
+        if expected_ids:
+            expected_set = set(expected_ids)
+            for idx, hit in enumerate(hits, start=1):
+                hid = hit.get("id")
+                if (isinstance(hid, int) or str(hid).isdigit()) and int(hid) in expected_set:
+                    id_rank = idx
+                    break
+
+        term_rank = None
         for idx, text in enumerate(hit_texts, start=1):
-            if any(m.lower() in text.lower() for m in must_contain):
-                rank = idx
+            if required_terms and any(m.lower() in text.lower() for m in required_terms):
+                term_rank = idx
                 break
-        passed = len(missing) == 0
+
+        rank = id_rank if id_rank is not None else term_rank
+        passed = len(missing_terms) == 0 and len(missing_ids) == 0
         return passed, {
             "query": query,
             "k": k,
             "hits": len(hits),
-            "missing": missing,
+            "hit_ids": hit_ids,
+            "expected_ids": expected_ids,
+            "missing_ids": missing_ids,
+            "missing": missing_terms,
+            "missing_terms": missing_terms,
             "first_match_rank": rank,
+            "reciprocal_rank": round(1.0 / rank, 4) if rank else 0.0,
         }
 
     def _run_prevention(self, scenario: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
@@ -192,6 +218,10 @@ class EvalHarness:
         ranks = [r.details.get("first_match_rank")
                  for r in recall_results
                  if r.details.get("first_match_rank")]
+        reciprocal_ranks = [
+            float(r.details.get("reciprocal_rank", 0.0))
+            for r in recall_results
+        ]
         def _rak(k: int) -> float:
             if not recall_results:
                 return 0.0
@@ -210,6 +240,9 @@ class EvalHarness:
                 "r_at_1": round(_rak(1), 4),
                 "r_at_5": round(_rak(5), 4),
                 "r_at_10": round(_rak(10), 4),
+                "mrr": round(
+                    sum(reciprocal_ranks) / len(reciprocal_ranks), 4,
+                ) if reciprocal_ranks else 0.0,
             },
             "prevention": {
                 "total": len(prevention_results),
@@ -232,3 +265,16 @@ class EvalHarness:
                 for r in results
             ],
         }
+
+
+def write_jsonl_report(report: dict[str, Any], output_path: str | Path) -> str:
+    """Append one eval report snapshot for trend monitoring."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        **report,
+    }
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+    return str(path)

@@ -51,7 +51,7 @@ except ImportError:
 try:
     from sentence_transformers import SentenceTransformer
     HAS_ST = True
-except ImportError:
+except Exception:
     HAS_ST = False
 
 try:
@@ -4852,7 +4852,8 @@ async def list_tools():
         Tool(
             name="memory_eval_recall",
             description="v11.0 Phase 8: generic recall benchmark on a dataset path or a "
-                        "small built-in fixture. Same payload shape as memory_eval_locomo.",
+                        "small built-in fixture. Supports golden expected_ids, MRR, "
+                        "failure diagnostics, and optional JSONL trend reports.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -4860,6 +4861,9 @@ async def list_tools():
                     "top_k": {"type": "integer", "default": 5},
                     "limit": {"type": "integer"},
                     "mode": {"type": "string", "enum": ["fast", "balanced", "deep"], "default": "fast"},
+                    "include_diagnostics": {"type": "boolean", "default": False},
+                    "write_report": {"type": "boolean", "default": False},
+                    "report_path": {"type": "string"},
                 },
             },
         ),
@@ -5194,6 +5198,75 @@ def _eval_run_locomo(
     report = harness.run_suite(scenarios)
     elapsed_ms = (_t.perf_counter() - t0) * 1000.0
     return {"report": report, "elapsed_ms": elapsed_ms, "scenarios": scenarios}
+
+
+def _eval_failure_diagnostics(report: dict, explanations: dict[str, dict] | None = None) -> list[dict]:
+    diagnostics: list[dict] = []
+    explanations = explanations or {}
+    for scenario in report.get("scenarios", []):
+        if scenario.get("passed"):
+            continue
+        details = scenario.get("details", {}) or {}
+        item = {
+            "name": scenario.get("name"),
+            "type": scenario.get("type"),
+            "query": details.get("query"),
+            "missing_ids": details.get("missing_ids", []),
+            "missing_terms": details.get("missing_terms", details.get("missing", [])),
+            "hit_ids": details.get("hit_ids", []),
+            "first_match_rank": details.get("first_match_rank"),
+        }
+        query = item.get("query")
+        if query and query in explanations:
+            explain = explanations[query].get("_explain", {})
+            item["explain"] = {
+                "tiers_used": explain.get("tiers_used", []),
+                "merged_ids": [
+                    row.get("id")
+                    for row in explain.get("merged", [])[:10]
+                    if isinstance(row, dict)
+                ],
+                "rerank_applied": explain.get("rerank_applied"),
+                "embedding_space": explain.get("embedding_space"),
+            }
+        diagnostics.append(item)
+    return diagnostics
+
+
+def _eval_summary_payload(
+    *,
+    report: dict,
+    mode: str,
+    llm_delta: int,
+    net_delta: int,
+    dataset: str | None = None,
+    diagnostics: list[dict] | None = None,
+    report_path: str | None = None,
+) -> dict:
+    recall_block = report.get("recall", {})
+    payload = {
+        "scenarios_total": int(report.get("total", 0)),
+        "scenarios_passed": int(report.get("passed", 0)),
+        "recall_at_5": float(recall_block.get("r_at_5", 0.0)),
+        "recall_at_10": float(recall_block.get("r_at_10", 0.0)),
+        "mrr": float(recall_block.get("mrr", 0.0)),
+        "latency_ms": float(report.get("latency", {}).get("p95_ms", 0.0)),
+        "mode": mode,
+        "llm_calls_during_eval": int(llm_delta),
+        "network_calls_during_eval": int(net_delta),
+        "details": {
+            "recall": recall_block,
+            "prevention": report.get("prevention", {}),
+            "latency": report.get("latency", {}),
+        },
+    }
+    if dataset is not None:
+        payload["dataset"] = dataset
+    if diagnostics is not None:
+        payload["failure_diagnostics"] = diagnostics
+    if report_path:
+        payload["report_path"] = report_path
+    return payload
 
 
 async def _do(name, a):
@@ -6487,28 +6560,21 @@ async def _do(name, a):
             llm_delta, net_delta = _eval_perf_snapshot_delta(before)
 
         report = run["report"]
-        recall_block = report.get("recall", {})
-        return J({
-            "scenarios_total": int(report.get("total", 0)),
-            "scenarios_passed": int(report.get("passed", 0)),
-            "recall_at_5": float(recall_block.get("r_at_5", 0.0)),
-            "recall_at_10": float(recall_block.get("r_at_10", 0.0)),
-            "latency_ms": float(report.get("latency", {}).get("p95_ms", 0.0)),
-            "mode": mode,
-            "llm_calls_during_eval": int(llm_delta),
-            "network_calls_during_eval": int(net_delta),
-            "details": {
-                "recall": recall_block,
-                "prevention": report.get("prevention", {}),
-                "latency": report.get("latency", {}),
-            },
-        })
+        return J(_eval_summary_payload(
+            report=report,
+            mode=mode,
+            llm_delta=llm_delta,
+            net_delta=net_delta,
+        ))
 
     elif name == "memory_eval_recall":
         mode = a.get("mode", "fast")
         top_k = int(a.get("top_k", 5))
         limit = a.get("limit")
         dataset_path = a.get("dataset_path")
+        include_diagnostics = bool(a.get("include_diagnostics", False))
+        write_report = bool(a.get("write_report", False))
+        report_path = a.get("report_path")
 
         # Built-in fixture when no dataset_path: a tiny self-test that seeds
         # two records and asks for them back. Deterministic; no LLM.
@@ -6578,18 +6644,67 @@ async def _do(name, a):
             llm_delta, net_delta = _eval_perf_snapshot_delta(before)
 
         report = run["report"]
-        recall_block = report.get("recall", {})
-        return J({
-            "scenarios_total": int(report.get("total", 0)),
-            "scenarios_passed": int(report.get("passed", 0)),
-            "recall_at_5": float(recall_block.get("r_at_5", 0.0)),
-            "recall_at_10": float(recall_block.get("r_at_10", 0.0)),
-            "latency_ms": float(report.get("latency", {}).get("p95_ms", 0.0)),
-            "mode": mode,
-            "llm_calls_during_eval": int(llm_delta),
-            "network_calls_during_eval": int(net_delta),
-            "dataset": "builtin" if builtin is not None else dataset_path,
-        })
+        explanations: dict[str, dict] = {}
+        if include_diagnostics:
+            for scenario in report.get("scenarios", []):
+                if scenario.get("passed") or scenario.get("type") != "recall":
+                    continue
+                query = (scenario.get("details") or {}).get("query")
+                if not query or query in explanations:
+                    continue
+                try:
+                    explanations[query] = recall.search(
+                        query,
+                        next(
+                            (s.get("project") for s in run.get("scenarios", [])
+                             if s.get("query") == query),
+                            None,
+                        ),
+                        "all",
+                        max(10, top_k),
+                        "full",
+                        None,
+                        "rrf",
+                        False,
+                        False,
+                        _explain=True,
+                    )
+                except Exception as exc:
+                    explanations[query] = {"error": str(exc)}
+
+        diagnostics = (
+            _eval_failure_diagnostics(report, explanations)
+            if include_diagnostics else None
+        )
+        saved_report_path = None
+        if write_report:
+            from eval_harness import write_jsonl_report
+            if not report_path:
+                report_path = str(
+                    Path(__file__).parent.parent
+                    / "evals" / "results" / "memory_eval_recall.jsonl"
+                )
+            saved_report_path = write_jsonl_report({
+                **_eval_summary_payload(
+                    report=report,
+                    mode=mode,
+                    llm_delta=llm_delta,
+                    net_delta=net_delta,
+                    dataset="builtin" if builtin is not None else dataset_path,
+                    diagnostics=diagnostics,
+                ),
+                "scenarios": report.get("scenarios", []),
+            }, report_path)
+
+        return J(_eval_summary_payload(
+            report=report,
+            mode=mode,
+            llm_delta=llm_delta,
+            net_delta=net_delta,
+            dataset="builtin" if builtin is not None else dataset_path,
+            diagnostics=diagnostics,
+            report_path=saved_report_path,
+        ))
 
     elif name == "memory_eval_temporal":
         mode = a.get("mode", "fast")

@@ -139,6 +139,46 @@ def test_run_suite_computes_r_at_k():
     assert abs(report["recall"]["r_at_5"] - 1.0) < 1e-6
 
 
+def test_recall_supports_expected_ids_and_mrr():
+    def fake_recall(q, params):
+        return [
+            {"id": 1, "content": "decoy"},
+            {"id": 42, "content": "golden answer"},
+        ]
+    h = EvalHarness(recall_fn=fake_recall)
+    report = h.run_suite([
+        {
+            "name": "golden-id",
+            "type": "recall",
+            "query": "where is the golden answer",
+            "expected_ids": [42],
+            "expected_terms": ["golden answer"],
+            "k": 5,
+        },
+    ])
+    scenario = report["scenarios"][0]
+    assert scenario["passed"] is True
+    assert scenario["details"]["first_match_rank"] == 2
+    assert scenario["details"]["missing_ids"] == []
+    assert abs(report["recall"]["mrr"] - 0.5) < 1e-6
+
+
+def test_recall_fails_when_expected_id_missing():
+    def fake_recall(q, params):
+        return [{"id": 1, "content": "golden answer text only"}]
+    h = EvalHarness(recall_fn=fake_recall)
+    r = h.run_scenario({
+        "type": "recall",
+        "query": "q",
+        "expected_ids": [42],
+        "expected_terms": ["golden answer"],
+        "k": 5,
+    })
+    assert r.passed is False
+    assert r.details["missing_ids"] == [42]
+    assert r.details["missing_terms"] == []
+
+
 def test_run_suite_computes_latency_percentiles():
     def fake_recall(q, params):
         return [{"content": "needle"}]
