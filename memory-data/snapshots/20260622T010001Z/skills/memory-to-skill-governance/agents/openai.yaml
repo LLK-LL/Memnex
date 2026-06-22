@@ -1,7 +1,0 @@
-﻿interface:
-  display_name: "Memory To Skill Governance"
-  short_description: "Promote reusable memory workflows into skills."
-  default_prompt: "Use $memory-to-skill-governance to decide whether this repeated solution should stay in memory or become a reusable skill."
-
-policy:
-  allow_implicit_invocation: true

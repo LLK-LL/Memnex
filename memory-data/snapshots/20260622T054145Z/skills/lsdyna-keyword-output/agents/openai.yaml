@@ -1,7 +1,0 @@
-﻿interface:
-  display_name: "LS-DYNA Keyword Output"
-  short_description: "Write robust LS-DYNA keyword card output."
-  default_prompt: "Use $lsdyna-keyword-output to fix or test generated LS-DYNA keyword formatting."
-
-policy:
-  allow_implicit_invocation: true

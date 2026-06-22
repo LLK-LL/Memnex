@@ -1,7 +1,0 @@
-﻿interface:
-  display_name: "Agent Terminal State Guard"
-  short_description: "Prevent premature Done events in agent UIs."
-  default_prompt: "Use $agent-terminal-state-guard to debug this premature agent Done or incomplete-turn issue."
-
-policy:
-  allow_implicit_invocation: true

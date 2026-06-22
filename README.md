@@ -108,6 +108,26 @@ task experience
 
 Memnex does not retrain the base model. It trains the local memory, rules, and skills around the model.
 
+## v0.2.0 - Memory graph visualization
+
+Memnex now includes a local graph viewer exporter for memory systems that expose
+SQLite graph tables. It exports a read-only snapshot into a static browser
+workspace with 2D and 3D views, type filters, weighted edges, search, and linked
+memory summaries.
+
+```powershell
+python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
+  --db "$env:USERPROFILE\.tam\memory.db" `
+  --output .\graph-viewer-output
+```
+
+Open `graph-viewer-output\index.html` for the 2D view or
+`graph-viewer-output\viewer-3d.html` for the 3D view.
+
+The exporter reads the source database in SQLite read-only mode. Generated
+viewer output can contain private memory summaries, so it is ignored by Git and
+should be reviewed before sharing.
+
 ## Quick Start
 
 Memnex currently ships with a PowerShell sync workflow for Windows.
@@ -170,6 +190,8 @@ memory-system/
   scripts/
     sync-memory-library.ps1        # collect, sanitize, commit, and push the latest state
     install-weekly-task.ps1        # install a local Windows weekly scheduled task
+  tools/
+    graph-viewer/                  # local 2D/3D memory graph viewer exporter
 
 memory-data/
   current/
@@ -186,7 +208,11 @@ memory-data/
 
 ## Privacy and Safety
 
-Memnex is intentionally conservative. It excludes obvious caches, logs, temporary files, and transient database files. Preference and configuration snapshots are redacted for sensitive-looking keywords such as:
+Memnex is intentionally conservative. Current public releases exclude
+`memory-data/` from Git so system files can be published without bundling live
+memory content. Sync outputs, graph viewer exports, obvious caches, logs,
+temporary files, and transient database files are ignored. Preference and
+configuration snapshots are redacted for sensitive-looking keywords such as:
 
 - `token`
 - `password`
@@ -203,8 +229,9 @@ You should still review the first sync before making a repository public. For de
 - Add macOS/Linux sync scripts.
 - Add a demo GIF for the end-to-end memory sync loop.
 - Add a lightweight retrieval helper for selected memories/rules/skills.
+- Add tests for the graph viewer exporter and redaction workflow.
 - Add more adapter examples for Claude, Cursor, Continue, Windsurf, Cline, and MCP servers.
-- Add tests for redaction behavior and sync path handling.
+- Add cross-platform redaction and sync path checks.
 
 ## Contributing
 

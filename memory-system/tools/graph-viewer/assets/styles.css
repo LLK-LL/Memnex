@@ -1,0 +1,182 @@
+:root {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --line: #d8dee9;
+  --text: #16202a;
+  --muted: #5c6b7a;
+  --accent: #2563eb;
+  --accent-soft: #dbeafe;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 280px minmax(420px, 1fr) 340px;
+  height: 100vh;
+  min-height: 620px;
+}
+
+.sidebar,
+.details {
+  overflow: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 18px;
+}
+
+.details {
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+h2 {
+  margin: 20px 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.mode-links {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mode-links a {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 10px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.mode-links a.active,
+.mode-links a:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.graph {
+  min-width: 0;
+  min-height: 0;
+}
+
+.graph-3d {
+  min-width: 0;
+  min-height: 0;
+  background: #08111f;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+input[type="search"] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 10px;
+  font: inherit;
+}
+
+.filters {
+  display: grid;
+  gap: 8px;
+}
+
+.filters label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.node-title {
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.meta {
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.pill {
+  display: inline-block;
+  margin: 0 6px 6px 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: #1d4ed8;
+  font-size: 12px;
+}
+
+.memory {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.memory strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 980px) {
+  .app {
+    grid-template-columns: 240px 1fr;
+  }
+
+  .details {
+    display: none;
+  }
+}

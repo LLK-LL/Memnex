@@ -1,4 +1,0 @@
-﻿[academic-search]
-trigger = ["鏌ユ枃鐚?, "鎼滆鏂?, "妫€绱?, "瀵煎叆EndNote", "瀵煎嚭RIS", "妫€鏌ュ弬鑰冩枃鐚?, "楠岃瘉DOI", "楠岃瘉寮曠敤", "鐩稿叧鏂囩尞", "鎵剧被浼艰鏂?, "鏋勫缓妫€绱㈠紡", "MeSH", "鍘婚噸", "search papers", "find articles", "academic search", "literature search", "verify references", "check DOI", "verify citations", "download citation", "export .nbib", "export .ris", "BibTeX", "DOI", "PMID"]
-priority = 5
-suppress_active_skills = ["lit-process"]

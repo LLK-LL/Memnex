@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Total Agent Memory Graph 3D</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/three@0.160.1/build/three.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar">
+      <header>
+        <h1>Memory Graph</h1>
+        <p id="stats">Loading 3D graph...</p>
+        <nav class="mode-links">
+          <a href="index.html">2D</a>
+          <a class="active" href="viewer-3d.html">3D</a>
+        </nav>
+      </header>
+
+      <label class="field">
+        Search
+        <input id="search" type="search" placeholder="node, project, concept">
+      </label>
+
+      <section>
+        <h2>Node Types</h2>
+        <div id="typeFilters" class="filters"></div>
+      </section>
+
+      <label class="field">
+        Minimum edge weight
+        <input id="weightFilter" type="range" min="0" max="10" step="0.1" value="0">
+        <span id="weightValue">0</span>
+      </label>
+
+      <section>
+        <h2>View</h2>
+        <div class="buttons">
+          <button id="fit" type="button">Fit</button>
+          <button id="reheat" type="button">Reheat</button>
+          <button id="clearFocus" type="button">Clear</button>
+        </div>
+      </section>
+    </aside>
+
+    <section id="graph3d" class="graph-3d"></section>
+
+    <aside class="details">
+      <h2>Selection</h2>
+      <div id="details">Select a node to inspect linked memories.</div>
+    </aside>
+  </main>
+  <script src="viewer-3d.js"></script>
+</body>
+</html>

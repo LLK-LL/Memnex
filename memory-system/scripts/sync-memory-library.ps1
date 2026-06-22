@@ -147,7 +147,7 @@ Copy-RedactedTextFile -Source (Join-Path $CodexHome ".codex-global-state.json") 
 
 $manifest = [ordered]@{
     synced_at_utc = (Get-Date).ToUniversalTime().ToString("o")
-    repository = "LLK-LL/AI-brain"
+    repository = "LLK-LL/Memnex"
     system_layer = "memory-system"
     data_layer = "memory-data/current"
     latest_memory_export_source = $latestExport
@@ -175,7 +175,7 @@ $manifest = [ordered]@{
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $dataRoot "manifest.json") -Encoding UTF8
 
 Write-Step "Preparing git commit"
-git add README.md .gitignore .gitattributes memory-system memory-data
+git add README.md README.zh-CN.md .gitignore .gitattributes memory-system docs examples
 $status = git status --porcelain
 if ([string]::IsNullOrWhiteSpace($status)) {
     Write-Step "No changes to commit"

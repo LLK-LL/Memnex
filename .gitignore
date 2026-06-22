@@ -6,3 +6,9 @@ Thumbs.db
 *.sqlite-shm
 *.sqlite-wal
 memory-system/logs/
+memory-data/
+graph-viewer-output/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite

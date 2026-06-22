@@ -1,4 +1,0 @@
-﻿interface:
-  display_name: "PPTX Automizer"
-  short_description: "Build PPTX files from templates."
-  default_prompt: "Use pptx-automizer to generate a PowerPoint from a provided template."

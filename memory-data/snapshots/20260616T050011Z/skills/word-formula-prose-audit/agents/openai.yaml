@@ -1,4 +1,0 @@
-﻿interface:
-  display_name: "Word Formula Prose Audit"
-  short_description: "Audit DOCX formula prose formatting regressions"
-  default_prompt: "Use $word-formula-prose-audit to check this DOCX for formula prose formatting regressions and manuscript-body audit language."
