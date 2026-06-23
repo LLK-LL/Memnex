@@ -171,6 +171,27 @@ button:hover {
   margin-bottom: 4px;
 }
 
+.filters.compact label {
+  padding: 0.35rem 0.4rem;
+}
+
+.notice {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 6px;
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  font-size: 0.85rem;
+}
+
+.graph-3d {
+  background:
+    radial-gradient(circle at 50% 45%, rgba(56, 189, 248, 0.12), transparent 28%),
+    radial-gradient(circle at 70% 30%, rgba(167, 139, 250, 0.10), transparent 22%),
+    #050913;
+}
+
 @media (max-width: 980px) {
   .app {
     grid-template-columns: 240px 1fr;
