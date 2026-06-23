@@ -217,6 +217,7 @@ function renderGalaxy() {
   filteredGraph = currentFilteredGalaxy();
   const focusGraph = buildFocusGalaxy(filteredGraph, { maxNodes: focusLimit });
   visibleGraph = buildExpandedGalaxy(filteredGraph, focusGraph, expandedNodeIds);
+  Graph2D.linkDirectionalParticles(() => 0);
   Graph2D.graphData(toPlanarGraph(visibleGraph));
   renderVisibleStats();
   refreshHighlight();
@@ -229,6 +230,8 @@ function toPlanarGraph(graph) {
       ...node,
       x: node.x,
       y: node.z ?? node.y,
+      fx: node.x,
+      fy: node.z ?? node.y,
     })),
   };
 }
@@ -273,7 +276,7 @@ function showNeighborhoodOnly() {
 }
 
 function expandNodeNeighborhood(node) {
-  expandedNodeIds.add(node.id);
+  expandedNodeIds = new Set([node.id]);
   renderGalaxy();
   Graph2D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
 }
