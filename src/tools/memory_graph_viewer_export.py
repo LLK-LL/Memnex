@@ -6,6 +6,7 @@ import argparse
 import json
 import shutil
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,46 @@ def _truncate(value: str | None, limit: int) -> str:
     return text[: limit - 1].rstrip() + "..."
 
 
+def _parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        text = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _freshness(last_seen_at: str | None, newest: datetime | None, oldest: datetime | None) -> float:
+    seen = _parse_iso(last_seen_at)
+    if not seen or not newest or not oldest or newest <= oldest:
+        return 0.5
+    span = (newest - oldest).total_seconds()
+    pos = (seen - oldest).total_seconds()
+    return round(max(0.0, min(1.0, pos / span)), 3)
+
+
+def _activity(mention_count: int, max_mentions: int) -> float:
+    if max_mentions <= 0:
+        return 0.0
+    return round(max(0.0, min(1.0, mention_count / max_mentions)), 3)
+
+
+def _galaxy_layer(node_type: str, importance: float, mention_count: int) -> str:
+    if node_type in {"rule", "decision"} or importance >= 1.4:
+        return "core"
+    if mention_count >= 10 or importance >= 0.9:
+        return "active"
+    if node_type in {"concept", "entity", "technology", "project"}:
+        return "knowledge"
+    if node_type in {"episode", "session", "observation"}:
+        return "episode"
+    return "external"
+
+
 def load_graph(
     conn: sqlite3.Connection,
     *,
@@ -60,6 +101,11 @@ def load_graph(
         node_params = (max_nodes,)
     node_rows = conn.execute(node_sql, node_params).fetchall()
     node_ids = {row["id"] for row in node_rows}
+    seen_dates = [_parse_iso(row["last_seen_at"]) for row in node_rows]
+    seen_dates = [date for date in seen_dates if date is not None]
+    oldest_seen = min(seen_dates) if seen_dates else None
+    newest_seen = max(seen_dates) if seen_dates else None
+    max_mentions = max((int(row["mention_count"] or 0) for row in node_rows), default=0)
 
     edge_sql = """
         SELECT id, source_id, target_id, relation_type, weight, context,
@@ -110,6 +156,13 @@ def load_graph(
                 "mention_count": int(row["mention_count"] or 0),
                 "first_seen_at": row["first_seen_at"],
                 "last_seen_at": row["last_seen_at"],
+                "galaxy_layer": _galaxy_layer(
+                    str(row["type"]),
+                    float(row["importance"] or 0.0),
+                    int(row["mention_count"] or 0),
+                ),
+                "freshness": _freshness(row["last_seen_at"], newest_seen, oldest_seen),
+                "activity": _activity(int(row["mention_count"] or 0), max_mentions),
                 "knowledge": knowledge_by_node.get(row["id"], []),
             }
         }
@@ -129,6 +182,10 @@ def load_graph(
             "max_edges": max_edges,
             "min_edge_weight": min_edge_weight,
             "type_counts": type_counts,
+            "timeline": {
+                "start": oldest_seen.isoformat() if oldest_seen else "",
+                "end": newest_seen.isoformat() if newest_seen else "",
+            },
         },
         "elements": {
             "nodes": nodes,

@@ -105,9 +105,18 @@ def test_load_graph_filters_orphan_edges_and_links_knowledge(tmp_path):
     assert graph["metadata"]["edge_count"] == 1
     assert graph["metadata"]["max_nodes"] is None
     assert graph["metadata"]["max_edges"] is None
+    assert "timeline" in graph["metadata"]
+    assert set(graph["metadata"]["timeline"]) == {"start", "end"}
+    assert graph["metadata"]["timeline"]["start"] <= graph["metadata"]["timeline"]["end"]
     assert graph["elements"]["edges"][0]["data"]["id"] == "e1"
     rag = next(node for node in graph["elements"]["nodes"] if node["data"]["id"] == "n1")
     assert rag["data"]["knowledge"][0]["summary"] == "Use RAG first"
+    assert "galaxy_layer" in rag["data"]
+    assert rag["data"]["galaxy_layer"] in {"core", "active", "knowledge", "episode", "external"}
+    assert "freshness" in rag["data"]
+    assert 0.0 <= rag["data"]["freshness"] <= 1.0
+    assert "activity" in rag["data"]
+    assert 0.0 <= rag["data"]["activity"] <= 1.0
 
 
 def test_load_graph_honors_explicit_limits(tmp_path):
