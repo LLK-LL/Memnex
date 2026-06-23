@@ -18,6 +18,7 @@ let renderTimer = null;
 let filteredGraph = { nodes: [], links: [], metadata: {} };
 let expandedNodeIds = new Set();
 let lastClick = { nodeId: null, at: 0 };
+let showAllNodes = false;
 const focusLimit = 720;
 
 function escapeHtml(value) {
@@ -193,6 +194,8 @@ function bindControls() {
   document.getElementById("reheat").addEventListener("click", () => Graph2D.d3ReheatSimulation());
   document.getElementById("clearFocus").addEventListener("click", clearFocus);
   document.getElementById("focusNeighborhood").addEventListener("click", showNeighborhoodOnly);
+  document.getElementById("expandAll").addEventListener("click", expandAll);
+  document.getElementById("focusView").addEventListener("click", focusView);
   document.getElementById("copySelection").addEventListener("click", copySelection);
   document.getElementById("stageIntent").addEventListener("click", stageSelectedIntent);
   window.addEventListener("resize", () => {
@@ -210,13 +213,14 @@ function applyFilters() {
   expandedNodeIds = new Set();
   selectedNodeId = null;
   selectedNode = null;
+  showAllNodes = false;
   renderGalaxy();
 }
 
 function renderGalaxy() {
   filteredGraph = currentFilteredGalaxy();
-  const focusGraph = buildFocusGalaxy(filteredGraph, { maxNodes: focusLimit });
-  visibleGraph = buildExpandedGalaxy(filteredGraph, focusGraph, expandedNodeIds);
+  const baseGraph = showAllNodes ? filteredGraph : buildFocusGalaxy(filteredGraph, { maxNodes: focusLimit });
+  visibleGraph = buildExpandedGalaxy(filteredGraph, baseGraph, expandedNodeIds);
   Graph2D.graphData(toPlanarGraph(visibleGraph));
   renderVisibleStats();
   refreshHighlight();
@@ -272,6 +276,20 @@ function showNeighborhoodOnly() {
   expandNodeNeighborhood(selectedNode);
 }
 
+function expandAll() {
+  expandedNodeIds = new Set();
+  showAllNodes = true;
+  renderGalaxy();
+  Graph2D.zoomToFit(600, 80);
+}
+
+function focusView() {
+  expandedNodeIds = new Set();
+  showAllNodes = false;
+  renderGalaxy();
+  Graph2D.zoomToFit(600, 80);
+}
+
 function expandNodeNeighborhood(node) {
   expandedNodeIds.add(node.id);
   renderGalaxy();
@@ -297,6 +315,7 @@ function clearFocus() {
   selectedNodeId = null;
   selectedNode = null;
   expandedNodeIds = new Set();
+  showAllNodes = false;
   refreshHighlight();
   Graph2D.linkDirectionalParticles(() => 0);
   document.getElementById("details").textContent = "Select a node to inspect linked memories.";
