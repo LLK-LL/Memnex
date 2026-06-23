@@ -243,7 +243,14 @@ def write_graph_json(graph: dict[str, Any], output_dir: Path) -> Path:
 
 def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for asset in ("index.html", "styles.css", "viewer.js", "viewer-3d.html", "viewer-3d.js"):
+    for asset in (
+        "index.html",
+        "styles.css",
+        "viewer.js",
+        "viewer-3d.html",
+        "viewer-3d.js",
+        "memory-galaxy-core.js",
+    ):
         shutil.copy2(asset_dir / asset, output_dir / asset)
 
 
