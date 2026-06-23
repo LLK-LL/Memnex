@@ -90,11 +90,13 @@ function createGraph() {
   Graph3D = ForceGraph3D()(container)
     .backgroundColor("#050913")
     .nodeLabel(node => `${node.label} | ${node.type} | ${node.layer}`)
-    .nodeColor(node => node.id === selectedNodeId ? "#facc15" : node.color)
-    .nodeVal(node => node.id === selectedNodeId ? node.val + 10 : node.val)
+    .nodeColor(node => node.id === selectedNodeId ? "#ffffff" : node.color)
+    .nodeVal(nodeSize)
     .nodeOpacity(0.94)
-    .linkColor(link => relationColor(link.relation))
-    .linkWidth(link => Math.max(0.2, Math.min(2.2, link.weight * 0.65)))
+    .nodeThreeObject(selectedNodeHalo)
+    .nodeThreeObjectExtend(true)
+    .linkColor(linkColor)
+    .linkWidth(linkWidth)
     .linkOpacity(0.22)
     .linkDirectionalParticles(link => selectedNodeId && touchesSelectedNode(link) ? 1 : 0)
     .linkDirectionalParticleWidth(1.1)
@@ -106,8 +108,8 @@ function createGraph() {
       const isDoubleClick = lastClick.nodeId === node.id && now - lastClick.at < 340;
       lastClick = { nodeId: node.id, at: now };
       selectNode(node);
-      focusNode(node);
       if (isDoubleClick) expandNodeNeighborhood(node);
+      else focusNode(node);
     })
     .onNodeRightClick(node => {
       selectNode(node);
@@ -121,6 +123,35 @@ function relationColor(relation) {
   if (relation === "causal") return "rgba(251, 191, 36, 0.65)";
   if (relation === "context") return "rgba(96, 165, 250, 0.55)";
   return "rgba(148, 163, 184, 0.42)";
+}
+
+function linkColor(link) {
+  if (link.expansionParentId) return "rgba(248, 113, 113, 0.95)";
+  if (selectedNodeId && touchesSelectedNode(link)) return "rgba(250, 204, 21, 0.9)";
+  return relationColor(link.relation);
+}
+
+function linkWidth(link) {
+  if (link.expansionParentId) return Math.max(2, Math.min(5, link.weight));
+  if (selectedNodeId && touchesSelectedNode(link)) return Math.max(1.6, Math.min(4, link.weight));
+  return Math.max(0.2, Math.min(2.2, link.weight * 0.65));
+}
+
+function nodeSize(node) {
+  return node.id === selectedNodeId ? node.val + 14 : node.val;
+}
+
+function selectedNodeHalo(node) {
+  if (node.id !== selectedNodeId || typeof THREE === "undefined") return null;
+  const radius = 7 + Math.sqrt(nodeSize(node)) * 2.2;
+  const geometry = new THREE.SphereGeometry(radius, 24, 16);
+  const material = new THREE.MeshBasicMaterial({
+    color: "#ff1f3d",
+    transparent: true,
+    opacity: 0.34,
+    wireframe: true,
+  });
+  return new THREE.Mesh(geometry, material);
 }
 
 function bindControls() {
@@ -219,7 +250,6 @@ function showNeighborhoodOnly() {
 function expandNodeNeighborhood(node) {
   expandedNodeIds.add(node.id);
   renderGalaxy();
-  focusNode(findVisibleNode(node.id) || node);
   Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
 }
 
@@ -260,14 +290,13 @@ function selectNode(node) {
   refreshHighlight();
 }
 
-function findVisibleNode(nodeId) {
-  return visibleGraph.nodes.find(graphNode => graphNode.id === nodeId);
-}
-
 function refreshHighlight() {
   if (!Graph3D) return;
-  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#facc15" : graphNode.color);
-  Graph3D.nodeVal(graphNode => graphNode.id === selectedNodeId ? graphNode.val + 10 : graphNode.val);
+  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
+  Graph3D.nodeVal(nodeSize);
+  Graph3D.nodeThreeObject(selectedNodeHalo);
+  Graph3D.linkColor(linkColor);
+  Graph3D.linkWidth(linkWidth);
 }
 
 function touchesSelectedNode(link) {

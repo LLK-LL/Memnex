@@ -143,6 +143,7 @@ export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, o
   const byId = new Map(sourceGalaxy.nodes.map(node => [node.id, node]));
   const baseIds = new Set(baseGalaxy.nodes.map(node => node.id));
   const keep = new Set(baseIds);
+  const addedFrom = new Map();
   const adjacency = buildAdjacency(sourceGalaxy.links);
 
   for (const id of expandedNodeIds || []) {
@@ -155,18 +156,34 @@ export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, o
       .slice(0, neighborLimit);
     for (const edge of neighbors) {
       keep.add(edge.id);
+      if (!baseIds.has(edge.id) && !addedFrom.has(edge.id)) {
+        addedFrom.set(edge.id, nodeId);
+      }
     }
   }
 
   const baseById = new Map(baseGalaxy.nodes.map(node => [node.id, node]));
   const nodes = sourceGalaxy.nodes
     .filter(node => keep.has(node.id))
-    .map(node => baseById.get(node.id) || positionExpandedNode(node));
+    .map(node => {
+      const baseNode = baseById.get(node.id);
+      if (baseNode) return baseNode;
+      return positionExpandedNode(node, baseById.get(addedFrom.get(node.id)) || byId.get(addedFrom.get(node.id)));
+    });
   const nodeIds = new Set(nodes.map(node => node.id));
   const links = sourceGalaxy.links.filter(link =>
     nodeIds.has(String(link.source.id || link.source)) &&
     nodeIds.has(String(link.target.id || link.target))
-  );
+  ).map(link => {
+    const source = String(link.source.id || link.source);
+    const target = String(link.target.id || link.target);
+    const expansionParentId = expandedNodeIds.has(source) && addedFrom.get(target) === source
+      ? source
+      : expandedNodeIds.has(target) && addedFrom.get(source) === target
+        ? target
+        : null;
+    return expansionParentId ? { ...link, expansionParentId } : link;
+  });
 
   return { nodes, links, metadata: sourceGalaxy.metadata };
 }
@@ -251,15 +268,18 @@ function hashAngle(value) {
   return (hashNumber(value) % 6283) / 1000;
 }
 
-function positionExpandedNode(node) {
+function positionExpandedNode(node, parent) {
   const angle = hashAngle(node.id);
-  const radius = Math.max(node.orbit || 0, 460);
+  const radius = 90 + (hashNumber(node.id) % 80);
+  const parentX = parent?.x || 0;
+  const parentY = parent?.y || 0;
+  const parentZ = parent?.z || 0;
   return {
     ...node,
     focusRing: 3,
-    x: Math.cos(angle) * radius,
-    y: ((hashNumber(node.id) % 11) - 5) * 16,
-    z: Math.sin(angle) * radius,
+    x: parentX + Math.cos(angle) * radius,
+    y: parentY + ((hashNumber(node.id) % 9) - 4) * 18,
+    z: parentZ + Math.sin(angle) * radius,
   };
 }
 

@@ -79,6 +79,10 @@ const expandedGalaxy = buildExpandedGalaxy(
 assert.ok(expandedGalaxy.nodes.length > 3);
 assert.ok(expandedGalaxy.nodes.some(node => node.id === "core"));
 assert.ok(expandedGalaxy.nodes.length <= 8);
+const expandedCore = expandedGalaxy.nodes.find(node => node.id === "core");
+const expandedChild = expandedGalaxy.nodes.find(node => node.id !== "core" && !focusGalaxy.nodes.slice(0, 3).some(baseNode => baseNode.id === node.id));
+assert.ok(Math.hypot(expandedChild.x - expandedCore.x, expandedChild.z - expandedCore.z) < 180);
+assert.ok(expandedGalaxy.links.some(link => link.expansionParentId === "core"));
 
 const intent = buildEditIntent("add_relation", { source: "p1", target: "c1", relation: "related" });
 assert.equal(intent.action, "add_relation");
