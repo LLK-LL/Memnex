@@ -82,6 +82,7 @@ function renderLayerFilters() {
 
 function createGraph() {
   const container = document.getElementById("graph3d");
+  container.addEventListener("contextmenu", event => event.preventDefault());
   Graph3D = ForceGraph3D()(container)
     .backgroundColor("#050913")
     .nodeLabel(node => `${node.label} | ${node.type} | ${node.layer}`)
@@ -97,12 +98,13 @@ function createGraph() {
     .d3AlphaDecay(0.08)
     .d3VelocityDecay(0.55)
     .onNodeClick(node => {
-      selectedNodeId = node.id;
-      selectedNode = node;
-      showDetails(node.raw);
+      selectNode(node);
       focusNode(node);
-      Graph3D.nodeColor(n => n.id === selectedNodeId ? "#ffffff" : n.color);
-      Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
+      expandNodeNeighborhood(node);
+    })
+    .onNodeRightClick(node => {
+      selectNode(node);
+      collapseNodeNeighborhood(node);
     });
 }
 
@@ -153,22 +155,29 @@ function scheduleApplyFilters() {
 }
 
 function applyFilters() {
+  visibleGraph = buildFocusGalaxy(currentFilteredGalaxy(), { maxNodes: focusLimit });
+  Graph3D.graphData(visibleGraph);
+  renderVisibleStats();
+  selectedNodeId = null;
+  selectedNode = null;
+}
+
+function currentFilteredGalaxy() {
   const timelineCutoff = timelineCutoffFromSlider();
-  const filtered = filterGalaxy(originalGraph, {
+  return filterGalaxy(originalGraph, {
     query: document.getElementById("search").value,
     activeTypes,
     activeLayers,
     minWeight: Number(document.getElementById("weightFilter").value),
     timelineCutoff,
   });
-  visibleGraph = buildFocusGalaxy(filtered, { maxNodes: focusLimit });
-  Graph3D.graphData(visibleGraph);
+}
+
+function renderVisibleStats() {
   renderStats({
     node_count: `${visibleGraph.nodes.length}/${originalGraph.nodes.length}`,
     edge_count: `${visibleGraph.links.length}/${originalGraph.links.length}`,
   });
-  selectedNodeId = null;
-  selectedNode = null;
 }
 
 function timelineCutoffFromSlider() {
@@ -189,18 +198,31 @@ function timelineCutoffFromSlider() {
 
 function showNeighborhoodOnly() {
   if (!selectedNode) return;
+  expandNodeNeighborhood(selectedNode);
+}
+
+function expandNodeNeighborhood(node) {
   visibleGraph = buildFocusGalaxy(originalGraph, {
-    focusNodeId: selectedNode.id,
+    focusNodeId: node.id,
     maxNodes: 360,
     seedCount: 1,
     firstRingLimit: 160,
   });
   Graph3D.graphData(visibleGraph);
-  renderStats({
-    node_count: `${visibleGraph.nodes.length}/${originalGraph.nodes.length}`,
-    edge_count: `${visibleGraph.links.length}/${originalGraph.links.length}`,
-  });
+  renderVisibleStats();
+  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
   Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
+}
+
+function collapseNodeNeighborhood(node) {
+  visibleGraph = buildFocusGalaxy(currentFilteredGalaxy(), { maxNodes: focusLimit });
+  Graph3D.graphData(visibleGraph);
+  renderVisibleStats();
+  const stillVisible = visibleGraph.nodes.some(graphNode => graphNode.id === node.id);
+  selectedNodeId = stillVisible ? node.id : null;
+  selectedNode = stillVisible ? node : null;
+  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
+  Graph3D.linkDirectionalParticles(() => 0);
 }
 
 function focusNode(node) {
@@ -220,6 +242,13 @@ function clearFocus() {
   Graph3D.linkDirectionalParticles(() => 0);
   document.getElementById("details").textContent = "Select a node to inspect linked memories.";
   applyFilters();
+}
+
+function selectNode(node) {
+  selectedNodeId = node.id;
+  selectedNode = node;
+  showDetails(node.raw);
+  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
 }
 
 function touchesSelectedNode(link) {
