@@ -1,5 +1,6 @@
 import {
   buildEditIntent,
+  buildExpandedGalaxy,
   buildFocusGalaxy,
   convertGraphToGalaxy,
   filterGalaxy,
@@ -14,6 +15,9 @@ let selectedNodeId = null;
 let selectedNode = null;
 let stagedIntents = [];
 let renderTimer = null;
+let filteredGraph = { nodes: [], links: [], metadata: {} };
+let expandedNodeIds = new Set();
+let lastClick = { nodeId: null, at: 0 };
 const focusLimit = 720;
 
 function escapeHtml(value) {
@@ -86,8 +90,8 @@ function createGraph() {
   Graph3D = ForceGraph3D()(container)
     .backgroundColor("#050913")
     .nodeLabel(node => `${node.label} | ${node.type} | ${node.layer}`)
-    .nodeColor(node => node.id === selectedNodeId ? "#ffffff" : node.color)
-    .nodeVal(node => node.val)
+    .nodeColor(node => node.id === selectedNodeId ? "#facc15" : node.color)
+    .nodeVal(node => node.id === selectedNodeId ? node.val + 10 : node.val)
     .nodeOpacity(0.94)
     .linkColor(link => relationColor(link.relation))
     .linkWidth(link => Math.max(0.2, Math.min(2.2, link.weight * 0.65)))
@@ -98,9 +102,12 @@ function createGraph() {
     .d3AlphaDecay(0.08)
     .d3VelocityDecay(0.55)
     .onNodeClick(node => {
+      const now = Date.now();
+      const isDoubleClick = lastClick.nodeId === node.id && now - lastClick.at < 340;
+      lastClick = { nodeId: node.id, at: now };
       selectNode(node);
       focusNode(node);
-      expandNodeNeighborhood(node);
+      if (isDoubleClick) expandNodeNeighborhood(node);
     })
     .onNodeRightClick(node => {
       selectNode(node);
@@ -155,11 +162,19 @@ function scheduleApplyFilters() {
 }
 
 function applyFilters() {
-  visibleGraph = buildFocusGalaxy(currentFilteredGalaxy(), { maxNodes: focusLimit });
-  Graph3D.graphData(visibleGraph);
-  renderVisibleStats();
+  expandedNodeIds = new Set();
   selectedNodeId = null;
   selectedNode = null;
+  renderGalaxy();
+}
+
+function renderGalaxy() {
+  filteredGraph = currentFilteredGalaxy();
+  const focusGraph = buildFocusGalaxy(filteredGraph, { maxNodes: focusLimit });
+  visibleGraph = buildExpandedGalaxy(filteredGraph, focusGraph, expandedNodeIds);
+  Graph3D.graphData(visibleGraph);
+  renderVisibleStats();
+  refreshHighlight();
 }
 
 function currentFilteredGalaxy() {
@@ -202,26 +217,19 @@ function showNeighborhoodOnly() {
 }
 
 function expandNodeNeighborhood(node) {
-  visibleGraph = buildFocusGalaxy(originalGraph, {
-    focusNodeId: node.id,
-    maxNodes: 360,
-    seedCount: 1,
-    firstRingLimit: 160,
-  });
-  Graph3D.graphData(visibleGraph);
-  renderVisibleStats();
-  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
+  expandedNodeIds.add(node.id);
+  renderGalaxy();
+  focusNode(findVisibleNode(node.id) || node);
   Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
 }
 
 function collapseNodeNeighborhood(node) {
-  visibleGraph = buildFocusGalaxy(currentFilteredGalaxy(), { maxNodes: focusLimit });
-  Graph3D.graphData(visibleGraph);
-  renderVisibleStats();
+  expandedNodeIds.delete(node.id);
+  renderGalaxy();
   const stillVisible = visibleGraph.nodes.some(graphNode => graphNode.id === node.id);
   selectedNodeId = stillVisible ? node.id : null;
   selectedNode = stillVisible ? node : null;
-  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
+  refreshHighlight();
   Graph3D.linkDirectionalParticles(() => 0);
 }
 
@@ -238,17 +246,28 @@ function focusNode(node) {
 function clearFocus() {
   selectedNodeId = null;
   selectedNode = null;
-  Graph3D.nodeColor(node => node.color);
+  expandedNodeIds = new Set();
+  refreshHighlight();
   Graph3D.linkDirectionalParticles(() => 0);
   document.getElementById("details").textContent = "Select a node to inspect linked memories.";
-  applyFilters();
+  renderGalaxy();
 }
 
 function selectNode(node) {
   selectedNodeId = node.id;
   selectedNode = node;
   showDetails(node.raw);
-  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
+  refreshHighlight();
+}
+
+function findVisibleNode(nodeId) {
+  return visibleGraph.nodes.find(graphNode => graphNode.id === nodeId);
+}
+
+function refreshHighlight() {
+  if (!Graph3D) return;
+  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#facc15" : graphNode.color);
+  Graph3D.nodeVal(graphNode => graphNode.id === selectedNodeId ? graphNode.val + 10 : graphNode.val);
 }
 
 function touchesSelectedNode(link) {

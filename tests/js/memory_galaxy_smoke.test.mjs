@@ -7,12 +7,12 @@ const helperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-c
 const helperSource = readFileSync(helperPath, "utf8").replaceAll("export function ", "function ");
 const context = { exports: {} };
 vm.runInNewContext(
-  `${helperSource}\nexports.convertGraphToGalaxy = convertGraphToGalaxy;\nexports.filterGalaxy = filterGalaxy;\nexports.buildFocusGalaxy = buildFocusGalaxy;\nexports.buildEditIntent = buildEditIntent;`,
+  `${helperSource}\nexports.convertGraphToGalaxy = convertGraphToGalaxy;\nexports.filterGalaxy = filterGalaxy;\nexports.buildFocusGalaxy = buildFocusGalaxy;\nexports.buildExpandedGalaxy = buildExpandedGalaxy;\nexports.buildEditIntent = buildEditIntent;`,
   context,
   { filename: helperPath },
 );
 
-const { convertGraphToGalaxy, filterGalaxy, buildFocusGalaxy, buildEditIntent } = context.exports;
+const { convertGraphToGalaxy, filterGalaxy, buildFocusGalaxy, buildExpandedGalaxy, buildEditIntent } = context.exports;
 
 const fixture = {
   metadata: {
@@ -69,6 +69,16 @@ const focusGalaxy = buildFocusGalaxy(convertGraphToGalaxy(focusFixture), {
 assert.equal(focusGalaxy.nodes.length, 8);
 assert.ok(focusGalaxy.nodes.some(node => node.id === "core" && node.focusRing === 0));
 assert.ok(focusGalaxy.links.length <= 7);
+
+const expandedGalaxy = buildExpandedGalaxy(
+  convertGraphToGalaxy(focusFixture),
+  { nodes: focusGalaxy.nodes.slice(0, 3), links: [], metadata: focusGalaxy.metadata },
+  new Set(["core"]),
+  { neighborLimit: 5 },
+);
+assert.ok(expandedGalaxy.nodes.length > 3);
+assert.ok(expandedGalaxy.nodes.some(node => node.id === "core"));
+assert.ok(expandedGalaxy.nodes.length <= 8);
 
 const intent = buildEditIntent("add_relation", { source: "p1", target: "c1", relation: "related" });
 assert.equal(intent.action, "add_relation");

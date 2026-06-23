@@ -138,6 +138,39 @@ export function buildFocusGalaxy(galaxy, options = {}) {
   return { nodes, links, metadata: galaxy.metadata };
 }
 
+export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, options = {}) {
+  const neighborLimit = Number(options.neighborLimit || 120);
+  const byId = new Map(sourceGalaxy.nodes.map(node => [node.id, node]));
+  const baseIds = new Set(baseGalaxy.nodes.map(node => node.id));
+  const keep = new Set(baseIds);
+  const adjacency = buildAdjacency(sourceGalaxy.links);
+
+  for (const id of expandedNodeIds || []) {
+    const nodeId = String(id);
+    if (!byId.has(nodeId)) continue;
+    keep.add(nodeId);
+    const neighbors = (adjacency.get(nodeId) || [])
+      .filter(edge => byId.has(edge.id))
+      .sort((a, b) => (b.weight + nodeScore(byId.get(b.id))) - (a.weight + nodeScore(byId.get(a.id))))
+      .slice(0, neighborLimit);
+    for (const edge of neighbors) {
+      keep.add(edge.id);
+    }
+  }
+
+  const baseById = new Map(baseGalaxy.nodes.map(node => [node.id, node]));
+  const nodes = sourceGalaxy.nodes
+    .filter(node => keep.has(node.id))
+    .map(node => baseById.get(node.id) || positionExpandedNode(node));
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const links = sourceGalaxy.links.filter(link =>
+    nodeIds.has(String(link.source.id || link.source)) &&
+    nodeIds.has(String(link.target.id || link.target))
+  );
+
+  return { nodes, links, metadata: sourceGalaxy.metadata };
+}
+
 export function buildEditIntent(action, payload) {
   return {
     action,
@@ -216,6 +249,18 @@ function hashNumber(value) {
 
 function hashAngle(value) {
   return (hashNumber(value) % 6283) / 1000;
+}
+
+function positionExpandedNode(node) {
+  const angle = hashAngle(node.id);
+  const radius = Math.max(node.orbit || 0, 460);
+  return {
+    ...node,
+    focusRing: 3,
+    x: Math.cos(angle) * radius,
+    y: ((hashNumber(node.id) % 11) - 5) * 16,
+    z: Math.sin(angle) * radius,
+  };
 }
 
 function inferLayer(data) {
