@@ -1,5 +1,6 @@
 import {
   buildEditIntent,
+  buildFocusGalaxy,
   convertGraphToGalaxy,
   filterGalaxy,
 } from "./memory-galaxy-core.js";
@@ -12,6 +13,8 @@ let activeLayers = new Set(["core", "active", "knowledge", "episode", "external"
 let selectedNodeId = null;
 let selectedNode = null;
 let stagedIntents = [];
+let renderTimer = null;
+const focusLimit = 720;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -86,17 +89,20 @@ function createGraph() {
     .nodeVal(node => node.val)
     .nodeOpacity(0.94)
     .linkColor(link => relationColor(link.relation))
-    .linkWidth(link => Math.max(0.35, Math.min(4, link.weight)))
-    .linkOpacity(0.34)
-    .linkDirectionalParticles(link => link.weight >= 4 ? 2 : 0)
+    .linkWidth(link => Math.max(0.2, Math.min(2.2, link.weight * 0.65)))
+    .linkOpacity(0.22)
+    .linkDirectionalParticles(link => selectedNodeId && touchesSelectedNode(link) ? 1 : 0)
     .linkDirectionalParticleWidth(1.1)
-    .cooldownTicks(120)
+    .cooldownTicks(45)
+    .d3AlphaDecay(0.08)
+    .d3VelocityDecay(0.55)
     .onNodeClick(node => {
       selectedNodeId = node.id;
       selectedNode = node;
       showDetails(node.raw);
       focusNode(node);
       Graph3D.nodeColor(n => n.id === selectedNodeId ? "#ffffff" : n.color);
+      Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
     });
 }
 
@@ -109,26 +115,26 @@ function relationColor(relation) {
 }
 
 function bindControls() {
-  document.getElementById("search").addEventListener("input", applyFilters);
+  document.getElementById("search").addEventListener("input", scheduleApplyFilters);
   document.getElementById("weightFilter").addEventListener("input", event => {
     document.getElementById("weightValue").textContent = event.target.value;
-    applyFilters();
+    scheduleApplyFilters();
   });
   document.getElementById("typeFilters").addEventListener("change", event => {
     if (!event.target.matches("input[type='checkbox']")) return;
     const type = event.target.dataset.type;
     if (event.target.checked) activeTypes.add(type);
     else activeTypes.delete(type);
-    applyFilters();
+    scheduleApplyFilters();
   });
   document.getElementById("layerFilters").addEventListener("change", event => {
     if (!event.target.matches("input[type='checkbox']")) return;
     const layer = event.target.dataset.layer;
     if (event.target.checked) activeLayers.add(layer);
     else activeLayers.delete(layer);
-    applyFilters();
+    scheduleApplyFilters();
   });
-  document.getElementById("timelineFilter").addEventListener("input", applyFilters);
+  document.getElementById("timelineFilter").addEventListener("input", scheduleApplyFilters);
   document.getElementById("fit").addEventListener("click", () => Graph3D.zoomToFit(600, 80));
   document.getElementById("reheat").addEventListener("click", () => Graph3D.d3ReheatSimulation());
   document.getElementById("clearFocus").addEventListener("click", clearFocus);
@@ -141,16 +147,26 @@ function bindControls() {
   });
 }
 
+function scheduleApplyFilters() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(applyFilters, 120);
+}
+
 function applyFilters() {
   const timelineCutoff = timelineCutoffFromSlider();
-  visibleGraph = filterGalaxy(originalGraph, {
+  const filtered = filterGalaxy(originalGraph, {
     query: document.getElementById("search").value,
     activeTypes,
     activeLayers,
     minWeight: Number(document.getElementById("weightFilter").value),
     timelineCutoff,
   });
+  visibleGraph = buildFocusGalaxy(filtered, { maxNodes: focusLimit });
   Graph3D.graphData(visibleGraph);
+  renderStats({
+    node_count: `${visibleGraph.nodes.length}/${originalGraph.nodes.length}`,
+    edge_count: `${visibleGraph.links.length}/${originalGraph.links.length}`,
+  });
   selectedNodeId = null;
   selectedNode = null;
 }
@@ -173,20 +189,18 @@ function timelineCutoffFromSlider() {
 
 function showNeighborhoodOnly() {
   if (!selectedNode) return;
-  const keep = new Set([selectedNode.id]);
-  for (const link of originalGraph.links) {
-    const source = String(link.source.id || link.source);
-    const target = String(link.target.id || link.target);
-    if (source === selectedNode.id) keep.add(target);
-    if (target === selectedNode.id) keep.add(source);
-  }
-  const nodes = originalGraph.nodes.filter(node => keep.has(node.id));
-  const links = originalGraph.links.filter(link =>
-    keep.has(String(link.source.id || link.source)) &&
-    keep.has(String(link.target.id || link.target))
-  );
-  visibleGraph = { nodes, links, metadata: originalGraph.metadata };
+  visibleGraph = buildFocusGalaxy(originalGraph, {
+    focusNodeId: selectedNode.id,
+    maxNodes: 360,
+    seedCount: 1,
+    firstRingLimit: 160,
+  });
   Graph3D.graphData(visibleGraph);
+  renderStats({
+    node_count: `${visibleGraph.nodes.length}/${originalGraph.nodes.length}`,
+    edge_count: `${visibleGraph.links.length}/${originalGraph.links.length}`,
+  });
+  Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
 }
 
 function focusNode(node) {
@@ -203,7 +217,15 @@ function clearFocus() {
   selectedNodeId = null;
   selectedNode = null;
   Graph3D.nodeColor(node => node.color);
+  Graph3D.linkDirectionalParticles(() => 0);
   document.getElementById("details").textContent = "Select a node to inspect linked memories.";
+  applyFilters();
+}
+
+function touchesSelectedNode(link) {
+  const source = String(link.source.id || link.source);
+  const target = String(link.target.id || link.target);
+  return source === selectedNodeId || target === selectedNodeId;
 }
 
 async function copySelection() {

@@ -7,12 +7,12 @@ const helperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-c
 const helperSource = readFileSync(helperPath, "utf8").replaceAll("export function ", "function ");
 const context = { exports: {} };
 vm.runInNewContext(
-  `${helperSource}\nexports.convertGraphToGalaxy = convertGraphToGalaxy;\nexports.filterGalaxy = filterGalaxy;\nexports.buildEditIntent = buildEditIntent;`,
+  `${helperSource}\nexports.convertGraphToGalaxy = convertGraphToGalaxy;\nexports.filterGalaxy = filterGalaxy;\nexports.buildFocusGalaxy = buildFocusGalaxy;\nexports.buildEditIntent = buildEditIntent;`,
   context,
   { filename: helperPath },
 );
 
-const { convertGraphToGalaxy, filterGalaxy, buildEditIntent } = context.exports;
+const { convertGraphToGalaxy, filterGalaxy, buildFocusGalaxy, buildEditIntent } = context.exports;
 
 const fixture = {
   metadata: {
@@ -46,6 +46,29 @@ const filtered = filterGalaxy(galaxy, {
 });
 assert.deepEqual(filtered.nodes.map(node => node.id), ["c1"]);
 assert.equal(filtered.links.length, 0);
+
+const focusFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "core", label: "Core", type: "rule", mention_count: 30, importance: 2, galaxy_layer: "core", freshness: 1, activity: 1, knowledge: [] } },
+      ...Array.from({ length: 20 }, (_, index) => ({
+        data: { id: `n${index}`, label: `Node ${index}`, type: "concept", mention_count: index, importance: 0.1, galaxy_layer: "knowledge", freshness: 0.2, activity: 0.2, knowledge: [] },
+      })),
+    ],
+    edges: Array.from({ length: 20 }, (_, index) => ({
+      data: { id: `e${index}`, source: "core", target: `n${index}`, relation: "related", weight: index + 1 },
+    })),
+  },
+};
+const focusGalaxy = buildFocusGalaxy(convertGraphToGalaxy(focusFixture), {
+  maxNodes: 8,
+  seedCount: 1,
+  firstRingLimit: 4,
+});
+assert.equal(focusGalaxy.nodes.length, 8);
+assert.ok(focusGalaxy.nodes.some(node => node.id === "core" && node.focusRing === 0));
+assert.ok(focusGalaxy.links.length <= 7);
 
 const intent = buildEditIntent("add_relation", { source: "p1", target: "c1", relation: "related" });
 assert.equal(intent.action, "add_relation");
