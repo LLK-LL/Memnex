@@ -6,7 +6,7 @@ import {
   filterGalaxy,
 } from "./memory-galaxy-core.js";
 
-let Graph3D;
+let Graph2D;
 let originalGraph = { nodes: [], links: [], metadata: {} };
 let visibleGraph = { nodes: [], links: [], metadata: {} };
 let activeTypes = new Set();
@@ -29,8 +29,8 @@ function escapeHtml(value) {
 }
 
 async function init() {
-  if (typeof ForceGraph3D !== "function") {
-    throw new Error("3d-force-graph failed to load from CDN.");
+  if (typeof ForceGraph !== "function") {
+    throw new Error("force-graph failed to load from CDN.");
   }
   const response = await fetch("graph.json");
   const graph = await response.json();
@@ -87,17 +87,13 @@ function renderLayerFilters() {
 function createGraph() {
   const container = document.getElementById("graph3d");
   container.addEventListener("contextmenu", event => event.preventDefault());
-  Graph3D = ForceGraph3D()(container)
+  Graph2D = ForceGraph()(container)
     .backgroundColor("#050913")
     .nodeLabel(node => `${node.label} | ${node.type} | ${node.layer}`)
-    .nodeColor(node => node.id === selectedNodeId ? "#ffffff" : node.color)
-    .nodeVal(nodeSize)
-    .nodeOpacity(0.94)
-    .nodeThreeObject(selectedNodeHalo)
-    .nodeThreeObjectExtend(true)
+    .nodeCanvasObject(drawNode)
+    .nodePointerAreaPaint(drawNodePointerArea)
     .linkColor(linkColor)
     .linkWidth(linkWidth)
-    .linkOpacity(0.22)
     .linkDirectionalParticles(link => selectedNodeId && touchesSelectedNode(link) ? 1 : 0)
     .linkDirectionalParticleWidth(1.1)
     .cooldownTicks(45)
@@ -138,20 +134,38 @@ function linkWidth(link) {
 }
 
 function nodeSize(node) {
-  return node.id === selectedNodeId ? node.val + 14 : node.val;
+  return node.id === selectedNodeId ? node.val + 10 : node.val;
 }
 
-function selectedNodeHalo(node) {
-  if (node.id !== selectedNodeId || typeof THREE === "undefined") return null;
-  const radius = 7 + Math.sqrt(nodeSize(node)) * 2.2;
-  const geometry = new THREE.SphereGeometry(radius, 24, 16);
-  const material = new THREE.MeshBasicMaterial({
-    color: "#ff1f3d",
-    transparent: true,
-    opacity: 0.34,
-    wireframe: true,
-  });
-  return new THREE.Mesh(geometry, material);
+function drawNode(node, ctx, globalScale) {
+  const radius = Math.max(2.4, Math.sqrt(nodeSize(node)) * 1.45);
+  if (node.id === selectedNodeId) {
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, radius + 7, 0, 2 * Math.PI, false);
+    ctx.strokeStyle = "#ff1f3d";
+    ctx.lineWidth = Math.max(2.2, 3 / globalScale);
+    ctx.shadowColor = "#ff1f3d";
+    ctx.shadowBlur = 16;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+  ctx.fillStyle = node.id === selectedNodeId ? "#ffffff" : node.color;
+  ctx.fill();
+  if (node.focusRing === 0) {
+    ctx.strokeStyle = "rgba(255,255,255,0.65)";
+    ctx.lineWidth = Math.max(0.8, 1.2 / globalScale);
+    ctx.stroke();
+  }
+}
+
+function drawNodePointerArea(node, color, ctx) {
+  const radius = Math.max(6, Math.sqrt(nodeSize(node)) * 1.8);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+  ctx.fill();
 }
 
 function bindControls() {
@@ -175,15 +189,15 @@ function bindControls() {
     scheduleApplyFilters();
   });
   document.getElementById("timelineFilter").addEventListener("input", scheduleApplyFilters);
-  document.getElementById("fit").addEventListener("click", () => Graph3D.zoomToFit(600, 80));
-  document.getElementById("reheat").addEventListener("click", () => Graph3D.d3ReheatSimulation());
+  document.getElementById("fit").addEventListener("click", () => Graph2D.zoomToFit(600, 80));
+  document.getElementById("reheat").addEventListener("click", () => Graph2D.d3ReheatSimulation());
   document.getElementById("clearFocus").addEventListener("click", clearFocus);
   document.getElementById("focusNeighborhood").addEventListener("click", showNeighborhoodOnly);
   document.getElementById("copySelection").addEventListener("click", copySelection);
   document.getElementById("stageIntent").addEventListener("click", stageSelectedIntent);
   window.addEventListener("resize", () => {
     const container = document.getElementById("graph3d");
-    Graph3D.width(container.clientWidth).height(container.clientHeight);
+    Graph2D.width(container.clientWidth).height(container.clientHeight);
   });
 }
 
@@ -203,9 +217,20 @@ function renderGalaxy() {
   filteredGraph = currentFilteredGalaxy();
   const focusGraph = buildFocusGalaxy(filteredGraph, { maxNodes: focusLimit });
   visibleGraph = buildExpandedGalaxy(filteredGraph, focusGraph, expandedNodeIds);
-  Graph3D.graphData(visibleGraph);
+  Graph2D.graphData(toPlanarGraph(visibleGraph));
   renderVisibleStats();
   refreshHighlight();
+}
+
+function toPlanarGraph(graph) {
+  return {
+    ...graph,
+    nodes: graph.nodes.map(node => ({
+      ...node,
+      x: node.x,
+      y: node.z ?? node.y,
+    })),
+  };
 }
 
 function currentFilteredGalaxy() {
@@ -250,7 +275,7 @@ function showNeighborhoodOnly() {
 function expandNodeNeighborhood(node) {
   expandedNodeIds.add(node.id);
   renderGalaxy();
-  Graph3D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
+  Graph2D.linkDirectionalParticles(link => touchesSelectedNode(link) ? 1 : 0);
 }
 
 function collapseNodeNeighborhood(node) {
@@ -260,17 +285,12 @@ function collapseNodeNeighborhood(node) {
   selectedNodeId = stillVisible ? node.id : null;
   selectedNode = stillVisible ? node : null;
   refreshHighlight();
-  Graph3D.linkDirectionalParticles(() => 0);
+  Graph2D.linkDirectionalParticles(() => 0);
 }
 
 function focusNode(node) {
-  const distance = 180;
-  const distRatio = 1 + distance / Math.hypot(node.x || 1, node.y || 1, node.z || 1);
-  Graph3D.cameraPosition(
-    { x: (node.x || 0) * distRatio, y: (node.y || 0) * distRatio, z: (node.z || 0) * distRatio },
-    node,
-    900
-  );
+  Graph2D.centerAt(node.x ?? 0, node.y ?? node.z ?? 0, 700);
+  Graph2D.zoom(2.4, 700);
 }
 
 function clearFocus() {
@@ -278,7 +298,7 @@ function clearFocus() {
   selectedNode = null;
   expandedNodeIds = new Set();
   refreshHighlight();
-  Graph3D.linkDirectionalParticles(() => 0);
+  Graph2D.linkDirectionalParticles(() => 0);
   document.getElementById("details").textContent = "Select a node to inspect linked memories.";
   renderGalaxy();
 }
@@ -291,12 +311,10 @@ function selectNode(node) {
 }
 
 function refreshHighlight() {
-  if (!Graph3D) return;
-  Graph3D.nodeColor(graphNode => graphNode.id === selectedNodeId ? "#ffffff" : graphNode.color);
-  Graph3D.nodeVal(nodeSize);
-  Graph3D.nodeThreeObject(selectedNodeHalo);
-  Graph3D.linkColor(linkColor);
-  Graph3D.linkWidth(linkWidth);
+  if (!Graph2D) return;
+  Graph2D.nodeCanvasObject(drawNode);
+  Graph2D.linkColor(linkColor);
+  Graph2D.linkWidth(linkWidth);
 }
 
 function touchesSelectedNode(link) {
