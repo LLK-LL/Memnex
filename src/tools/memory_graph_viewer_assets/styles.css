@@ -184,6 +184,36 @@ select {
   font-size: 12px;
 }
 
+.legend-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.legend-list span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.legend-dot.router { color: #60a5fa; background: #60a5fa; }
+.legend-dot.persona { color: #a78bfa; background: #a78bfa; }
+.legend-dot.skill { color: #22d3ee; background: #22d3ee; }
+.legend-dot.harness { color: #34d399; background: #34d399; }
+.legend-dot.rule { color: #facc15; background: #facc15; }
+.legend-dot.preference { color: #f472b6; background: #f472b6; }
+
 .filters {
   display: grid;
   gap: 8px;

@@ -311,6 +311,22 @@ function drawSystemGuides() {
     guide.ellipse(system.x, system.y, system.orbitRadius * 1.42, system.orbitRadius * 0.91);
     guide.stroke({ width: 0.8, color: 0x5b6f91, alpha: 0.08 });
     orbitLayer.addChild(guide);
+    const label = new PIXI.Text({
+      text: system.label,
+      resolution: 2,
+      style: {
+        fill: 0xbfd7ff,
+        fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
+        fontSize: 12,
+        fontWeight: "700",
+        stroke: { color: 0x020617, width: 3, alpha: 0.65 },
+      },
+    });
+    label.anchor.set(0.5, 0.5);
+    label.x = system.x;
+    label.y = system.y - system.orbitRadius * 0.78;
+    label.alpha = 0.68;
+    orbitLayer.addChild(label);
   }
 }
 
