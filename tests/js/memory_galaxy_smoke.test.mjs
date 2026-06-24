@@ -48,6 +48,20 @@ exports.suggestAgentPrompt = suggestAgentPrompt;`,
 );
 const { createMemoryGalaxyEvent, createInteractionLog, suggestAgentPrompt } = eventContext.exports;
 
+const sharedHelperPath = resolve("src/tools/memory_graph_viewer_assets/viewer-shared.js");
+const sharedHelperSource = readFileSync(sharedHelperPath, "utf8").replaceAll("export function ", "function ");
+const sharedContext = { exports: {} };
+vm.runInNewContext(
+  `${sharedHelperSource}
+exports.escapeHtml = escapeHtml;
+exports.formatNodeDetails = formatNodeDetails;
+exports.timelineCutoffFromPercent = timelineCutoffFromPercent;
+exports.renderPromptText = renderPromptText;`,
+  sharedContext,
+  { filename: sharedHelperPath },
+);
+const { formatNodeDetails, timelineCutoffFromPercent, renderPromptText } = sharedContext.exports;
+
 const fixture = {
   metadata: {
     type_counts: { project: 1, concept: 1, rule: 1 },
@@ -195,3 +209,31 @@ const sourcePrompt = suggestAgentPrompt(event, {
 });
 assert.equal(sourcePrompt.kind, "source-provenance");
 assert.ok(sourcePrompt.message.includes("RAG"));
+
+const detailHtml = formatNodeDetails({
+  label: "RAG <Memory>",
+  type: "concept",
+  galaxy_layer: "active",
+  mention_count: 4,
+  importance: 0.8,
+  source: "test",
+  last_seen_at: "2026-01-02",
+  content: "retrieval <augmented>",
+  relation_counts: { total: 2, related: 1, context: 1 },
+  provenance: { source: "test", first_seen_at: "2026-01-01", last_seen_at: "2026-01-02" },
+  knowledge: [{ id: 1, type: "solution", project: "global", role: "tagged", strength: 0.9, summary: "Use <RAG>" }],
+});
+assert.ok(detailHtml.includes("RAG &lt;Memory&gt;"));
+assert.ok(detailHtml.includes("Content Source"));
+assert.ok(!detailHtml.includes("Use <RAG>"));
+
+assert.equal(
+  timelineCutoffFromPercent(
+    { start: "2026-01-01T00:00:00+00:00", end: "2026-01-11T00:00:00+00:00" },
+    50,
+  ),
+  "2026-01-06T00:00:00.000Z",
+);
+assert.equal(timelineCutoffFromPercent({}, 50), null);
+assert.equal(renderPromptText({ message: "要不要查看来源？" }), "要不要查看来源？");
+assert.equal(renderPromptText(null), "");
