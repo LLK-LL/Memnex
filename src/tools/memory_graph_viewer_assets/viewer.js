@@ -141,7 +141,6 @@ function drawCurrentLayout() {
       state.selectedNodeId = node.id;
       showDetails(node);
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
-      drawCurrentLayout();
     },
     onNodeTap: node => {
       state.selectedNodeId = node.id;
