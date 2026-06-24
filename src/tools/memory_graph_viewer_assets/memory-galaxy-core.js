@@ -23,6 +23,32 @@ const clusterCenters = {
   external: { x: 470, y: 150 },
 };
 
+const galacticSystemCenters = {
+  router: { x: 0, y: 0, orbitRadius: 0, label: "Router Core" },
+  rule: { x: -330, y: -150, orbitRadius: 128, label: "Rules" },
+  persona: { x: 0, y: -250, orbitRadius: 126, label: "Persona" },
+  skill: { x: 345, y: -120, orbitRadius: 142, label: "Skills" },
+  harness: { x: 365, y: 185, orbitRadius: 122, label: "Harness" },
+  preference: { x: -335, y: 185, orbitRadius: 112, label: "Preferences" },
+  project: { x: 0, y: 265, orbitRadius: 126, label: "Projects" },
+  knowledge: { x: -610, y: 35, orbitRadius: 118, label: "Knowledge" },
+  event: { x: 610, y: 45, orbitRadius: 112, label: "Events" },
+  source: { x: 0, y: 470, orbitRadius: 96, label: "Sources" },
+};
+
+const memorySystemPriority = {
+  router: 56,
+  persona: 48,
+  skill: 44,
+  harness: 40,
+  rule: 38,
+  preference: 30,
+  project: 28,
+  knowledge: 20,
+  event: 14,
+  source: 10,
+};
+
 const typeColors = {
   project: "#60a5fa",
   concept: "#34d399",
@@ -214,6 +240,87 @@ export function buildClusterGalaxy2DLayout(galaxy, options = {}) {
   return { nodes, links: pruned.links, metadata: focused.metadata };
 }
 
+export function buildGalacticOrbital2DLayout(galaxy, options = {}) {
+  const focused = buildFocusGalaxy(galaxy, {
+    maxNodes: Number(options.maxNodes || 850),
+    seedCount: Number(options.seedCount || 48),
+    firstRingLimit: Number(options.firstRingLimit || 540),
+    focusNodeId: options.focusNodeId,
+  });
+  const starIds = starNodeIdsBySystem(focused.nodes);
+  const nodes = focused.nodes.map((node, index) => {
+    const memorySystem = memorySystemForNode(node);
+    const systemCenter = galacticSystemCenters[memorySystem] || galacticSystemCenters.knowledge;
+    const starId = starIds.get(memorySystem);
+    const orbitalRole = memorySystem === "router"
+      ? "galactic-core"
+      : node.id === starId
+        ? "star"
+        : node.layer === "episode" || memorySystem === "source"
+          ? "moon"
+          : "planet";
+    const angle = hashAngle(`${node.id}:orbital:${memorySystem}`);
+    const ringBase = orbitalRole === "star"
+      ? 0
+      : orbitalRole === "moon"
+        ? systemCenter.orbitRadius * 1.42
+        : systemCenter.orbitRadius;
+    const jitter = orbitalRole === "star" ? 0 : ((hashNumber(`${node.id}:orbital-jitter`) % 100) / 100) * 34;
+    const radius = ringBase + jitter + ((index % 5) * 5);
+    const flatten = memorySystem === "router" ? 1 : 0.64;
+    const x = memorySystem === "router"
+      ? Math.cos(angle) * Math.min(48, radius + 34)
+      : systemCenter.x + Math.cos(angle) * radius;
+    const y = memorySystem === "router"
+      ? Math.sin(angle) * Math.min(38, radius + 26)
+      : systemCenter.y + Math.sin(angle) * radius * flatten;
+    return {
+      ...node,
+      clusterKey: memorySystem,
+      memorySystem,
+      orbitalRole,
+      systemCenter,
+      homeX: x,
+      homeY: y,
+      x,
+      y,
+      z: 0,
+      renderRadius: priorityRadiusForNode(node),
+      labelPriority: nodeScore(node) + (orbitalRole === "star" || orbitalRole === "galactic-core" ? 12 : 0),
+    };
+  });
+  const pruned = pruneGalaxyLinks({ nodes, links: focused.links, metadata: focused.metadata }, {
+    perNodeLimit: Number(options.perNodeLimit || 4),
+  });
+  return {
+    nodes,
+    links: pruned.links,
+    metadata: focused.metadata,
+    systems: Object.entries(galacticSystemCenters).map(([key, value]) => ({ key, ...value })),
+  };
+}
+
+export function labelAnchorForNode(node) {
+  const center = node.systemCenter || { x: 0, y: 0 };
+  let dx = node.x - center.x;
+  let dy = node.y - center.y;
+  let distance = Math.hypot(dx, dy);
+  if (distance < 1) {
+    const angle = hashAngle(`${node.id}:label-anchor`);
+    dx = Math.cos(angle);
+    dy = Math.sin(angle);
+    distance = 1;
+  }
+  const offset = Number(node.renderRadius || 8) + (node.orbitalRole === "star" || node.orbitalRole === "galactic-core" ? 20 : 14);
+  const x = node.x + (dx / distance) * offset;
+  const y = node.y + (dy / distance) * offset;
+  return {
+    x,
+    y,
+    align: x >= node.x ? "left" : "right",
+  };
+}
+
 export function springBackTarget(node, options = {}) {
   const retainRatio = Number(options.retainRatio ?? 0.2);
   const homeX = Number(node.homeX ?? node.x ?? 0);
@@ -313,6 +420,30 @@ export function buildEditIntent(action, payload) {
   };
 }
 
+export function memorySystemForNode(node) {
+  const text = semanticText(node);
+  if (/\b(router|routing|route|dispatch|orchestrat)/.test(text)) return "router";
+  if (/\b(persona|personality|identity|tone|style|voice|character)\b/.test(text)) return "persona";
+  if (/\b(skill|capability|trigger|workflow|procedure)\b/.test(text) || node.type === "capability") return "skill";
+  if (/\b(harness|eval|evaluation|pytest|test runner|smoke test|verification|browser automation|playwright|workflow runner)\b/.test(text)) return "harness";
+  if (node.type === "rule" || /\b(rule|policy|must|never|required)\b/.test(text)) return "rule";
+  if (/\b(preference|prefers|user wants|style preference|interaction preference)\b/.test(text)) return "preference";
+  if (node.type === "project") return "project";
+  if (["event", "episode", "session", "observation"].includes(node.type) || node.layer === "episode") return "event";
+  if (/\b(source|provenance|evidence|citation|origin)\b/.test(text) || node.layer === "external") return "source";
+  return "knowledge";
+}
+
+export function priorityRadiusForNode(node) {
+  const system = memorySystemForNode(node);
+  const baseDiameter = memorySystemPriority[system] || memorySystemPriority.knowledge;
+  const importance = Number(node.raw?.importance || 0);
+  const activity = Number(node.raw?.activity || 0);
+  const mentions = Math.log1p(Number(node.raw?.mention_count || 0));
+  const diameter = baseDiameter + importance * 3 + activity * 4 + mentions * 1.4;
+  return Math.max(6, Math.min(34, diameter / 2));
+}
+
 export function pruneGalaxyLinks(galaxy, options = {}) {
   const perNodeLimit = Number(options.perNodeLimit || 4);
   const kept = new Map();
@@ -407,6 +538,29 @@ export function groupNeighborRelations(galaxy, nodeId) {
     groups[relation].sort((a, b) => b.link.weight - a.link.weight);
   }
   return groups;
+}
+
+function semanticText(node) {
+  return [
+    node.id,
+    node.label,
+    node.type,
+    node.layer,
+    node.raw?.content,
+    node.raw?.source,
+    node.raw?.project,
+    ...(node.raw?.knowledge || []).map(item => `${item.type || ""} ${item.project || ""} ${item.summary || ""}`),
+  ].join(" ").toLowerCase();
+}
+
+function starNodeIdsBySystem(nodes) {
+  const best = new Map();
+  for (const node of nodes) {
+    const system = memorySystemForNode(node);
+    const current = best.get(system);
+    if (!current || nodeScore(node) > nodeScore(current)) best.set(system, node);
+  }
+  return new Map([...best].map(([system, node]) => [system, node.id]));
 }
 
 function buildAdjacency(links) {

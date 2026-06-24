@@ -21,7 +21,11 @@ exports.groupNeighborRelations = groupNeighborRelations;
 exports.buildClusterGalaxy2DLayout = buildClusterGalaxy2DLayout;
 exports.pruneGalaxyLinks = pruneGalaxyLinks;
 exports.visibleLinksForSelection = visibleLinksForSelection;
-exports.springBackTarget = springBackTarget;`,
+exports.springBackTarget = springBackTarget;
+exports.memorySystemForNode = memorySystemForNode;
+exports.priorityRadiusForNode = priorityRadiusForNode;
+exports.buildGalacticOrbital2DLayout = buildGalacticOrbital2DLayout;
+exports.labelAnchorForNode = labelAnchorForNode;`,
   context,
   { filename: helperPath },
 );
@@ -41,6 +45,10 @@ const {
   pruneGalaxyLinks,
   visibleLinksForSelection,
   springBackTarget,
+  memorySystemForNode,
+  priorityRadiusForNode,
+  buildGalacticOrbital2DLayout,
+  labelAnchorForNode,
 } = context.exports;
 
 const eventHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-events.js");
@@ -244,6 +252,68 @@ const springTarget = springBackTarget(
 );
 assert.equal(springTarget.x, 140);
 assert.equal(springTarget.y, 70);
+
+const orbitalFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "router", label: "Router Core", type: "pattern", content: "routing orchestration and request dispatch", mention_count: 50, importance: 2.0, galaxy_layer: "core", freshness: 1, activity: 1, knowledge: [] } },
+      { data: { id: "rule", label: "No Lumi edits", type: "rule", content: "rule: use the real memory viewer only", mention_count: 25, importance: 1.8, galaxy_layer: "core", freshness: 1, activity: 0.9, knowledge: [] } },
+      { data: { id: "persona", label: "Persona Tone", type: "concept", content: "persona identity tone response style", mention_count: 18, importance: 1.3, galaxy_layer: "active", freshness: 0.9, activity: 0.8, knowledge: [] } },
+      { data: { id: "skill", label: "Debugging Skill", type: "capability", content: "skill trigger systematic debugging workflow", mention_count: 15, importance: 1.2, galaxy_layer: "active", freshness: 0.9, activity: 0.7, knowledge: [] } },
+      { data: { id: "harness", label: "Eval Harness", type: "technology", content: "harness test eval verification runner", mention_count: 12, importance: 1.1, galaxy_layer: "active", freshness: 0.8, activity: 0.7, knowledge: [] } },
+      { data: { id: "pref", label: "User Preference", type: "concept", content: "preference deep-space playful visualization", mention_count: 10, importance: 0.9, galaxy_layer: "knowledge", freshness: 0.7, activity: 0.6, knowledge: [] } },
+      { data: { id: "memory", label: "Viewer Memory", type: "concept", content: "memory graph visualization context", mention_count: 8, importance: 0.7, galaxy_layer: "knowledge", freshness: 0.7, activity: 0.5, knowledge: [] } },
+      { data: { id: "source", label: "Source Episode", type: "event", content: "source episode observation", mention_count: 4, importance: 0.3, galaxy_layer: "episode", freshness: 0.5, activity: 0.3, knowledge: [] } },
+    ],
+    edges: [
+      { data: { id: "or1", source: "router", target: "rule", relation: "routes", weight: 10 } },
+      { data: { id: "or2", source: "router", target: "persona", relation: "routes", weight: 9 } },
+      { data: { id: "or3", source: "router", target: "skill", relation: "routes", weight: 9 } },
+      { data: { id: "or4", source: "skill", target: "harness", relation: "executes", weight: 8 } },
+      { data: { id: "or5", source: "persona", target: "pref", relation: "shapes", weight: 7 } },
+      { data: { id: "or6", source: "rule", target: "memory", relation: "guards", weight: 6 } },
+      { data: { id: "or7", source: "memory", target: "source", relation: "evidence", weight: 3 } },
+    ],
+  },
+};
+const orbitalGalaxy = convertGraphToGalaxy(orbitalFixture);
+const orbitalById = new Map(orbitalGalaxy.nodes.map(node => [node.id, node]));
+assert.equal(memorySystemForNode(orbitalById.get("router")), "router");
+assert.equal(memorySystemForNode(orbitalById.get("rule")), "rule");
+assert.equal(memorySystemForNode(orbitalById.get("persona")), "persona");
+assert.equal(memorySystemForNode(orbitalById.get("skill")), "skill");
+assert.equal(memorySystemForNode(orbitalById.get("harness")), "harness");
+assert.equal(memorySystemForNode(orbitalById.get("pref")), "preference");
+assert.equal(memorySystemForNode(orbitalById.get("source")), "event");
+
+assert.ok(priorityRadiusForNode(orbitalById.get("router")) > priorityRadiusForNode(orbitalById.get("rule")));
+assert.ok(priorityRadiusForNode(orbitalById.get("persona")) > priorityRadiusForNode(orbitalById.get("pref")));
+assert.ok(priorityRadiusForNode(orbitalById.get("skill")) > priorityRadiusForNode(orbitalById.get("memory")));
+assert.ok(priorityRadiusForNode(orbitalById.get("harness")) > priorityRadiusForNode(orbitalById.get("source")));
+
+const orbitalLayout = buildGalacticOrbital2DLayout(orbitalGalaxy, { maxNodes: 8, perNodeLimit: 5 });
+const orbitalLayoutById = new Map(orbitalLayout.nodes.map(node => [node.id, node]));
+const routerNode = orbitalLayoutById.get("router");
+const ruleNode = orbitalLayoutById.get("rule");
+const skillNode = orbitalLayoutById.get("skill");
+const harnessNode = orbitalLayoutById.get("harness");
+assert.ok(Math.hypot(routerNode.x, routerNode.y) < 80);
+assert.ok(Math.hypot(ruleNode.systemCenter.x, ruleNode.systemCenter.y) > 220);
+assert.equal(ruleNode.orbitalRole, "star");
+assert.equal(skillNode.orbitalRole, "star");
+assert.equal(harnessNode.memorySystem, "harness");
+assert.ok(harnessNode.renderRadius >= 16);
+assert.ok(orbitalLayout.systems.some(system => system.key === "persona"));
+assert.ok(orbitalLayout.systems.some(system => system.key === "skill"));
+assert.ok(orbitalLayout.systems.some(system => system.key === "harness"));
+
+const prefNode = orbitalLayoutById.get("pref");
+const prefAnchor = labelAnchorForNode(prefNode);
+assert.ok(Number.isFinite(prefAnchor.x));
+assert.ok(Number.isFinite(prefAnchor.y));
+assert.ok(Math.hypot(prefAnchor.x - prefNode.x, prefAnchor.y - prefNode.y) >= prefNode.renderRadius + 12);
+assert.ok(["left", "right"].includes(prefAnchor.align));
 
 const event = createMemoryGalaxyEvent("node:drag-ended", {
   node_id: "p1",
