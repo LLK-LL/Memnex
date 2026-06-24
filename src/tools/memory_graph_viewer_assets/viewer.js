@@ -22,6 +22,17 @@ import {
 const viewName = "2d-galaxy";
 const focusLimit = 850;
 const interactionLog = createInteractionLog();
+const labelModeZoom = {
+  minimal: 0.65,
+  normal: 1,
+  dense: 1.8,
+};
+const springProfiles = [
+  { limit: 15, label: "Pinned", retainRatio: 0.08, stiffness: 0.045, damping: 0.62, neighborPull: 0.012 },
+  { limit: 45, label: "Gentle", retainRatio: 0.14, stiffness: 0.06, damping: 0.68, neighborPull: 0.022 },
+  { limit: 75, label: "Playful", retainRatio: 0.22, stiffness: 0.085, damping: 0.72, neighborPull: 0.038 },
+  { limit: 101, label: "Elastic", retainRatio: 0.32, stiffness: 0.115, damping: 0.76, neighborPull: 0.056 },
+];
 
 let app;
 let stageRoot;
@@ -112,6 +123,14 @@ function bindControls() {
     scheduleApplyFilters();
   });
   document.getElementById("timelineFilter").addEventListener("input", scheduleApplyFilters);
+  document.getElementById("edgeDensity").addEventListener("input", event => {
+    document.getElementById("edgeDensityValue").textContent = `${event.target.value} links / star`;
+    scheduleApplyFilters();
+  });
+  document.getElementById("labelMode").addEventListener("change", drawGalaxy);
+  document.getElementById("springStrength").addEventListener("input", event => {
+    document.getElementById("springStrengthValue").textContent = currentSpringProfile().label;
+  });
   document.getElementById("typeFilters").addEventListener("change", event => {
     if (!event.target.matches("input[type='checkbox']")) return;
     if (event.target.checked) activeTypes.add(event.target.dataset.type);
@@ -137,6 +156,7 @@ function scheduleApplyFilters() {
 
 function applyFilters() {
   const timelineCutoff = currentTimelineCutoff();
+  const edgeDensity = currentEdgeDensity();
   const filtered = filterGalaxy(originalGraph, {
     query: document.getElementById("search").value,
     activeTypes,
@@ -144,7 +164,7 @@ function applyFilters() {
     minWeight: Number(document.getElementById("weightFilter").value),
     timelineCutoff,
   });
-  visibleGraph = buildClusterGalaxy2DLayout(filtered, { maxNodes: focusLimit, perNodeLimit: 4 });
+  visibleGraph = buildClusterGalaxy2DLayout(filtered, { maxNodes: focusLimit, perNodeLimit: edgeDensity });
   for (const node of visibleGraph.nodes) {
     const offset = dragOffsetByNodeId.get(node.id);
     if (!offset) continue;
@@ -189,7 +209,7 @@ function drawGalaxy() {
   const linksToDraw = visibleLinksForSelection(visibleGraph.links, {
     selectedNodeId,
     hoveredNodeId,
-    perNodeLimit: 4,
+    perNodeLimit: currentEdgeDensity(),
   });
   for (const link of linksToDraw) {
     const source = nodeById.get(String(link.source.id || link.source));
@@ -219,7 +239,7 @@ function drawGalaxy() {
     });
     nodeLayer.addChild(star);
   }
-  for (const node of selectVisibleLabels(visibleGraph.nodes, { zoom: scale, selectedNodeId, hoveredNodeId })) {
+  for (const node of selectVisibleLabels(visibleGraph.nodes, { zoom: scale * currentLabelZoomBoost(), selectedNodeId, hoveredNodeId })) {
     const label = new PIXI.Text({ text: node.label, style: { fill: 0xe5f0ff, fontFamily: "Segoe UI, Microsoft YaHei, sans-serif", fontSize: 12, fontWeight: "600" } });
     label.x = node.x + node.renderRadius + 7;
     label.y = node.y - 8;
@@ -285,10 +305,13 @@ function onStagePointerMove(event) {
 
 function onStagePointerUp() {
   if (dragState?.mode === "node") {
-    const target = springBackTarget(dragState.node, { retainRatio: 0.2 });
+    const spring = currentSpringProfile();
+    const target = springBackTarget(dragState.node, { retainRatio: spring.retainRatio });
     springAnimations.set(dragState.node.id, {
       node: dragState.node,
       target,
+      stiffness: spring.stiffness,
+      damping: spring.damping,
       velocity: { x: 0, y: 0 },
     });
     dragOffsetByNodeId.set(dragState.node.id, {
@@ -307,8 +330,8 @@ function tickSpringAnimations() {
     const node = animation.node;
     const dx = animation.target.x - node.x;
     const dy = animation.target.y - node.y;
-    animation.velocity.x = (animation.velocity.x + dx * 0.08) * 0.72;
-    animation.velocity.y = (animation.velocity.y + dy * 0.08) * 0.72;
+    animation.velocity.x = (animation.velocity.x + dx * animation.stiffness) * animation.damping;
+    animation.velocity.y = (animation.velocity.y + dy * animation.stiffness) * animation.damping;
     node.x += animation.velocity.x;
     node.y += animation.velocity.y;
     if (Math.abs(dx) < 0.6 && Math.abs(dy) < 0.6 && Math.hypot(animation.velocity.x, animation.velocity.y) < 0.25) {
@@ -331,9 +354,24 @@ function applyNeighborGravity(node, dx, dy) {
   }
   for (const neighbor of visibleGraph.nodes) {
     if (!neighborIds.has(neighbor.id)) continue;
-    neighbor.x += dx * 0.035;
-    neighbor.y += dy * 0.035;
+    const pull = currentSpringProfile().neighborPull;
+    neighbor.x += dx * pull;
+    neighbor.y += dy * pull;
   }
+}
+
+function currentEdgeDensity() {
+  return Math.max(1, Math.min(8, Number(document.getElementById("edgeDensity")?.value || 4)));
+}
+
+function currentLabelZoomBoost() {
+  const mode = document.getElementById("labelMode")?.value || "normal";
+  return labelModeZoom[mode] || labelModeZoom.normal;
+}
+
+function currentSpringProfile() {
+  const value = Number(document.getElementById("springStrength")?.value || 70);
+  return springProfiles.find(profile => value < profile.limit) || springProfiles[2];
 }
 
 function onWheel(event) {

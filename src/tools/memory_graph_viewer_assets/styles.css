@@ -159,6 +159,31 @@ input[type="search"] {
   font: inherit;
 }
 
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.compact-field {
+  margin-top: 10px;
+  gap: 6px;
+}
+
+.compact-field span {
+  color: var(--text);
+  font-size: 12px;
+}
+
 .filters {
   display: grid;
   gap: 8px;

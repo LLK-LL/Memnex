@@ -47,6 +47,28 @@
       </label>
 
       <section>
+        <h2>Galaxy Feel</h2>
+        <label class="field compact-field">
+          Edge density
+          <input id="edgeDensity" type="range" min="1" max="8" step="1" value="4">
+          <span id="edgeDensityValue">4 links / star</span>
+        </label>
+        <label class="field compact-field">
+          Labels
+          <select id="labelMode">
+            <option value="minimal">Minimal</option>
+            <option value="normal" selected>Normal</option>
+            <option value="dense">Dense</option>
+          </select>
+        </label>
+        <label class="field compact-field">
+          Spring
+          <input id="springStrength" type="range" min="0" max="100" step="5" value="70">
+          <span id="springStrengthValue">Playful</span>
+        </label>
+      </section>
+
+      <section>
         <h2>View</h2>
         <div class="buttons">
           <button id="fit" type="button">Fit</button>
