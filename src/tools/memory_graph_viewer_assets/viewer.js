@@ -1,8 +1,9 @@
 import {
-  buildClusterGalaxy2DLayout,
+  buildGalacticOrbital2DLayout,
   buildFocusGalaxy,
   convertGraphToGalaxy,
   filterGalaxy,
+  labelAnchorForNode,
   selectVisibleLabels,
   springBackTarget,
   visibleLinksForSelection,
@@ -37,6 +38,7 @@ const springProfiles = [
 let app;
 let stageRoot;
 let linkLayer;
+let orbitLayer;
 let nodeLayer;
 let labelLayer;
 let originalGraph = { nodes: [], links: [], metadata: {} };
@@ -79,10 +81,11 @@ async function createPixi() {
   });
   container.appendChild(app.canvas);
   stageRoot = new PIXI.Container();
+  orbitLayer = new PIXI.Container();
   linkLayer = new PIXI.Container();
   nodeLayer = new PIXI.Container();
   labelLayer = new PIXI.Container();
-  stageRoot.addChild(linkLayer, nodeLayer, labelLayer);
+  stageRoot.addChild(orbitLayer, linkLayer, nodeLayer, labelLayer);
   app.stage.addChild(stageRoot);
   stageRoot.eventMode = "static";
   app.stage.eventMode = "static";
@@ -164,7 +167,7 @@ function applyFilters() {
     minWeight: Number(document.getElementById("weightFilter").value),
     timelineCutoff,
   });
-  visibleGraph = buildClusterGalaxy2DLayout(filtered, { maxNodes: focusLimit, perNodeLimit: edgeDensity });
+  visibleGraph = buildGalacticOrbital2DLayout(filtered, { maxNodes: focusLimit, perNodeLimit: edgeDensity });
   for (const node of visibleGraph.nodes) {
     const offset = dragOffsetByNodeId.get(node.id);
     if (!offset) continue;
@@ -181,7 +184,7 @@ function applyFilters() {
 
 function focusNeighborhood() {
   if (!selectedNode) return;
-  visibleGraph = buildClusterGalaxy2DLayout(buildFocusGalaxy(originalGraph, {
+  visibleGraph = buildGalacticOrbital2DLayout(buildFocusGalaxy(originalGraph, {
     focusNodeId: selectedNode.id,
     maxNodes: 260,
     seedCount: 1,
@@ -202,10 +205,12 @@ function clearFocus() {
 }
 
 function drawGalaxy() {
+  orbitLayer.removeChildren();
   linkLayer.removeChildren();
   nodeLayer.removeChildren();
   labelLayer.removeChildren();
   const nodeById = new Map(visibleGraph.nodes.map(node => [node.id, node]));
+  drawSystemGuides();
   const linksToDraw = visibleLinksForSelection(visibleGraph.links, {
     selectedNodeId,
     hoveredNodeId,
@@ -217,8 +222,17 @@ function drawGalaxy() {
     if (!source || !target) continue;
     const line = new PIXI.Graphics();
     const selected = selectedNodeId && (source.id === selectedNodeId || target.id === selectedNodeId);
+    const sameSystem = source.memorySystem && source.memorySystem === target.memorySystem;
     line.moveTo(source.x, source.y).lineTo(target.x, target.y);
-    line.stroke({ width: selected ? Math.max(2.2, Math.min(4.2, link.weight * 0.55)) : Math.max(0.25, Math.min(1.1, link.weight * 0.28)), color: selected ? 0xfacc15 : 0x31445f, alpha: selected ? 0.82 : 0.075 });
+    line.stroke({
+      width: selected
+        ? Math.max(2.4, Math.min(4.6, link.weight * 0.58))
+        : sameSystem
+          ? Math.max(0.35, Math.min(1.15, link.weight * 0.28))
+          : Math.max(0.3, Math.min(0.9, link.weight * 0.18)),
+      color: selected ? 0xfacc15 : sameSystem ? 0x3f6d8f : 0x6d5f9d,
+      alpha: selected ? 0.84 : sameSystem ? 0.12 : 0.055,
+    });
     linkLayer.addChild(line);
   }
   for (const node of visibleGraph.nodes) {
@@ -247,6 +261,19 @@ function drawGalaxy() {
     labelLayer.addChild(label);
   }
   updateTransform();
+}
+
+function drawSystemGuides() {
+  if (!visibleGraph.systems) return;
+  for (const system of visibleGraph.systems) {
+    if (system.key === "router") continue;
+    const guide = new PIXI.Graphics();
+    guide.ellipse(system.x, system.y, system.orbitRadius, system.orbitRadius * 0.64);
+    guide.stroke({ width: 1.2, color: 0x5b6f91, alpha: 0.16 });
+    guide.ellipse(system.x, system.y, system.orbitRadius * 1.42, system.orbitRadius * 0.91);
+    guide.stroke({ width: 0.8, color: 0x5b6f91, alpha: 0.08 });
+    orbitLayer.addChild(guide);
+  }
 }
 
 function drawStar(graphics, node) {
