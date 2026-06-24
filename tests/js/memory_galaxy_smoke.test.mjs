@@ -78,6 +78,29 @@ exports.renderPromptText = renderPromptText;`,
 );
 const { formatNodeDetails, timelineCutoffFromPercent, renderPromptText } = sharedContext.exports;
 
+const systemsHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-systems.js");
+const systemsHelperSource = readFileSync(systemsHelperPath, "utf8")
+  .replaceAll("export const ", "const ")
+  .replaceAll("export function ", "function ");
+const systemsContext = { exports: {} };
+vm.runInNewContext(
+  `${systemsHelperSource}
+exports.memorySystemForData = memorySystemForData;
+exports.orbitRoleForData = orbitRoleForData;
+exports.priorityRadiusForData = priorityRadiusForData;
+exports.systemColor = systemColor;
+exports.systemLayerForKey = systemLayerForKey;`,
+  systemsContext,
+  { filename: systemsHelperPath },
+);
+const {
+  memorySystemForData,
+  orbitRoleForData,
+  priorityRadiusForData,
+  systemColor,
+  systemLayerForKey,
+} = systemsContext.exports;
+
 const fixture = {
   metadata: {
     type_counts: { project: 1, concept: 1, rule: 1 },
@@ -279,6 +302,24 @@ const orbitalFixture = {
 };
 const orbitalGalaxy = convertGraphToGalaxy(orbitalFixture);
 const orbitalById = new Map(orbitalGalaxy.nodes.map(node => [node.id, node]));
+assert.equal(memorySystemForData({ id: "router", type: "pattern", content: "routing orchestration dispatch" }), "router");
+assert.equal(memorySystemForData({ id: "rule", type: "rule", content: "must verify source" }), "rule");
+assert.equal(memorySystemForData({ id: "persona", type: "concept", content: "persona identity tone style" }), "persona");
+assert.equal(memorySystemForData({ id: "skill", type: "capability", content: "skill workflow trigger" }), "skill");
+assert.equal(memorySystemForData({ id: "harness", type: "technology", content: "eval harness pytest verification" }), "harness");
+assert.equal(memorySystemForData({ id: "pref", type: "concept", content: "preference user wants deep-space view" }), "preference");
+assert.equal(memorySystemForData({ id: "event", type: "event", galaxy_layer: "episode" }), "event");
+assert.equal(memorySystemForData({ id: "source", type: "source", content: "provenance citation origin" }), "source");
+assert.equal(systemLayerForKey("rule"), "control");
+assert.equal(systemLayerForKey("skill"), "execution");
+assert.equal(systemLayerForKey("knowledge"), "context");
+assert.equal(systemLayerForKey("source"), "evidence");
+assert.equal(orbitRoleForData({ type: "event", galaxy_layer: "episode" }), "evidence");
+assert.equal(orbitRoleForData({ type: "concept", importance: 1.1, mention_count: 20 }), "planet");
+assert.equal(orbitRoleForData({ type: "concept", importance: 0.2, mention_count: 2 }), "moon");
+assert.ok(priorityRadiusForData({ type: "capability", content: "skill", importance: 2, activity: 1, mention_count: 30 }, { scale: 0.48 }) < 18);
+assert.ok(priorityRadiusForData({ type: "capability", content: "skill", importance: 2, activity: 1, mention_count: 30 }, { scale: 0.7 }) > priorityRadiusForData({ type: "capability", content: "skill", importance: 2, activity: 1, mention_count: 30 }, { scale: 0.48 }));
+assert.equal(systemColor("skill"), "#22d3ee");
 assert.equal(memorySystemForNode(orbitalById.get("router")), "router");
 assert.equal(memorySystemForNode(orbitalById.get("rule")), "rule");
 assert.equal(memorySystemForNode(orbitalById.get("persona")), "persona");
