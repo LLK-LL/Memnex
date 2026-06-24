@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980">
+  <defs>
+    <radialGradient id="space" cx="50%" cy="40%" r="75%">
+      <stop offset="0%" stop-color="#17233d"/>
+      <stop offset="45%" stop-color="#081221"/>
+      <stop offset="100%" stop-color="#030711"/>
+    </radialGradient>
+    <radialGradient id="sphere" cx="42%" cy="35%" r="62%">
+      <stop offset="0%" stop-color="#d9f7ff" stop-opacity="0.95"/>
+      <stop offset="18%" stop-color="#6ee7f9" stop-opacity="0.62"/>
+      <stop offset="48%" stop-color="#3b82f6" stop-opacity="0.30"/>
+      <stop offset="78%" stop-color="#1e1b4b" stop-opacity="0.62"/>
+      <stop offset="100%" stop-color="#050816" stop-opacity="0.95"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#101a2f" stop-opacity="0.96"/>
+      <stop offset="100%" stop-color="#07101f" stop-opacity="0.96"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .title { fill: #eff6ff; font: 700 34px "Segoe UI", "Microsoft YaHei", sans-serif; }
+      .subtitle { fill: #94a3b8; font: 15px "Segoe UI", "Microsoft YaHei", sans-serif; }
+      .panelTitle { fill: #e2e8f0; font: 700 18px "Segoe UI", "Microsoft YaHei", sans-serif; }
+      .label { fill: #cbd5e1; font: 13px "Segoe UI", "Microsoft YaHei", sans-serif; }
+      .tiny { fill: #94a3b8; font: 11px "Segoe UI", "Microsoft YaHei", sans-serif; }
+      .chipText { fill: #dbeafe; font: 12px "Segoe UI", "Microsoft YaHei", sans-serif; }
+      .line { stroke: #60a5fa; stroke-opacity: 0.22; stroke-width: 1.4; }
+      .hotLine { stroke: #facc15; stroke-opacity: 0.68; stroke-width: 2.4; }
+      .orbit { fill: none; stroke: #475569; stroke-opacity: 0.34; stroke-width: 1.2; }
+      .orbitHot { fill: none; stroke: #38bdf8; stroke-opacity: 0.58; stroke-width: 1.8; }
+      .panelStroke { stroke: #24324a; stroke-width: 1; }
+      .nodeText { fill: #f8fafc; font: 700 12px "Segoe UI", "Microsoft YaHei", sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="980" fill="url(#space)"/>
+
+  <g opacity="0.55">
+    <circle cx="98" cy="91" r="1.4" fill="#dbeafe"/>
+    <circle cx="280" cy="130" r="1.1" fill="#bae6fd"/>
+    <circle cx="517" cy="78" r="1.2" fill="#f8fafc"/>
+    <circle cx="733" cy="144" r="1.0" fill="#dbeafe"/>
+    <circle cx="1002" cy="82" r="1.2" fill="#bae6fd"/>
+    <circle cx="1410" cy="118" r="1.4" fill="#e0f2fe"/>
+    <circle cx="1510" cy="318" r="1.0" fill="#f8fafc"/>
+    <circle cx="1210" cy="888" r="1.2" fill="#bae6fd"/>
+    <circle cx="170" cy="810" r="1.0" fill="#dbeafe"/>
+    <circle cx="590" cy="910" r="1.4" fill="#f8fafc"/>
+    <circle cx="895" cy="815" r="1.0" fill="#bae6fd"/>
+    <circle cx="320" cy="450" r="1.1" fill="#e0f2fe"/>
+    <circle cx="710" cy="590" r="1.3" fill="#dbeafe"/>
+    <circle cx="1365" cy="628" r="1.0" fill="#f8fafc"/>
+  </g>
+
+  <text x="56" y="64" class="title">Memory Galaxy Redesign</text>
+  <text x="56" y="93" class="subtitle">2D 可拖动星系图 + 3D 球体星系图；好看、不卡、可读，并预留智能体/语音交互事件层</text>
+
+  <g transform="translate(40,125)">
+    <rect width="710" height="790" rx="18" fill="#07101f" fill-opacity="0.72" stroke="#22324d"/>
+    <text x="26" y="42" class="panelTitle">2D Galaxy · 可拖动探索主视图</text>
+    <text x="26" y="66" class="subtitle">稳定轨道布局 / 碰撞避让 / 局部展开 / 缩放级标签</text>
+
+    <g transform="translate(355,410)">
+      <ellipse rx="285" ry="122" class="orbit"/>
+      <ellipse rx="225" ry="92" class="orbit"/>
+      <ellipse rx="160" ry="62" class="orbitHot"/>
+      <ellipse rx="92" ry="34" class="orbit"/>
+
+      <line x1="-204" y1="-78" x2="-60" y2="-16" class="line"/>
+      <line x1="-60" y1="-16" x2="0" y2="0" class="hotLine"/>
+      <line x1="0" y1="0" x2="126" y2="-48" class="hotLine"/>
+      <line x1="126" y1="-48" x2="236" y2="-98" class="line"/>
+      <line x1="0" y1="0" x2="-164" y2="68" class="hotLine"/>
+      <line x1="-164" y1="68" x2="-272" y2="112" class="line"/>
+      <line x1="0" y1="0" x2="204" y2="74" class="line"/>
+      <line x1="204" y1="74" x2="274" y2="118" class="line"/>
+      <line x1="0" y1="0" x2="46" y2="106" class="line"/>
+
+      <circle cx="0" cy="0" r="19" fill="#f8fafc" filter="url(#glow)"/>
+      <circle cx="0" cy="0" r="31" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.9"/>
+      <text x="28" y="5" class="nodeText">当前节点</text>
+
+      <circle cx="-60" cy="-16" r="13" fill="#38bdf8" filter="url(#glow)"/>
+      <circle cx="126" cy="-48" r="15" fill="#34d399" filter="url(#glow)"/>
+      <circle cx="-164" cy="68" r="12" fill="#a78bfa" filter="url(#glow)"/>
+      <circle cx="204" cy="74" r="11" fill="#fb7185"/>
+      <circle cx="46" cy="106" r="10" fill="#f97316"/>
+      <circle cx="-204" cy="-78" r="8" fill="#60a5fa"/>
+      <circle cx="236" cy="-98" r="8" fill="#22c55e"/>
+      <circle cx="-272" cy="112" r="7" fill="#fbbf24"/>
+      <circle cx="274" cy="118" r="7" fill="#94a3b8"/>
+      <circle cx="-104" cy="-106" r="6" fill="#38bdf8"/>
+      <circle cx="164" cy="18" r="6" fill="#c084fc"/>
+      <circle cx="-18" cy="-72" r="7" fill="#facc15"/>
+
+      <path d="M 0 -42 C 40 -80, 108 -83, 132 -58" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="7 6" opacity="0.8"/>
+      <text x="112" y="-75" class="tiny">拖动后轻微回弹</text>
+    </g>
+
+    <g transform="translate(28,690)">
+      <rect width="184" height="38" rx="19" fill="#10284a" stroke="#1d4ed8"/>
+      <text x="19" y="25" class="chipText">缩放：核心标签优先</text>
+      <rect x="198" width="154" height="38" rx="19" fill="#102f2c" stroke="#10b981"/>
+      <text x="218" y="25" class="chipText">双击展开邻域</text>
+      <rect x="366" width="145" height="38" rx="19" fill="#351f3d" stroke="#a855f7"/>
+      <text x="387" y="25" class="chipText">拖动触发事件</text>
+      <rect x="525" width="132" height="38" rx="19" fill="#3a2915" stroke="#f59e0b"/>
+      <text x="546" y="25" class="chipText">不卡顿预算</text>
+    </g>
+  </g>
+
+  <g transform="translate(790,125)">
+    <rect width="490" height="790" rx="18" fill="#07101f" fill-opacity="0.72" stroke="#22324d"/>
+    <text x="26" y="42" class="panelTitle">3D Galaxy · 球体星系图</text>
+    <text x="26" y="66" class="subtitle">球壳分层 / 旋转缩放 / 聚焦邻域弧线 / 默认子图</text>
+
+    <g transform="translate(245,405)">
+      <circle r="235" fill="url(#sphere)" opacity="0.92" filter="url(#softGlow)"/>
+      <ellipse rx="235" ry="58" fill="none" stroke="#93c5fd" stroke-opacity="0.30" stroke-width="1.5"/>
+      <ellipse rx="210" ry="210" fill="none" stroke="#38bdf8" stroke-opacity="0.18" stroke-width="1.2" transform="rotate(26)"/>
+      <ellipse rx="185" ry="185" fill="none" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1.2" transform="rotate(-31)"/>
+      <ellipse rx="156" ry="42" fill="none" stroke="#facc15" stroke-opacity="0.35" stroke-width="1.4" transform="rotate(-14)"/>
+      <ellipse rx="112" ry="202" fill="none" stroke="#60a5fa" stroke-opacity="0.20" stroke-width="1.2" transform="rotate(52)"/>
+
+      <path d="M -86 -90 C -34 -138, 62 -126, 112 -52" fill="none" stroke="#facc15" stroke-width="2.3" opacity="0.74"/>
+      <path d="M -118 42 C -44 98, 54 92, 124 28" fill="none" stroke="#38bdf8" stroke-width="1.8" opacity="0.55"/>
+      <path d="M -32 138 C 38 95, 92 36, 126 -74" fill="none" stroke="#a78bfa" stroke-width="1.6" opacity="0.46"/>
+
+      <circle cx="-86" cy="-90" r="9" fill="#38bdf8" filter="url(#glow)"/>
+      <circle cx="112" cy="-52" r="13" fill="#f8fafc" filter="url(#glow)"/>
+      <circle cx="-118" cy="42" r="8" fill="#34d399"/>
+      <circle cx="124" cy="28" r="10" fill="#fb7185"/>
+      <circle cx="-32" cy="138" r="7" fill="#f97316"/>
+      <circle cx="126" cy="-74" r="8" fill="#facc15"/>
+      <circle cx="-8" cy="-188" r="6" fill="#93c5fd"/>
+      <circle cx="74" cy="158" r="6" fill="#c084fc"/>
+      <circle cx="-162" cy="-12" r="5" fill="#94a3b8"/>
+      <circle cx="172" cy="92" r="5" fill="#60a5fa"/>
+      <circle cx="18" cy="-28" r="17" fill="#ffffff" opacity="0.92" filter="url(#glow)"/>
+      <circle cx="18" cy="-28" r="31" fill="none" stroke="#facc15" stroke-width="2.2"/>
+      <text x="42" y="-25" class="nodeText">聚焦星体</text>
+    </g>
+
+    <g transform="translate(32,690)">
+      <rect width="128" height="38" rx="19" fill="#10284a" stroke="#38bdf8"/>
+      <text x="25" y="25" class="chipText">球体旋转</text>
+      <rect x="142" width="136" height="38" rx="19" fill="#102f2c" stroke="#10b981"/>
+      <text x="163" y="25" class="chipText">分层星壳</text>
+      <rect x="292" width="136" height="38" rx="19" fill="#351f3d" stroke="#a855f7"/>
+      <text x="313" y="25" class="chipText">邻域弧线</text>
+    </g>
+  </g>
+
+  <g transform="translate(1310,125)">
+    <rect width="250" height="790" rx="18" fill="url(#panel)" class="panelStroke"/>
+    <text x="22" y="42" class="panelTitle">智能体交互层</text>
+    <text x="22" y="68" class="subtitle">事件不绑定渲染引擎</text>
+
+    <g transform="translate(22,104)">
+      <rect width="206" height="90" rx="14" fill="#0f1d34" stroke="#263b5f"/>
+      <text x="16" y="28" class="label">node:selected</text>
+      <text x="16" y="51" class="tiny">click / drag / hover</text>
+      <text x="16" y="72" class="tiny">统一进入 InteractionBus</text>
+    </g>
+
+    <g transform="translate(22,220)">
+      <path d="M 20 0 H 196 Q 212 0 212 16 V 108 Q 212 124 196 124 H 54 L 32 148 L 36 124 H 20 Q 4 124 4 108 V 16 Q 4 0 20 0 Z" fill="#11213a" stroke="#3b82f6"/>
+      <text x="24" y="34" class="label">我看到你拖动了这个记忆节点。</text>
+      <text x="24" y="60" class="label">要不要查看它的内容来源？</text>
+      <text x="24" y="88" class="tiny">后续可接语音 API / MCP / 本地服务</text>
+    </g>
+
+    <g transform="translate(22,405)">
+      <text x="0" y="0" class="panelTitle">节点详情</text>
+      <rect y="22" width="206" height="206" rx="14" fill="#0b1628" stroke="#263b5f"/>
+      <text x="16" y="54" class="label">记忆节点：RAG Recall</text>
+      <text x="16" y="82" class="tiny">类型：concept · active</text>
+      <text x="16" y="108" class="tiny">来源：2026-06-23 session</text>
+      <text x="16" y="134" class="tiny">关联：42 条记忆，8 条强关系</text>
+      <text x="16" y="160" class="tiny">操作：展开邻域 / 查看来源</text>
+      <text x="16" y="186" class="tiny">提示：语音追问由事件层触发</text>
+    </g>
+
+    <g transform="translate(22,664)">
+      <text x="0" y="0" class="panelTitle">性能预算</text>
+      <rect y="22" width="206" height="70" rx="14" fill="#102f2c" stroke="#10b981"/>
+      <text x="16" y="52" class="label">默认 600-900 可见节点</text>
+      <text x="16" y="75" class="tiny">全量图作为高级/降级模式</text>
+    </g>
+  </g>
+</svg>
