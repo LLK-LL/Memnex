@@ -101,6 +101,34 @@ const {
   systemLayerForKey,
 } = systemsContext.exports;
 
+const layoutsHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-layouts.js");
+const layoutsHelperSource = readFileSync(layoutsHelperPath, "utf8")
+  .replace(/import[\s\S]*?from ".\/memory-galaxy-systems\.js";\n/, "")
+  .replaceAll("export function ", "function ");
+const layoutsContext = {
+  exports: {},
+  memorySystemForData,
+  orbitRoleForData,
+  priorityRadiusForData,
+  systemColor,
+  systemLayerForKey,
+};
+vm.runInNewContext(
+  `${layoutsHelperSource}
+exports.buildGalaxyOverviewLayout = buildGalaxyOverviewLayout;
+exports.buildSolarSystemLayout = buildSolarSystemLayout;
+exports.buildPlanetSatelliteLayout = buildPlanetSatelliteLayout;
+exports.buildCometOverlayLayout = buildCometOverlayLayout;`,
+  layoutsContext,
+  { filename: layoutsHelperPath },
+);
+const {
+  buildGalaxyOverviewLayout,
+  buildSolarSystemLayout,
+  buildPlanetSatelliteLayout,
+  buildCometOverlayLayout,
+} = layoutsContext.exports;
+
 const fixture = {
   metadata: {
     type_counts: { project: 1, concept: 1, rule: 1 },
@@ -348,6 +376,51 @@ assert.ok(harnessNode.renderRadius >= 16);
 assert.ok(orbitalLayout.systems.some(system => system.key === "persona"));
 assert.ok(orbitalLayout.systems.some(system => system.key === "skill"));
 assert.ok(orbitalLayout.systems.some(system => system.key === "harness"));
+
+const finalOverview = buildGalaxyOverviewLayout(orbitalGalaxy, { nodeScale: 0.48, width: 1600, height: 1000 });
+assert.equal(finalOverview.view, "galaxy");
+assert.ok(finalOverview.systems.some(system => system.key === "router"));
+assert.ok(finalOverview.systems.some(system => system.key === "skill"));
+assert.ok(finalOverview.systems.every(system => system.key === "router" || system.miniOrbits.length >= 2));
+assert.ok(finalOverview.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
+assert.ok(finalOverview.nodes.every(node => node.renderRadius <= 28));
+assert.ok(finalOverview.bounds.width > 0);
+for (let i = 0; i < finalOverview.nodes.length; i += 1) {
+  for (let j = i + 1; j < finalOverview.nodes.length; j += 1) {
+    const a = finalOverview.nodes[i];
+    const b = finalOverview.nodes[j];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    assert.ok(distance >= Math.min(14, a.renderRadius + b.renderRadius + 2));
+  }
+}
+
+const skillSolar = buildSolarSystemLayout(orbitalGalaxy, "skill", { nodeScale: 0.48, width: 1400, height: 900 });
+assert.equal(skillSolar.view, "solar");
+assert.equal(skillSolar.systemKey, "skill");
+assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "category"));
+assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "planet"));
+assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "moon"));
+assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "evidence"));
+assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "central-star"));
+
+const skillPlanet = buildPlanetSatelliteLayout(orbitalGalaxy, "skill", "skill", { nodeScale: 0.5, width: 1200, height: 800 });
+assert.equal(skillPlanet.view, "planet");
+assert.equal(skillPlanet.systemKey, "skill");
+assert.equal(skillPlanet.planetId, "skill");
+assert.ok(skillPlanet.orbits.some(orbit => orbit.kind === "direct-moon"));
+assert.ok(skillPlanet.orbits.some(orbit => orbit.kind === "evidence"));
+assert.ok(skillPlanet.nodes.some(node => node.orbitalRole === "central-planet"));
+
+const cometOverlay = buildCometOverlayLayout(finalOverview, [{
+  id: "comet:test",
+  label: "Memory Galaxy Redesign",
+  comet_type: "active_task",
+  trajectory: ["preference", "skill", "harness", "rule"],
+  influenced_systems: [{ system: "skill", weight: 0.92 }, { system: "harness", weight: 0.84 }],
+}]);
+assert.equal(cometOverlay.comets.length, 1);
+assert.ok(cometOverlay.comets[0].influences.some(item => item.system === "skill" && item.weight > 0.9));
+assert.ok(cometOverlay.comets[0].tail.length >= 2);
 
 const prefNode = orbitalLayoutById.get("pref");
 const prefAnchor = labelAnchorForNode(prefNode);
