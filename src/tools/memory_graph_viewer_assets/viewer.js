@@ -253,14 +253,52 @@ function drawGalaxy() {
     });
     nodeLayer.addChild(star);
   }
+  const placedLabelBounds = [];
   for (const node of selectVisibleLabels(visibleGraph.nodes, { zoom: scale * currentLabelZoomBoost(), selectedNodeId, hoveredNodeId })) {
-    const label = new PIXI.Text({ text: node.label, style: { fill: 0xe5f0ff, fontFamily: "Segoe UI, Microsoft YaHei, sans-serif", fontSize: 12, fontWeight: "600" } });
-    label.x = node.x + node.renderRadius + 7;
-    label.y = node.y - 8;
-    label.alpha = node.id === selectedNodeId || node.id === hoveredNodeId ? 1 : 0.72;
-    labelLayer.addChild(label);
+    drawNodeLabel(node, placedLabelBounds);
   }
   updateTransform();
+}
+
+function drawNodeLabel(node, placedLabelBounds) {
+  const anchor = labelAnchorForNode(node);
+  const isPinned = node.id === selectedNodeId || node.id === hoveredNodeId || node.orbitalRole === "star" || node.orbitalRole === "galactic-core";
+  const fontSize = isPinned ? 13 : 11;
+  const text = new PIXI.Text({
+    text: node.label,
+    resolution: 2,
+    style: {
+      fill: 0xf8fbff,
+      fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
+      fontSize,
+      fontWeight: isPinned ? "700" : "600",
+      lineJoin: "round",
+      stroke: { color: 0x020617, width: 3, alpha: 0.75 },
+    },
+  });
+  text.anchor.set(anchor.align === "left" ? 0 : 1, 0.5);
+  text.x = anchor.x;
+  text.y = anchor.y;
+  const bounds = {
+    x1: anchor.align === "left" ? text.x : text.x - text.width,
+    y1: text.y - text.height / 2,
+    x2: anchor.align === "left" ? text.x + text.width : text.x,
+    y2: text.y + text.height / 2,
+  };
+  if (!isPinned && placedLabelBounds.some(item => boundsOverlap(bounds, item))) return;
+  placedLabelBounds.push(bounds);
+  const plate = new PIXI.Graphics();
+  const padX = 7;
+  const padY = 4;
+  plate.roundRect(bounds.x1 - padX, bounds.y1 - padY, text.width + padX * 2, text.height + padY * 2, 7);
+  plate.fill({ color: 0x020817, alpha: isPinned ? 0.74 : 0.46 });
+  plate.stroke({ width: 1, color: isPinned ? 0x7dd3fc : 0x334155, alpha: isPinned ? 0.42 : 0.22 });
+  labelLayer.addChild(plate);
+  labelLayer.addChild(text);
+}
+
+function boundsOverlap(a, b) {
+  return a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
 }
 
 function drawSystemGuides() {
