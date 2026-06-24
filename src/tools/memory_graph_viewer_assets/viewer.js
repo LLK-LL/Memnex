@@ -1,9 +1,10 @@
 import {
-  buildGalaxy2DLayout,
+  buildClusterGalaxy2DLayout,
   buildFocusGalaxy,
   convertGraphToGalaxy,
   filterGalaxy,
   selectVisibleLabels,
+  visibleLinksForSelection,
 } from "./memory-galaxy-core.js";
 import {
   createInteractionLog,
@@ -139,7 +140,7 @@ function applyFilters() {
     minWeight: Number(document.getElementById("weightFilter").value),
     timelineCutoff,
   });
-  visibleGraph = buildGalaxy2DLayout(filtered, { maxNodes: focusLimit });
+  visibleGraph = buildClusterGalaxy2DLayout(filtered, { maxNodes: focusLimit, perNodeLimit: 4 });
   selectedNodeId = null;
   selectedNode = null;
   drawGalaxy();
@@ -150,7 +151,7 @@ function applyFilters() {
 
 function focusNeighborhood() {
   if (!selectedNode) return;
-  visibleGraph = buildGalaxy2DLayout(buildFocusGalaxy(originalGraph, {
+  visibleGraph = buildClusterGalaxy2DLayout(buildFocusGalaxy(originalGraph, {
     focusNodeId: selectedNode.id,
     maxNodes: 260,
     seedCount: 1,
@@ -175,14 +176,19 @@ function drawGalaxy() {
   nodeLayer.removeChildren();
   labelLayer.removeChildren();
   const nodeById = new Map(visibleGraph.nodes.map(node => [node.id, node]));
-  for (const link of visibleGraph.links) {
+  const linksToDraw = visibleLinksForSelection(visibleGraph.links, {
+    selectedNodeId,
+    hoveredNodeId,
+    perNodeLimit: 4,
+  });
+  for (const link of linksToDraw) {
     const source = nodeById.get(String(link.source.id || link.source));
     const target = nodeById.get(String(link.target.id || link.target));
     if (!source || !target) continue;
     const line = new PIXI.Graphics();
     const selected = selectedNodeId && (source.id === selectedNodeId || target.id === selectedNodeId);
     line.moveTo(source.x, source.y).lineTo(target.x, target.y);
-    line.stroke({ width: selected ? 2.2 : Math.max(0.4, Math.min(1.6, link.weight * 0.45)), color: selected ? 0xfacc15 : 0x5b6f91, alpha: selected ? 0.78 : 0.26 });
+    line.stroke({ width: selected ? Math.max(2.2, Math.min(4.2, link.weight * 0.55)) : Math.max(0.25, Math.min(1.1, link.weight * 0.28)), color: selected ? 0xfacc15 : 0x31445f, alpha: selected ? 0.82 : 0.075 });
     linkLayer.addChild(line);
   }
   for (const node of visibleGraph.nodes) {
