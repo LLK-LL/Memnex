@@ -4,6 +4,7 @@ import {
   convertGraphToGalaxy,
   filterGalaxy,
   selectVisibleLabels,
+  springBackTarget,
   visibleLinksForSelection,
 } from "./memory-galaxy-core.js";
 import {
@@ -38,6 +39,8 @@ let renderTimer = null;
 let scale = 1;
 let pan = { x: 0, y: 0 };
 let dragState = null;
+const springAnimations = new Map();
+const dragOffsetByNodeId = new Map();
 
 async function init() {
   if (!window.PIXI) throw new Error("PixiJS failed to load from CDN.");
@@ -79,6 +82,7 @@ async function createPixi() {
   app.stage.on("pointerup", onStagePointerUp);
   app.stage.on("pointerupoutside", onStagePointerUp);
   window.addEventListener("resize", () => requestAnimationFrame(fitView));
+  app.ticker.add(tickSpringAnimations);
 }
 
 function renderTypeFilters(typeCounts) {
@@ -141,6 +145,12 @@ function applyFilters() {
     timelineCutoff,
   });
   visibleGraph = buildClusterGalaxy2DLayout(filtered, { maxNodes: focusLimit, perNodeLimit: 4 });
+  for (const node of visibleGraph.nodes) {
+    const offset = dragOffsetByNodeId.get(node.id);
+    if (!offset) continue;
+    node.x += offset.x;
+    node.y += offset.y;
+  }
   selectedNodeId = null;
   selectedNode = null;
   drawGalaxy();
@@ -237,7 +247,15 @@ function onNodePointerDown(event, node, star) {
   selectedNodeId = node.id;
   selectedNode = node;
   showDetails(node);
-  dragState = { node, star, start: event.global.clone(), origin: { x: node.x, y: node.y }, mode: "node" };
+  springAnimations.delete(node.id);
+  dragState = {
+    node,
+    star,
+    start: event.global.clone(),
+    origin: { x: node.x, y: node.y },
+    home: { x: node.homeX ?? node.x, y: node.homeY ?? node.y },
+    mode: "node",
+  };
   star.cursor = "grabbing";
   emitEvent("node:selected", node, { layer: node.layer, visible_neighbors: countVisibleNeighbors(node.id) });
   emitEvent("node:drag-started", node, { layer: node.layer });
@@ -260,15 +278,62 @@ function onStagePointerMove(event) {
   const dy = (event.global.y - dragState.start.y) / scale;
   dragState.node.x = dragState.origin.x + dx;
   dragState.node.y = dragState.origin.y + dy;
+  applyNeighborGravity(dragState.node, dx, dy);
   emitEvent("node:dragged", dragState.node, { layer: dragState.node.layer });
   drawGalaxy();
 }
 
 function onStagePointerUp() {
   if (dragState?.mode === "node") {
+    const target = springBackTarget(dragState.node, { retainRatio: 0.2 });
+    springAnimations.set(dragState.node.id, {
+      node: dragState.node,
+      target,
+      velocity: { x: 0, y: 0 },
+    });
+    dragOffsetByNodeId.set(dragState.node.id, {
+      x: target.x - (dragState.node.homeX ?? target.x),
+      y: target.y - (dragState.node.homeY ?? target.y),
+    });
     emitEvent("node:drag-ended", dragState.node, { layer: dragState.node.layer, visible_neighbors: countVisibleNeighbors(dragState.node.id) });
   }
   dragState = null;
+}
+
+function tickSpringAnimations() {
+  if (springAnimations.size === 0) return;
+  let changed = false;
+  for (const [nodeId, animation] of springAnimations) {
+    const node = animation.node;
+    const dx = animation.target.x - node.x;
+    const dy = animation.target.y - node.y;
+    animation.velocity.x = (animation.velocity.x + dx * 0.08) * 0.72;
+    animation.velocity.y = (animation.velocity.y + dy * 0.08) * 0.72;
+    node.x += animation.velocity.x;
+    node.y += animation.velocity.y;
+    if (Math.abs(dx) < 0.6 && Math.abs(dy) < 0.6 && Math.hypot(animation.velocity.x, animation.velocity.y) < 0.25) {
+      node.x = animation.target.x;
+      node.y = animation.target.y;
+      springAnimations.delete(nodeId);
+    }
+    changed = true;
+  }
+  if (changed) drawGalaxy();
+}
+
+function applyNeighborGravity(node, dx, dy) {
+  const neighborIds = new Set();
+  for (const link of visibleGraph.links) {
+    const source = String(link.source.id || link.source);
+    const target = String(link.target.id || link.target);
+    if (source === node.id) neighborIds.add(target);
+    if (target === node.id) neighborIds.add(source);
+  }
+  for (const neighbor of visibleGraph.nodes) {
+    if (!neighborIds.has(neighbor.id)) continue;
+    neighbor.x += dx * 0.035;
+    neighbor.y += dy * 0.035;
+  }
 }
 
 function onWheel(event) {
