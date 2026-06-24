@@ -158,4 +158,8 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     assert (output / "viewer-3d.js").exists()
     assert (output / "memory-galaxy-core.js").exists()
     assert (output / "memory-galaxy-events.js").exists()
+    assert (output / "memory-galaxy-systems.js").exists()
+    assert (output / "memory-galaxy-layouts.js").exists()
+    assert (output / "memory-galaxy-renderer.js").exists()
+    assert (output / "memory-galaxy-view-state.js").exists()
     assert (output / "viewer-shared.js").exists()

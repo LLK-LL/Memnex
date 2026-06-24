@@ -49,9 +49,17 @@
       <section>
         <h2>Galaxy Feel</h2>
         <label class="field compact-field">
-          Edge density
-          <input id="edgeDensity" type="range" min="1" max="8" step="1" value="4">
-          <span id="edgeDensityValue">4 links / star</span>
+          Node diameter
+          <input id="nodeScale" type="range" min="0.42" max="0.70" step="0.01" value="0.48">
+          <span id="nodeScaleValue">0.48</span>
+        </label>
+        <label class="field compact-field">
+          Relation mode
+          <select id="relationshipMode">
+            <option value="structure" selected>Structure</option>
+            <option value="focus">Focus</option>
+            <option value="path">Path</option>
+          </select>
         </label>
         <label class="field compact-field">
           Labels
@@ -60,11 +68,6 @@
             <option value="normal" selected>Normal</option>
             <option value="dense">Dense</option>
           </select>
-        </label>
-        <label class="field compact-field">
-          Spring
-          <input id="springStrength" type="range" min="0" max="100" step="5" value="70">
-          <span id="springStrengthValue">Playful</span>
         </label>
       </section>
 
@@ -83,10 +86,10 @@
       <section>
         <h2>View</h2>
         <div class="buttons">
+          <button id="backView" type="button">Back</button>
           <button id="fit" type="button">Fit</button>
-          <button id="clearFocus" type="button">Clear</button>
-          <button id="focusNeighborhood" type="button">Neighborhood</button>
-          <button id="focusView" type="button">Focus View</button>
+          <button id="clearFocus" type="button">Galaxy</button>
+          <button id="focusView" type="button">Refresh</button>
         </div>
       </section>
     </aside>

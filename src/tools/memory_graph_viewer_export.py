@@ -291,6 +291,10 @@ def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR) -> None:
         "viewer-3d.js",
         "memory-galaxy-core.js",
         "memory-galaxy-events.js",
+        "memory-galaxy-systems.js",
+        "memory-galaxy-layouts.js",
+        "memory-galaxy-renderer.js",
+        "memory-galaxy-view-state.js",
         "viewer-shared.js",
     ):
         shutil.copy2(asset_dir / asset, output_dir / asset)
