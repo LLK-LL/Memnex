@@ -1,3 +1,4 @@
+import * as THREE from "https://unpkg.com/three@0.165.0/build/three.module.min.js";
 import {
   buildFocusGalaxy,
   buildSphereGalaxyLayout,
@@ -41,7 +42,6 @@ let lastPointer = { x: 0, y: 0 };
 let rotation = { x: -0.28, y: 0.42 };
 
 async function init() {
-  if (!window.THREE) throw new Error("Three.js failed to load from CDN.");
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
   const response = await fetch("graph.json");
