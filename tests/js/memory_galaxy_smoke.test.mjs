@@ -35,6 +35,19 @@ const {
   groupNeighborRelations,
 } = context.exports;
 
+const eventHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-events.js");
+const eventHelperSource = readFileSync(eventHelperPath, "utf8").replaceAll("export function ", "function ");
+const eventContext = { exports: {} };
+vm.runInNewContext(
+  `${eventHelperSource}
+exports.createMemoryGalaxyEvent = createMemoryGalaxyEvent;
+exports.createInteractionLog = createInteractionLog;
+exports.suggestAgentPrompt = suggestAgentPrompt;`,
+  eventContext,
+  { filename: eventHelperPath },
+);
+const { createMemoryGalaxyEvent, createInteractionLog, suggestAgentPrompt } = eventContext.exports;
+
 const fixture = {
   metadata: {
     type_counts: { project: 1, concept: 1, rule: 1 },
@@ -156,3 +169,29 @@ const grouped = groupNeighborRelations(galaxy, "c1");
 assert.deepEqual(Object.keys(grouped).sort(), ["context", "related"]);
 assert.equal(grouped.related[0].neighbor.id, "p1");
 assert.equal(grouped.context[0].neighbor.id, "r1");
+
+const event = createMemoryGalaxyEvent("node:drag-ended", {
+  node_id: "p1",
+  gesture: "drag",
+  view: "2d-galaxy",
+  context: { layer: "active", visible_neighbors: 4 },
+  timestamp: "2026-06-24T00:00:00.000Z",
+});
+assert.equal(event.type, "node:drag-ended");
+assert.equal(event.node_id, "p1");
+assert.equal(event.view, "2d-galaxy");
+assert.equal(event.context.visible_neighbors, 4);
+
+const log = createInteractionLog(2);
+log.push(createMemoryGalaxyEvent("node:selected", { node_id: "a", timestamp: "2026-06-24T00:00:00.000Z" }));
+log.push(createMemoryGalaxyEvent("node:hovered", { node_id: "b", timestamp: "2026-06-24T00:00:01.000Z" }));
+log.push(createMemoryGalaxyEvent("node:drag-ended", { node_id: "c", timestamp: "2026-06-24T00:00:02.000Z" }));
+assert.equal(JSON.stringify(log.all().map(item => item.node_id)), JSON.stringify(["b", "c"]));
+
+const sourcePrompt = suggestAgentPrompt(event, {
+  label: "RAG",
+  provenance: { source: "explicit" },
+  relation_counts: { total: 5 },
+});
+assert.equal(sourcePrompt.kind, "source-provenance");
+assert.ok(sourcePrompt.message.includes("RAG"));
