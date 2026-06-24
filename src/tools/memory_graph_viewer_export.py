@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sqlite3
@@ -13,6 +14,8 @@ from typing import Any
 
 DEFAULT_DB = Path.home() / ".tam" / "memory.db"
 ASSET_DIR = Path(__file__).with_name("memory_graph_viewer_assets")
+DEFAULT_GALAXY_CACHE_ROOT = Path("D:/TotalAgentMemory/memory-galaxy-cache")
+GALAXY_LAYOUT_NAMESPACE = "memory-galaxy"
 
 
 def connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -38,6 +41,14 @@ def _truncate(value: str | None, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "..."
+
+
+def _stable_hash(values: list[str]) -> str:
+    digest = hashlib.sha256()
+    for value in sorted(str(item) for item in values):
+        digest.update(value.encode("utf-8"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -142,6 +153,19 @@ def load_graph(
         if max_edges is not None and len(edges) >= max_edges:
             break
 
+    relation_counts_by_node: dict[str, dict[str, int]] = {
+        str(node_id): {"total": 0} for node_id in node_ids
+    }
+    for edge in edges:
+        data = edge["data"]
+        relation = str(data["relation"] or "related")
+        for endpoint in (str(data["source"]), str(data["target"])):
+            counts = relation_counts_by_node.setdefault(endpoint, {"total": 0})
+            counts["total"] = counts.get("total", 0) + 1
+            counts[relation] = counts.get(relation, 0) + 1
+
+    node_ids_hash = _stable_hash([str(row["id"]) for row in node_rows])
+    edge_ids_hash = _stable_hash([str(edge["data"]["id"]) for edge in edges])
     knowledge_by_node = _load_knowledge_links(conn, node_ids, content_limit)
     nodes = [
         {
@@ -163,6 +187,13 @@ def load_graph(
                 ),
                 "freshness": _freshness(row["last_seen_at"], newest_seen, oldest_seen),
                 "activity": _activity(int(row["mention_count"] or 0), max_mentions),
+                "layout_seed": _stable_hash([str(row["id"]), str(row["type"]), str(row["name"])]),
+                "relation_counts": relation_counts_by_node.get(str(row["id"]), {"total": 0}),
+                "provenance": {
+                    "source": row["source"] or "",
+                    "first_seen_at": row["first_seen_at"],
+                    "last_seen_at": row["last_seen_at"],
+                },
                 "knowledge": knowledge_by_node.get(row["id"], []),
             }
         }
@@ -186,6 +217,15 @@ def load_graph(
                 "start": oldest_seen.isoformat() if oldest_seen else "",
                 "end": newest_seen.isoformat() if newest_seen else "",
             },
+            "cache": {
+                "default_root": str(DEFAULT_GALAXY_CACHE_ROOT),
+                "layout_namespace": GALAXY_LAYOUT_NAMESPACE,
+            },
+            "graph_identity": {
+                "node_ids_hash": node_ids_hash,
+                "edge_ids_hash": edge_ids_hash,
+            },
+            "layout_seed": node_ids_hash[:16],
         },
         "elements": {
             "nodes": nodes,
@@ -250,6 +290,8 @@ def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR) -> None:
         "viewer-3d.html",
         "viewer-3d.js",
         "memory-galaxy-core.js",
+        "memory-galaxy-events.js",
+        "viewer-shared.js",
     ):
         shutil.copy2(asset_dir / asset, output_dir / asset)
 
