@@ -55,7 +55,7 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
     }
 
     const members = grouped.get(system.key) || [];
-    const star = members[0] || syntheticNode(`system:${system.key}`, systemLabels[system.key] || system.key, system.key, nodeScale);
+    const star = syntheticNode(`system:${system.key}`, systemLabels[system.key] || system.key, system.key, nodeScale);
     outputNodes.push(placeNode(star, system.x, system.y, {
       memorySystem: system.key,
       orbitRole: "star",
@@ -63,7 +63,7 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
       renderRadius: Math.max(10, priorityRadiusForData(star.raw || star, { scale: nodeScale })),
     }));
 
-    const bodies = members.slice(1).sort(compareNodePriority);
+    const bodies = overviewSummaryNodes(members).sort(compareNodePriority);
     const byRole = splitByRole(bodies);
     const roleSpecs = [
       ["planet", byRole.planet, 34],
@@ -328,6 +328,7 @@ function buildSystemDescriptors(grouped, nodeScale) {
         key,
         label: systemLabels[key] || key,
         layer,
+        color: systemColor(key),
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius * 0.58,
         radius: miniRadius,
@@ -346,6 +347,21 @@ function splitByRole(nodes) {
     else acc.moon.push(node);
     return acc;
   }, { planet: [], moon: [], evidence: [] });
+}
+
+function overviewSummaryNodes(nodes) {
+  const byRole = splitByRole(nodes);
+  const selected = [
+    ...byRole.planet.slice(0, 4),
+    ...byRole.moon.slice(0, 3),
+    ...byRole.evidence.slice(0, 2),
+  ];
+  const seen = new Set();
+  return selected.filter(node => {
+    if (seen.has(node.id)) return false;
+    seen.add(node.id);
+    return true;
+  });
 }
 
 function splitTracks(nodes, baseRadius, step, nodeScale) {

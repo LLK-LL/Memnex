@@ -422,6 +422,35 @@ assert.equal(cometOverlay.comets.length, 1);
 assert.ok(cometOverlay.comets[0].influences.some(item => item.system === "skill" && item.weight > 0.9));
 assert.ok(cometOverlay.comets[0].tail.length >= 2);
 
+const denseOverviewFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "router-dense", label: "Router Dense", type: "pattern", content: "routing dispatch", mention_count: 100, importance: 2, galaxy_layer: "core", knowledge: [] } },
+      ...Array.from({ length: 80 }, (_, index) => ({
+        data: {
+          id: `skill-dense-${index}`,
+          label: `dense skill node ${index}`,
+          type: "capability",
+          content: "skill workflow trigger",
+          mention_count: 80 - index,
+          importance: index < 12 ? 1.2 : 0.2,
+          galaxy_layer: index < 12 ? "active" : "knowledge",
+          knowledge: [],
+        },
+      })),
+    ],
+    edges: Array.from({ length: 80 }, (_, index) => ({
+      data: { id: `dense-edge-${index}`, source: "router-dense", target: `skill-dense-${index}`, relation: "routes", weight: 10 - index * 0.05 },
+    })),
+  },
+};
+const denseOverview = buildGalaxyOverviewLayout(convertGraphToGalaxy(denseOverviewFixture), { nodeScale: 0.48 });
+const denseSkillNodes = denseOverview.nodes.filter(node => node.memorySystem === "skill");
+assert.ok(denseSkillNodes.length <= 10);
+assert.ok(denseSkillNodes.some(node => node.id === "system:skill" && node.label === "Skill System"));
+assert.ok(!denseSkillNodes.some(node => node.label === "dense skill node 0" && node.orbitalRole === "star"));
+
 const prefNode = orbitalLayoutById.get("pref");
 const prefAnchor = labelAnchorForNode(prefNode);
 assert.ok(Number.isFinite(prefAnchor.x));
