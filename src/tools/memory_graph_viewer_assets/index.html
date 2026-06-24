@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Total Agent Memory Graph</title>
+  <title>Total Agent Memory Galaxy</title>
   <link rel="stylesheet" href="styles.css">
-  <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/pixi.js@8.2.6/dist/pixi.min.js"></script>
 </head>
 <body>
-  <main class="app">
+  <main class="app galaxy-app">
     <aside class="sidebar">
       <header>
-        <h1>Memory Graph</h1>
-        <p id="stats">Loading graph...</p>
+        <h1>Memory Galaxy</h1>
+        <p id="stats">Loading galaxy...</p>
         <nav class="mode-links">
-          <a class="active" href="index.html">2D</a>
-          <a href="viewer-3d.html">3D</a>
+          <a class="active" href="index.html">2D Galaxy</a>
+          <a href="viewer-3d.html">3D Sphere</a>
         </nav>
       </header>
 
@@ -29,30 +29,43 @@
         <div id="typeFilters" class="filters"></div>
       </section>
 
+      <section>
+        <h2>Galaxy Layers</h2>
+        <div id="layerFilters" class="filters compact"></div>
+      </section>
+
       <label class="field">
         Minimum edge weight
         <input id="weightFilter" type="range" min="0" max="10" step="0.1" value="0">
         <span id="weightValue">0</span>
       </label>
 
+      <label class="field">
+        Timeline
+        <input id="timelineFilter" type="range" min="0" max="100" step="1" value="100">
+        <span id="timelineValue">All time</span>
+      </label>
+
       <section>
-        <h2>Layout</h2>
+        <h2>View</h2>
         <div class="buttons">
-          <button id="layoutCose" type="button">Cose</button>
-          <button id="layoutCircle" type="button">Circle</button>
           <button id="fit" type="button">Fit</button>
           <button id="clearFocus" type="button">Clear</button>
+          <button id="focusNeighborhood" type="button">Neighborhood</button>
+          <button id="focusView" type="button">Focus View</button>
         </div>
       </section>
     </aside>
 
-    <section id="cy" class="graph"></section>
+    <section id="galaxy2d" class="galaxy-canvas" aria-label="2D memory galaxy"></section>
 
     <aside class="details">
+      <h2>Agent Prompt</h2>
+      <div id="agentPrompt" class="agent-prompt">Select or drag a node to stage an agent prompt.</div>
       <h2>Selection</h2>
       <div id="details">Select a node to inspect linked memories.</div>
     </aside>
   </main>
-  <script src="viewer.js"></script>
+  <script type="module" src="viewer.js"></script>
 </body>
 </html>
