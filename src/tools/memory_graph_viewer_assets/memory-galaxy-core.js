@@ -14,6 +14,15 @@ const sphereShell = {
   external: 410,
 };
 
+const clusterCenters = {
+  project: { x: -360, y: -150 },
+  concept: { x: 0, y: -190 },
+  technology: { x: 360, y: -120 },
+  pattern: { x: -260, y: 190 },
+  event: { x: 190, y: 210 },
+  external: { x: 470, y: 150 },
+};
+
 const typeColors = {
   project: "#60a5fa",
   concept: "#34d399",
@@ -171,6 +180,52 @@ export function buildGalaxy2DLayout(galaxy, options = {}) {
   return { nodes, links: focused.links, metadata: focused.metadata };
 }
 
+export function buildClusterGalaxy2DLayout(galaxy, options = {}) {
+  const focused = buildFocusGalaxy(galaxy, {
+    maxNodes: Number(options.maxNodes || 850),
+    seedCount: Number(options.seedCount || 42),
+    firstRingLimit: Number(options.firstRingLimit || 520),
+    focusNodeId: options.focusNodeId,
+  });
+  const nodes = focused.nodes.map((node, index) => {
+    const clusterKey = clusterKeyForType(node.type);
+    const center = clusterCenters[clusterKey] || clusterCenters.external;
+    const localRadius = (layerOrbit[node.layer] || layerOrbit.external) * 0.42;
+    const angle = hashAngle(`${node.id}:cluster:${clusterKey}`);
+    const jitter = ((hashNumber(`${node.id}:cluster-jitter`) % 100) / 100) * 38;
+    const radius = localRadius + jitter + ((index % 7) * 4);
+    const x = center.x + Math.cos(angle) * radius;
+    const y = center.y + Math.sin(angle) * radius * 0.72;
+    return {
+      ...node,
+      clusterKey,
+      homeX: x,
+      homeY: y,
+      x,
+      y,
+      z: 0,
+      renderRadius: Math.max(4, Math.sqrt(node.val) * 1.7),
+      labelPriority: nodeScore(node),
+    };
+  });
+  const pruned = pruneGalaxyLinks({ nodes, links: focused.links, metadata: focused.metadata }, {
+    perNodeLimit: Number(options.perNodeLimit || 4),
+  });
+  return { nodes, links: pruned.links, metadata: focused.metadata };
+}
+
+export function springBackTarget(node, options = {}) {
+  const retainRatio = Number(options.retainRatio ?? 0.2);
+  const homeX = Number(node.homeX ?? node.x ?? 0);
+  const homeY = Number(node.homeY ?? node.y ?? 0);
+  const x = Number(node.x ?? homeX);
+  const y = Number(node.y ?? homeY);
+  return {
+    x: Math.round(homeX + (x - homeX) * retainRatio),
+    y: Math.round(homeY + (y - homeY) * retainRatio),
+  };
+}
+
 export function buildSphereGalaxyLayout(galaxy, options = {}) {
   const focused = buildFocusGalaxy(galaxy, {
     maxNodes: Number(options.maxNodes || 650),
@@ -258,6 +313,46 @@ export function buildEditIntent(action, payload) {
   };
 }
 
+export function pruneGalaxyLinks(galaxy, options = {}) {
+  const perNodeLimit = Number(options.perNodeLimit || 4);
+  const kept = new Map();
+  const counts = new Map();
+  const sorted = [...galaxy.links].sort((a, b) => b.weight - a.weight);
+  for (const link of sorted) {
+    const source = String(link.source.id || link.source);
+    const target = String(link.target.id || link.target);
+    const sourceCount = counts.get(source) || 0;
+    const targetCount = counts.get(target) || 0;
+    if (sourceCount >= perNodeLimit || targetCount >= perNodeLimit) continue;
+    kept.set(link.raw?.id || `${source}->${target}:${link.relation}`, link);
+    counts.set(source, sourceCount + 1);
+    counts.set(target, targetCount + 1);
+  }
+  return { nodes: galaxy.nodes, links: [...kept.values()], metadata: galaxy.metadata };
+}
+
+export function visibleLinksForSelection(links, options = {}) {
+  const selectedNodeId = options.selectedNodeId ? String(options.selectedNodeId) : null;
+  const hoveredNodeId = options.hoveredNodeId ? String(options.hoveredNodeId) : null;
+  if (!selectedNodeId && !hoveredNodeId) {
+    return pruneGalaxyLinks({ nodes: [], links, metadata: {} }, { perNodeLimit: Number(options.perNodeLimit || 4) }).links;
+  }
+  const focusIds = new Set([selectedNodeId, hoveredNodeId].filter(Boolean));
+  const quiet = pruneGalaxyLinks({ nodes: [], links, metadata: {} }, { perNodeLimit: Number(options.perNodeLimit || 3) }).links;
+  const focused = links.filter(link => {
+    const source = String(link.source.id || link.source);
+    const target = String(link.target.id || link.target);
+    return focusIds.has(source) || focusIds.has(target);
+  });
+  const byKey = new Map();
+  for (const link of [...quiet, ...focused]) {
+    const source = String(link.source.id || link.source);
+    const target = String(link.target.id || link.target);
+    byKey.set(link.raw?.id || `${source}->${target}:${link.relation}`, link);
+  }
+  return [...byKey.values()];
+}
+
 export function selectVisibleLabels(nodes, options = {}) {
   const zoom = Number(options.zoom || 1);
   const selectedNodeId = options.selectedNodeId ? String(options.selectedNodeId) : null;
@@ -269,7 +364,8 @@ export function selectVisibleLabels(nodes, options = {}) {
       node.id === hoveredNodeId ||
       node.layer === "core" ||
       node.layer === "active" ||
-      Number(node.raw.importance || 0) >= 1.2
+      (zoom >= 1.55 && Number(node.raw.importance || 0) >= 0.7) ||
+      (zoom >= 2.2 && Number(node.raw.mention_count || 0) >= 3)
     )
     .sort((a, b) => {
       const aPinned = a.id === selectedNodeId || a.id === hoveredNodeId ? 1000 : 0;
@@ -382,6 +478,15 @@ function hashNumber(value) {
 
 function hashAngle(value) {
   return (hashNumber(value) % 6283) / 1000;
+}
+
+function clusterKeyForType(type) {
+  if (type === "project") return "project";
+  if (type === "concept" || type === "domain") return "concept";
+  if (type === "technology" || type === "company") return "technology";
+  if (type === "pattern" || type === "rule" || type === "decision") return "pattern";
+  if (type === "event" || type === "episode" || type === "session" || type === "observation") return "event";
+  return "external";
 }
 
 function positionExpandedNode(node, parent) {

@@ -17,7 +17,11 @@ exports.buildGalaxy2DLayout = buildGalaxy2DLayout;
 exports.buildSphereGalaxyLayout = buildSphereGalaxyLayout;
 exports.selectVisibleLabels = selectVisibleLabels;
 exports.buildGalaxyCacheKey = buildGalaxyCacheKey;
-exports.groupNeighborRelations = groupNeighborRelations;`,
+exports.groupNeighborRelations = groupNeighborRelations;
+exports.buildClusterGalaxy2DLayout = buildClusterGalaxy2DLayout;
+exports.pruneGalaxyLinks = pruneGalaxyLinks;
+exports.visibleLinksForSelection = visibleLinksForSelection;
+exports.springBackTarget = springBackTarget;`,
   context,
   { filename: helperPath },
 );
@@ -33,6 +37,10 @@ const {
   selectVisibleLabels,
   buildGalaxyCacheKey,
   groupNeighborRelations,
+  buildClusterGalaxy2DLayout,
+  pruneGalaxyLinks,
+  visibleLinksForSelection,
+  springBackTarget,
 } = context.exports;
 
 const eventHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-events.js");
@@ -183,6 +191,59 @@ const grouped = groupNeighborRelations(galaxy, "c1");
 assert.deepEqual(Object.keys(grouped).sort(), ["context", "related"]);
 assert.equal(grouped.related[0].neighbor.id, "p1");
 assert.equal(grouped.context[0].neighbor.id, "r1");
+
+const denseFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "project", label: "Project", type: "project", mention_count: 20, importance: 1.4, galaxy_layer: "core", freshness: 1, activity: 1, knowledge: [] } },
+      { data: { id: "concept", label: "Concept", type: "concept", mention_count: 15, importance: 1.0, galaxy_layer: "active", freshness: 0.8, activity: 0.8, knowledge: [] } },
+      { data: { id: "tech", label: "Tech", type: "technology", mention_count: 10, importance: 0.8, galaxy_layer: "knowledge", freshness: 0.7, activity: 0.6, knowledge: [] } },
+      { data: { id: "pattern", label: "Pattern", type: "pattern", mention_count: 8, importance: 0.7, galaxy_layer: "knowledge", freshness: 0.6, activity: 0.5, knowledge: [] } },
+      { data: { id: "event", label: "Event", type: "event", mention_count: 5, importance: 0.5, galaxy_layer: "episode", freshness: 0.5, activity: 0.3, knowledge: [] } },
+      { data: { id: "domain", label: "Domain", type: "domain", mention_count: 4, importance: 0.4, galaxy_layer: "external", freshness: 0.3, activity: 0.2, knowledge: [] } },
+    ],
+    edges: [
+      { data: { id: "e1", source: "project", target: "concept", relation: "related", weight: 10 } },
+      { data: { id: "e2", source: "project", target: "tech", relation: "related", weight: 8 } },
+      { data: { id: "e3", source: "project", target: "pattern", relation: "related", weight: 6 } },
+      { data: { id: "e4", source: "project", target: "event", relation: "related", weight: 4 } },
+      { data: { id: "e5", source: "project", target: "domain", relation: "related", weight: 2 } },
+      { data: { id: "e6", source: "concept", target: "tech", relation: "context", weight: 7 } },
+      { data: { id: "e7", source: "concept", target: "pattern", relation: "context", weight: 5 } },
+      { data: { id: "e8", source: "concept", target: "event", relation: "context", weight: 3 } },
+    ],
+  },
+};
+const denseGalaxy = convertGraphToGalaxy(denseFixture);
+
+const pruned = pruneGalaxyLinks(denseGalaxy, { perNodeLimit: 3 });
+assert.ok(pruned.links.length < denseGalaxy.links.length);
+assert.ok(pruned.links.some(link => link.raw.id === "e1"));
+assert.ok(pruned.links.some(link => link.raw.id === "e2"));
+assert.ok(pruned.links.some(link => link.raw.id === "e6"));
+
+const projectVisible = visibleLinksForSelection(denseGalaxy.links, {
+  selectedNodeId: "project",
+  hoveredNodeId: null,
+  perNodeLimit: 3,
+});
+assert.ok(projectVisible.some(link => link.raw.id === "e5"));
+assert.ok(projectVisible.filter(link => String(link.source.id || link.source) === "project" || String(link.target.id || link.target) === "project").length >= 5);
+
+const clustered = buildClusterGalaxy2DLayout(denseGalaxy, { maxNodes: 6 });
+const byIdClustered = new Map(clustered.nodes.map(node => [node.id, node]));
+assert.ok(Math.hypot(byIdClustered.get("project").x - byIdClustered.get("event").x, byIdClustered.get("project").y - byIdClustered.get("event").y) > 220);
+assert.ok(Math.hypot(byIdClustered.get("concept").x - byIdClustered.get("tech").x, byIdClustered.get("concept").y - byIdClustered.get("tech").y) > 120);
+assert.ok(clustered.nodes.every(node => node.clusterKey));
+assert.ok(clustered.nodes.every(node => Number.isFinite(node.homeX) && Number.isFinite(node.homeY)));
+
+const springTarget = springBackTarget(
+  { homeX: 100, homeY: 50, x: 300, y: 150 },
+  { retainRatio: 0.2 },
+);
+assert.equal(springTarget.x, 140);
+assert.equal(springTarget.y, 70);
 
 const event = createMemoryGalaxyEvent("node:drag-ended", {
   node_id: "p1",
