@@ -18,6 +18,7 @@ let currentLayout = null;
 let activeTypes = new Set();
 let activeLayers = new Set(["core", "active", "knowledge", "episode", "external"]);
 let renderTimer = null;
+let lastSystemTap = { key: null, time: 0 };
 
 async function init() {
   if (!window.PIXI) throw new Error("PixiJS failed to load from CDN.");
@@ -132,10 +133,23 @@ function drawCurrentLayout() {
   renderer.draw(currentLayout, state, {
     onSystemClick: system => {
       if (state.view !== "galaxy" || system.key === "router") return;
-      enterSolarView(state, system.key);
+      const now = Date.now();
+      const doubleTap = lastSystemTap.key === system.key && now - lastSystemTap.time < 420;
+      lastSystemTap = { key: system.key, time: now };
+      state.selectedSystem = system.key;
       state.selectedNodeId = null;
+      showSystemDetails(system);
       emitEvent("system:selected", null, { system: system.key });
+      if (doubleTap) enterSolarView(state, system.key);
       drawCurrentLayout();
+    },
+    onSystemHover: system => {
+      if (state.view !== "galaxy") return;
+      drawCurrentLayout();
+    },
+    onCometTap: comet => {
+      showCometDetails(comet);
+      document.getElementById("agentPrompt").textContent = `彗星 ${comet.label} 正在影响 ${comet.influences.map(item => item.system).join(", ")}`;
     },
     onNodePointerDown: node => {
       state.selectedNodeId = node.id;
@@ -197,6 +211,26 @@ function buildActiveComets() {
       { system: "preference", weight: 0.78 },
       { system: "rule", weight: 0.55 },
     ],
+  }, {
+    id: "comet:verification-trail",
+    label: "Verification Trail",
+    comet_type: "verification",
+    trajectory: ["harness", "source", "rule"],
+    influenced_systems: [
+      { system: "harness", weight: 0.86 },
+      { system: "source", weight: 0.64 },
+      { system: "rule", weight: 0.48 },
+    ],
+  }, {
+    id: "comet:user-feedback",
+    label: "User Feedback",
+    comet_type: "feedback",
+    trajectory: ["preference", "persona", "knowledge"],
+    influenced_systems: [
+      { system: "preference", weight: 0.9 },
+      { system: "persona", weight: 0.58 },
+      { system: "knowledge", weight: 0.5 },
+    ],
   }];
 }
 
@@ -232,6 +266,23 @@ function currentTimelineCutoff() {
 
 function showDetails(node) {
   document.getElementById("details").innerHTML = formatNodeDetails(node.raw || node);
+}
+
+function showSystemDetails(system) {
+  document.getElementById("details").innerHTML = `
+    <div class="node-title">${escapeHtml(system.label)}</div>
+    <div class="meta">Layer: ${escapeHtml(system.layer)} · Mini orbits: ${(system.miniOrbits || []).length}</div>
+    <p>单击高亮整个太阳系；双击进入该太阳系内部视图。行星、卫星和证据轨道会在太阳系视图中展开。</p>
+  `;
+  document.getElementById("agentPrompt").textContent = `已选中 ${system.label}。要查看这个太阳系内部结构，可以双击它。`;
+}
+
+function showCometDetails(comet) {
+  document.getElementById("details").innerHTML = `
+    <div class="node-title">${escapeHtml(comet.label)}</div>
+    <div class="meta">Comet type: ${escapeHtml(comet.cometType || "active_task")}</div>
+    <p>Influenced systems: ${escapeHtml(comet.influences.map(item => `${item.system} ${Math.round(item.weight * 100)}%`).join(", "))}</p>
+  `;
 }
 
 function emitEvent(type, node, context) {

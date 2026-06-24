@@ -402,6 +402,10 @@ assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "planet"));
 assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "moon"));
 assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "evidence"));
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "central-star"));
+assert.ok(skillSolar.satelliteSystems.length >= 1);
+assert.ok(skillSolar.satelliteSystems.every(system => system.parentId && system.orbits.some(orbit => orbit.kind === "satellite")));
+assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "satellite"));
+assert.ok(skillSolar.nodes.every(node => node.animation && Number.isFinite(node.animation.orbitSpeed) && Number.isFinite(node.animation.spinSpeed)));
 
 const skillPlanet = buildPlanetSatelliteLayout(orbitalGalaxy, "skill", "skill", { nodeScale: 0.5, width: 1200, height: 800 });
 assert.equal(skillPlanet.view, "planet");
@@ -417,10 +421,24 @@ const cometOverlay = buildCometOverlayLayout(finalOverview, [{
   comet_type: "active_task",
   trajectory: ["preference", "skill", "harness", "rule"],
   influenced_systems: [{ system: "skill", weight: 0.92 }, { system: "harness", weight: 0.84 }],
+}, {
+  id: "comet:second",
+  label: "Verification Trail",
+  comet_type: "verification",
+  trajectory: ["harness", "source"],
+  influenced_systems: [{ system: "harness", weight: 0.82 }, { system: "source", weight: 0.62 }],
 }]);
-assert.equal(cometOverlay.comets.length, 1);
+assert.equal(cometOverlay.comets.length, 2);
 assert.ok(cometOverlay.comets[0].influences.some(item => item.system === "skill" && item.weight > 0.9));
 assert.ok(cometOverlay.comets[0].tail.length >= 2);
+for (const comet of cometOverlay.comets) {
+  assert.ok(Number.isFinite(comet.head.x));
+  assert.ok(Number.isFinite(comet.head.y));
+  assert.ok(comet.hitRadius >= 18);
+  for (const influence of comet.influences) {
+    assert.ok(Math.hypot(comet.head.x - influence.x, comet.head.y - influence.y) > influence.radius + comet.hitRadius);
+  }
+}
 
 const denseOverviewFixture = {
   metadata: { type_counts: {}, timeline: {} },

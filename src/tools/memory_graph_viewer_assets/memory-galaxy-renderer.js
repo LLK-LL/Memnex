@@ -15,6 +15,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   let scale = 1;
   let pan = { x: 0, y: 0 };
   let dragState = null;
+  let elapsed = 0;
 
   stage.eventMode = "static";
   stage.hitArea = app.screen;
@@ -35,6 +36,10 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     scale = Math.max(0.25, Math.min(3.5, scale * factor));
     applyTransform();
   });
+  app.ticker.add(ticker => {
+    elapsed += ticker.deltaTime;
+    animateScene();
+  });
 
   function draw(layout, state, handlers = {}) {
     currentLayout = layout;
@@ -47,9 +52,9 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     clearLayer(labelLayer);
 
     drawOrbits(layout);
-    drawComets(layout);
     drawLinks(layout, state);
     drawNodes(layout, state, handlers);
+    drawComets(layout);
     drawLabels(layout, state);
     applyTransform();
   }
@@ -77,12 +82,23 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     for (const system of layout.systems || []) {
       if (system.key === "router") continue;
       const guide = new PIXI.Graphics();
+      const selected = system.key === currentState?.selectedSystem;
       guide.ellipse(system.x, system.y, system.radius || 70, (system.radius || 70) * 0.62);
-      guide.stroke({ width: 1, color: parseColor(system.color || "#7dd3fc"), alpha: 0.18 });
+      guide.stroke({ width: selected ? 2.4 : 1, color: selected ? 0xfacc15 : parseColor(system.color || "#7dd3fc"), alpha: selected ? 0.82 : 0.18 });
+      if (selected) {
+        guide.ellipse(system.x, system.y, (system.radius || 70) + 18, ((system.radius || 70) + 18) * 0.62);
+        guide.stroke({ width: 1.4, color: 0xfacc15, alpha: 0.38 });
+      }
       for (const miniOrbit of system.miniOrbits || []) {
         guide.ellipse(system.x, system.y, miniOrbit.radius, miniOrbit.radius * 0.62);
         guide.stroke({ width: 0.8, color: parseColor(system.color || "#7dd3fc"), alpha: 0.12 });
       }
+      orbitLayer.addChild(guide);
+    }
+    for (const satelliteSystem of layout.satelliteSystems || []) {
+      const guide = new PIXI.Graphics();
+      guide.ellipse(satelliteSystem.x, satelliteSystem.y, satelliteSystem.radius, satelliteSystem.radius * 0.62);
+      guide.stroke({ width: 0.8, color: 0x94a3b8, alpha: 0.18 });
       orbitLayer.addChild(guide);
     }
   }
@@ -126,6 +142,16 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       trail.circle(comet.head.x, comet.head.y, 12);
       trail.fill({ color: 0xf97316, alpha: 0.95 });
       cometLayer.addChild(trail);
+      const hit = new PIXI.Graphics();
+      hit.eventMode = "static";
+      hit.cursor = "pointer";
+      hit.circle(comet.head.x, comet.head.y, comet.hitRadius || 24);
+      hit.fill({ color: 0xffffff, alpha: 0.001 });
+      hit.on("pointertap", event => {
+        event.stopPropagation();
+        currentHandlers.onCometTap?.(comet, event);
+      });
+      cometLayer.addChild(hit);
     }
   }
 
@@ -141,6 +167,8 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
         event.stopPropagation();
         handlers.onSystemClick?.(system);
       });
+      hit.on("pointerover", () => handlers.onSystemHover?.(system));
+      hit.on("pointerout", () => handlers.onSystemHoverOut?.(system));
       nodeLayer.addChild(hit);
     }
     for (const node of layout.nodes || []) {
@@ -211,6 +239,23 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   function applyTransform() {
     root.scale.set(scale);
     root.position.set(pan.x, pan.y);
+  }
+
+  function animateScene() {
+    if (!currentLayout || dragState) return;
+    let changed = false;
+    for (const node of currentLayout.nodes || []) {
+      const animation = node.animation;
+      if (!animation || animation.orbitSpeed === 0) continue;
+      const radiusX = animation.orbitRadiusX;
+      const radiusY = animation.orbitRadiusY;
+      if (radiusX < 1 && radiusY < 1) continue;
+      const angle = animation.orbitAngle + elapsed * animation.orbitSpeed * 0.016;
+      node.x = animation.orbitCenterX + Math.cos(angle) * radiusX;
+      node.y = animation.orbitCenterY + Math.sin(angle) * radiusY;
+      changed = true;
+    }
+    if (changed && currentState) draw(currentLayout, currentState, currentHandlers);
   }
 
   return {

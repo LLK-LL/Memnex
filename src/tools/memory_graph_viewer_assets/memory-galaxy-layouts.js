@@ -146,14 +146,16 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
       }));
     }
   }
+  const satelliteSystems = buildSatelliteSystems(outputNodes, nodeScale);
 
   return {
     view: "solar",
     systemKey,
-    nodes: resolveOverlaps(outputNodes),
+    nodes: resolveOverlaps([...outputNodes, ...satelliteSystems.flatMap(system => system.nodes)]),
     links: cloneLinks(galaxy.links || []),
     systems: [],
     orbits,
+    satelliteSystems,
     bounds: boundsFor(outputNodes, [], orbits),
   };
 }
@@ -235,10 +237,12 @@ export function buildCometOverlayLayout(galaxyLayout, comets = []) {
         };
       })
       .filter(Boolean);
-    const headAnchor = influences[0] || { x: 120 + index * 40, y: -90 - index * 30 };
+    const headAnchor = influences[0] || { x: 120 + index * 40, y: -90 - index * 30, radius: 80 };
+    const angle = -Math.PI / 3 + index * 0.82;
+    const minDistance = Number(headAnchor.radius || 80) + 72 + index * 26;
     const head = {
-      x: headAnchor.x * 0.38,
-      y: headAnchor.y * 0.38,
+      x: headAnchor.x + Math.cos(angle) * minDistance,
+      y: headAnchor.y + Math.sin(angle) * minDistance,
     };
     const trajectory = (comet.trajectory || []).map((systemKey, step) => {
       const system = systems.get(systemKey);
@@ -260,6 +264,7 @@ export function buildCometOverlayLayout(galaxyLayout, comets = []) {
       label: comet.label || "Active Context",
       cometType: comet.comet_type || "active_task",
       head,
+      hitRadius: 24,
       tail,
       trajectory,
       influences,
@@ -390,6 +395,8 @@ function placeOrbit(nodes, options) {
       orbitalRole: options.orbitalRole,
       renderRadius: priorityRadiusForData(node.raw || node, { scale: options.nodeScale }),
       labelAnchor: labelAnchor(x, y, angle),
+      orbitCenterX: options.centerX,
+      orbitCenterY: options.centerY,
     });
   });
 }
@@ -413,6 +420,15 @@ function placeNode(node, x, y, overrides = {}) {
     homeX: x,
     homeY: y,
     labelAnchor: overrides.labelAnchor || labelAnchor(x, y, Math.atan2(y, x)),
+    animation: {
+      orbitCenterX: overrides.orbitCenterX ?? 0,
+      orbitCenterY: overrides.orbitCenterY ?? 0,
+      orbitRadiusX: Math.abs(x - (overrides.orbitCenterX ?? 0)),
+      orbitRadiusY: Math.abs(y - (overrides.orbitCenterY ?? 0)),
+      orbitAngle: Math.atan2(y - (overrides.orbitCenterY ?? 0), x - (overrides.orbitCenterX ?? 0)),
+      orbitSpeed: overrides.orbitSpeed ?? animationSpeedFor(overrides.orbitalRole || node.orbitalRole),
+      spinSpeed: overrides.spinSpeed ?? 0.018,
+    },
   };
 }
 
@@ -442,6 +458,52 @@ function buildCategoryNodes(systemKey, localNodes, nodeScale) {
     .slice(0, 6)));
   if (categories.length === 0) categories.push(systemKey);
   return categories.map(category => syntheticNode(`category:${systemKey}:${category}`, category, systemKey, nodeScale));
+}
+
+function buildSatelliteSystems(outputNodes, nodeScale) {
+  const parents = outputNodes
+    .filter(node => node.orbitalRole === "planet")
+    .slice(0, 4);
+  return parents.map((parent, parentIndex) => {
+    const radius = 34 + parentIndex * 3;
+    const satelliteNodes = Array.from({ length: 3 }, (_, index) => {
+      const angle = -Math.PI / 2 + index * Math.PI * 2 / 3 + parentIndex * 0.24;
+      const raw = {
+        id: `satellite:${parent.id}:${index}`,
+        label: index === 0 ? "usage moon" : index === 1 ? "context moon" : "evidence moon",
+        type: index === 2 ? "event" : "concept",
+        content: `satellite context for ${parent.label}`,
+        importance: 0.35,
+        mention_count: 2,
+      };
+      return placeNode({
+        id: raw.id,
+        label: raw.label,
+        raw,
+        memorySystem: parent.memorySystem,
+        orbitRole: "satellite",
+        color: index === 2 ? systemColor("source") : systemColor(parent.memorySystem),
+        renderRadius: Math.max(3, priorityRadiusForData(raw, { scale: nodeScale }) * 0.72),
+      }, parent.x + Math.cos(angle) * radius, parent.y + Math.sin(angle) * radius * 0.62, {
+        memorySystem: parent.memorySystem,
+        orbitRole: "satellite",
+        orbitalRole: "satellite",
+        renderRadius: Math.max(3, priorityRadiusForData(raw, { scale: nodeScale }) * 0.72),
+        orbitCenterX: parent.x,
+        orbitCenterY: parent.y,
+        orbitSpeed: 0.012 + index * 0.002,
+        spinSpeed: 0.025,
+      });
+    });
+    return {
+      parentId: parent.id,
+      x: parent.x,
+      y: parent.y,
+      radius,
+      orbits: [{ kind: "satellite", radius }],
+      nodes: satelliteNodes,
+    };
+  });
 }
 
 function oneHopNeighborIds(links, ids) {
@@ -528,6 +590,20 @@ function roleStartAngle(role) {
     "derived-moon": -Math.PI / 4,
     external: Math.PI / 5,
   }[role] || -Math.PI / 2;
+}
+
+function animationSpeedFor(role) {
+  return {
+    "galactic-core": 0,
+    "central-star": 0,
+    "central-planet": 0,
+    star: 0.002,
+    category: 0.004,
+    planet: 0.006,
+    moon: 0.009,
+    evidence: 0.007,
+    satellite: 0.014,
+  }[role] ?? 0.004;
 }
 
 function labelAnchor(x, y, angle) {
