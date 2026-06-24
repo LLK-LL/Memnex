@@ -7,12 +7,33 @@ const helperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-c
 const helperSource = readFileSync(helperPath, "utf8").replaceAll("export function ", "function ");
 const context = { exports: {} };
 vm.runInNewContext(
-  `${helperSource}\nexports.convertGraphToGalaxy = convertGraphToGalaxy;\nexports.filterGalaxy = filterGalaxy;\nexports.buildFocusGalaxy = buildFocusGalaxy;\nexports.buildExpandedGalaxy = buildExpandedGalaxy;\nexports.buildEditIntent = buildEditIntent;`,
+  `${helperSource}
+exports.convertGraphToGalaxy = convertGraphToGalaxy;
+exports.filterGalaxy = filterGalaxy;
+exports.buildFocusGalaxy = buildFocusGalaxy;
+exports.buildExpandedGalaxy = buildExpandedGalaxy;
+exports.buildEditIntent = buildEditIntent;
+exports.buildGalaxy2DLayout = buildGalaxy2DLayout;
+exports.buildSphereGalaxyLayout = buildSphereGalaxyLayout;
+exports.selectVisibleLabels = selectVisibleLabels;
+exports.buildGalaxyCacheKey = buildGalaxyCacheKey;
+exports.groupNeighborRelations = groupNeighborRelations;`,
   context,
   { filename: helperPath },
 );
 
-const { convertGraphToGalaxy, filterGalaxy, buildFocusGalaxy, buildExpandedGalaxy, buildEditIntent } = context.exports;
+const {
+  convertGraphToGalaxy,
+  filterGalaxy,
+  buildFocusGalaxy,
+  buildExpandedGalaxy,
+  buildEditIntent,
+  buildGalaxy2DLayout,
+  buildSphereGalaxyLayout,
+  selectVisibleLabels,
+  buildGalaxyCacheKey,
+  groupNeighborRelations,
+} = context.exports;
 
 const fixture = {
   metadata: {
@@ -88,3 +109,50 @@ const intent = buildEditIntent("add_relation", { source: "p1", target: "c1", rel
 assert.equal(intent.action, "add_relation");
 assert.equal(intent.payload.source, "p1");
 assert.ok(intent.created_at);
+
+const layout2dA = buildGalaxy2DLayout(galaxy, { maxNodes: 3 });
+const layout2dB = buildGalaxy2DLayout(galaxy, { maxNodes: 3 });
+assert.deepEqual(
+  layout2dA.nodes.map(node => [node.id, Math.round(node.x), Math.round(node.y)]),
+  layout2dB.nodes.map(node => [node.id, Math.round(node.x), Math.round(node.y)]),
+);
+assert.ok(layout2dA.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
+assert.ok(layout2dA.nodes.every(node => node.renderRadius >= 4));
+
+const sphere = buildSphereGalaxyLayout(galaxy, { maxNodes: 3 });
+assert.equal(sphere.nodes.length, 3);
+for (const node of sphere.nodes) {
+  const distance = Math.hypot(node.x, node.y, node.z);
+  assert.ok(distance >= 70 && distance <= 430);
+  assert.ok(Number.isFinite(node.theta));
+  assert.ok(Number.isFinite(node.phi));
+}
+
+const labelsFar = selectVisibleLabels(layout2dA.nodes, {
+  zoom: 0.45,
+  selectedNodeId: "p1",
+  hoveredNodeId: null,
+});
+assert.ok(labelsFar.some(node => node.id === "p1"));
+assert.ok(labelsFar.every(node => node.layer === "core" || node.layer === "active" || node.id === "p1"));
+
+const labelsNear = selectVisibleLabels(layout2dA.nodes, {
+  zoom: 1.8,
+  selectedNodeId: null,
+  hoveredNodeId: "c1",
+});
+assert.ok(labelsNear.some(node => node.id === "c1"));
+assert.ok(labelsNear.length >= labelsFar.length);
+
+const cacheKey = buildGalaxyCacheKey({
+  metadata: {
+    cache: { layout_namespace: "memory-galaxy", default_root: "D:\\TotalAgentMemory\\memory-galaxy-cache" },
+    graph_identity: { node_ids_hash: "nodes", edge_ids_hash: "edges" },
+  },
+}, "2d");
+assert.equal(cacheKey, "memory-galaxy:2d:D:\\TotalAgentMemory\\memory-galaxy-cache:nodes:edges");
+
+const grouped = groupNeighborRelations(galaxy, "c1");
+assert.deepEqual(Object.keys(grouped).sort(), ["context", "related"]);
+assert.equal(grouped.related[0].neighbor.id, "p1");
+assert.equal(grouped.context[0].neighbor.id, "r1");

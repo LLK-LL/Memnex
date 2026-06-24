@@ -6,6 +6,14 @@
   external: 370,
 };
 
+const sphereShell = {
+  core: 85,
+  active: 155,
+  knowledge: 245,
+  episode: 330,
+  external: 410,
+};
+
 const typeColors = {
   project: "#60a5fa",
   concept: "#34d399",
@@ -138,6 +146,59 @@ export function buildFocusGalaxy(galaxy, options = {}) {
   return { nodes, links, metadata: galaxy.metadata };
 }
 
+export function buildGalaxy2DLayout(galaxy, options = {}) {
+  const focused = buildFocusGalaxy(galaxy, {
+    maxNodes: Number(options.maxNodes || 850),
+    seedCount: Number(options.seedCount || 42),
+    firstRingLimit: Number(options.firstRingLimit || 520),
+    focusNodeId: options.focusNodeId,
+  });
+  const nodes = focused.nodes.map((node, index) => {
+    const angle = hashAngle(`${node.id}:2d`);
+    const spiral = 1 + ((hashNumber(`${node.id}:spiral`) % 100) / 420);
+    const baseRadius = layerOrbit[node.layer] || layerOrbit.external;
+    const ringOffset = ((index % 11) - 5) * 7;
+    const radius = baseRadius * spiral + ringOffset;
+    return {
+      ...node,
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius * 0.58,
+      z: 0,
+      renderRadius: Math.max(4, Math.sqrt(node.val) * 1.7),
+      labelPriority: nodeScore(node),
+    };
+  });
+  return { nodes, links: focused.links, metadata: focused.metadata };
+}
+
+export function buildSphereGalaxyLayout(galaxy, options = {}) {
+  const focused = buildFocusGalaxy(galaxy, {
+    maxNodes: Number(options.maxNodes || 650),
+    seedCount: Number(options.seedCount || 36),
+    firstRingLimit: Number(options.firstRingLimit || 380),
+    focusNodeId: options.focusNodeId,
+  });
+  const nodes = focused.nodes.map((node, index) => {
+    const radius = sphereShell[node.layer] || sphereShell.external;
+    const theta = hashAngle(`${node.id}:theta`);
+    const phiSeed = ((hashNumber(`${node.id}:phi`) % 1000) / 1000);
+    const phi = Math.acos(1 - 2 * phiSeed);
+    const shellJitter = ((index % 7) - 3) * 5;
+    const r = radius + shellJitter;
+    return {
+      ...node,
+      theta,
+      phi,
+      x: r * Math.sin(phi) * Math.cos(theta),
+      y: r * Math.cos(phi),
+      z: r * Math.sin(phi) * Math.sin(theta),
+      renderRadius: Math.max(3.5, Math.sqrt(node.val) * 1.45),
+      labelPriority: nodeScore(node),
+    };
+  });
+  return { nodes, links: focused.links, metadata: focused.metadata };
+}
+
 export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, options = {}) {
   const neighborLimit = Number(options.neighborLimit || 120);
   const byId = new Map(sourceGalaxy.nodes.map(node => [node.id, node]));
@@ -195,6 +256,61 @@ export function buildEditIntent(action, payload) {
     created_at: new Date().toISOString(),
     source: "memory-galaxy-viewer",
   };
+}
+
+export function selectVisibleLabels(nodes, options = {}) {
+  const zoom = Number(options.zoom || 1);
+  const selectedNodeId = options.selectedNodeId ? String(options.selectedNodeId) : null;
+  const hoveredNodeId = options.hoveredNodeId ? String(options.hoveredNodeId) : null;
+  const maxLabels = zoom < 0.8 ? 28 : zoom < 1.4 ? 72 : 160;
+  return [...nodes]
+    .filter(node =>
+      node.id === selectedNodeId ||
+      node.id === hoveredNodeId ||
+      node.layer === "core" ||
+      node.layer === "active" ||
+      Number(node.raw.importance || 0) >= 1.2
+    )
+    .sort((a, b) => {
+      const aPinned = a.id === selectedNodeId || a.id === hoveredNodeId ? 1000 : 0;
+      const bPinned = b.id === selectedNodeId || b.id === hoveredNodeId ? 1000 : 0;
+      return (bPinned + nodeScore(b)) - (aPinned + nodeScore(a));
+    })
+    .slice(0, maxLabels);
+}
+
+export function buildGalaxyCacheKey(graph, view) {
+  const metadata = graph.metadata || {};
+  const cache = metadata.cache || {};
+  const identity = metadata.graph_identity || {};
+  return [
+    cache.layout_namespace || "memory-galaxy",
+    view || "unknown",
+    cache.default_root || "D:\\TotalAgentMemory\\memory-galaxy-cache",
+    identity.node_ids_hash || "nodes",
+    identity.edge_ids_hash || "edges",
+  ].join(":");
+}
+
+export function groupNeighborRelations(galaxy, nodeId) {
+  const targetId = String(nodeId);
+  const byId = new Map(galaxy.nodes.map(node => [node.id, node]));
+  const groups = {};
+  for (const link of galaxy.links) {
+    const source = String(link.source.id || link.source);
+    const target = String(link.target.id || link.target);
+    if (source !== targetId && target !== targetId) continue;
+    const neighborId = source === targetId ? target : source;
+    const neighbor = byId.get(neighborId);
+    if (!neighbor) continue;
+    const relation = link.relation || "related";
+    if (!groups[relation]) groups[relation] = [];
+    groups[relation].push({ neighbor, link });
+  }
+  for (const relation of Object.keys(groups)) {
+    groups[relation].sort((a, b) => b.link.weight - a.link.weight);
+  }
+  return groups;
 }
 
 function buildAdjacency(links) {
