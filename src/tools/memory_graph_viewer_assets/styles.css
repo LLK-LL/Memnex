@@ -68,6 +68,7 @@ button {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   background: var(--bg-panel);
   border: 1px solid var(--line-soft);
   box-shadow: var(--shadow-panel);
@@ -79,6 +80,7 @@ button {
 }
 
 .details {
+  padding-right: 20px;
   border-left: 1px solid var(--line-soft);
 }
 
@@ -673,6 +675,7 @@ button:hover,
   color: var(--text-1);
   font-size: 15px;
   text-align: right;
+  padding-right: 10px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -710,8 +713,8 @@ button:hover,
 
 .relation-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 12px;
   align-items: baseline;
   color: var(--text-2);
 }
@@ -724,8 +727,7 @@ button:hover,
 .weight-value {
   display: block;
   color: var(--text-2);
-  text-align: right;
-  padding-right: 4px;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
@@ -761,7 +763,7 @@ button:hover,
 .summary-row > span:last-child {
   display: block;
   text-align: right;
-  padding-right: 4px;
+  padding-right: 14px;
   font-variant-numeric: tabular-nums;
 }
 
