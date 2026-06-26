@@ -642,7 +642,7 @@ button:hover,
 
 .metric-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0;
   margin: 12px 0;
   border: 1px solid var(--line-soft);
@@ -651,17 +651,16 @@ button:hover,
 }
 
 .metric-cell {
-  padding: 10px;
-  border-right: 1px solid var(--line-soft);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line-soft);
   background: rgba(10, 17, 29, 0.82);
 }
 
-.metric-cell:nth-child(2n) {
-  border-right: 0;
-}
-
-.metric-cell:nth-last-child(-n+2) {
+.metric-cell:last-child {
   border-bottom: 0;
 }
 
@@ -671,9 +670,9 @@ button:hover,
 }
 
 .metric-value {
-  margin-top: 4px;
   color: var(--text-1);
   font-size: 15px;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
