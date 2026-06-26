@@ -674,6 +674,7 @@ button:hover,
   margin-top: 4px;
   color: var(--text-1);
   font-size: 15px;
+  font-variant-numeric: tabular-nums;
 }
 
 .meta-stack {
@@ -710,8 +711,9 @@ button:hover,
 
 .relation-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 56px;
   gap: 8px;
+  align-items: baseline;
   color: var(--text-2);
 }
 
@@ -721,7 +723,11 @@ button:hover,
 }
 
 .weight-value {
+  display: block;
   color: var(--text-2);
+  text-align: right;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .agent-prompt {
@@ -742,14 +748,22 @@ button:hover,
 
 .summary-row {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr) 56px;
   gap: 8px;
+  align-items: baseline;
   color: var(--text-2);
 }
 
 .summary-row strong {
   color: var(--text-1);
   font-weight: 500;
+}
+
+.summary-row > span:last-child {
+  display: block;
+  text-align: right;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .pill {
