@@ -13,6 +13,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   let currentHandlers = {};
   let scale = 1;
   let pan = { x: 0, y: 0 };
+  let panState = null;
   let dragState = null;
   let pressState = null;
   let lastTap = { kind: null, key: null, time: 0 };
@@ -23,7 +24,22 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
 
   stage.eventMode = "static";
   stage.hitArea = app.screen;
+  stage.on("pointerdown", event => {
+    if (!hasCtrlModifier(event) || !isPrimaryButton(event)) return;
+    panState = {
+      start: event.global.clone(),
+      origin: { ...pan },
+    };
+  });
   stage.on("pointermove", event => {
+    if (panState) {
+      pan = {
+        x: panState.origin.x + (event.global.x - panState.start.x),
+        y: panState.origin.y + (event.global.y - panState.start.y),
+      };
+      applyTransform();
+      return;
+    }
     if (pressState) {
       const dxRaw = event.global.x - pressState.start.x;
       const dyRaw = event.global.y - pressState.start.y;
@@ -40,6 +56,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   stage.on("pointerup", endDrag);
   stage.on("pointerupoutside", endDrag);
   stage.on("wheel", event => {
+    if (!hasCtrlModifier(event)) return;
     event.preventDefault();
     scale = Math.max(0.25, Math.min(3.5, scale * (event.deltaY > 0 ? 0.9 : 1.1)));
     applyTransform();
@@ -56,10 +73,10 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     clearLayer(nodeLayer);
     clearLayer(labelLayer);
     nodeGraphicsById.clear();
-    drawOrbits(layout);
+    drawOrbits(layout, state);
     drawLinks(layout, state);
     drawNodes(layout, state, handlers);
-    drawComets(layout);
+    drawComets(layout, state);
     drawLabels(layout, state);
     applyTransform();
   }
@@ -85,7 +102,8 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     applyTransform();
   }
 
-  function drawOrbits(layout) {
+  function drawOrbits(layout, state) {
+    if (state?.showOrbitGuides === false) return;
     for (const orbit of layout.orbits || []) {
       const guide = new PIXI.Graphics();
       const radius = Number(orbit.radius || 0);
@@ -123,6 +141,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     const nodeById = new Map((layout.nodes || []).map(node => [node.id, node]));
     const selectedNode = state.selectedNodeId ? nodeById.get(String(state.selectedNodeId)) : null;
     const selectedSystem = selectedNode?.id?.startsWith("system:") ? selectedNode.memorySystem : null;
+    const relationMode = String(state.relationshipMode || "all");
     for (const link of layout.links || []) {
       const source = nodeById.get(String(link.source?.id || link.source));
       const target = nodeById.get(String(link.target?.id || link.target));
@@ -130,6 +149,9 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       const selected = state.selectedNodeId && (source.id === state.selectedNodeId || target.id === state.selectedNodeId);
       const selectedBySystem = selectedSystem && (source.memorySystem === selectedSystem || target.memorySystem === selectedSystem);
       if (!selected && !selectedBySystem) continue;
+      if (relationMode === "direct" && !selected) continue;
+      if (relationMode === "inbound" && String(link.target?.id || link.target) !== state.selectedNodeId) continue;
+      if (relationMode === "outbound" && String(link.source?.id || link.source) !== state.selectedNodeId) continue;
       const line = new PIXI.Graphics();
       line.moveTo(source.x, source.y).lineTo(target.x, target.y);
       line.stroke({
@@ -141,7 +163,8 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     }
   }
 
-  function drawComets(layout) {
+  function drawComets(layout, state) {
+    if (state?.showComets === false) return;
     for (const comet of layout.comets || []) {
       const graphic = new PIXI.Graphics();
       const trailPoints = (comet.trailHistory || comet.tail || []).filter(point => Number(point.alpha || 0) > 0.02);
@@ -188,6 +211,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       drawNodeBody(graphics, node, state);
       nodeGraphicsById.set(node.id, graphics);
       graphics.on("pointerdown", event => {
+        if (hasCtrlModifier(event)) return;
         event.stopPropagation();
         dragState = { node, graphic: graphics, start: event.global.clone(), origin: { x: node.x, y: node.y } };
         pressState = {
@@ -268,6 +292,10 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   }
 
   function endDrag() {
+    if (panState) {
+      panState = null;
+      return;
+    }
     const activePress = pressState;
     const activeDrag = dragState;
     if (activeDrag) {
@@ -474,8 +502,14 @@ function sameParent(source, target) {
 }
 
 function shouldLabel(node, state) {
+  const density = String(state.labelMode || "medium");
+  if (density === "none") return false;
   if (node.id === state.selectedNodeId || node.id === state.hoveredNodeId) return true;
-  return ["galactic-core", "central-star", "central-planet", "star", "category"].includes(node.orbitalRole);
+  if (density === "low") return ["galactic-core", "central-star", "star"].includes(node.orbitalRole);
+  if (density === "medium") return ["galactic-core", "central-star", "central-planet", "star", "category"].includes(node.orbitalRole);
+  return ["galactic-core", "central-star", "central-planet", "star", "category"].includes(node.orbitalRole)
+    || Number(node.raw?.importance || 0) >= 0.9
+    || Number(node.raw?.mention_count || 0) >= 5;
 }
 
 function isPinned(node, state) {
@@ -493,6 +527,14 @@ function pointerDetail(event) {
     ?? event?.originalEvent?.detail
     ?? 0
   );
+}
+
+function hasCtrlModifier(event) {
+  return Boolean(event?.ctrlKey ?? event?.nativeEvent?.ctrlKey ?? event?.originalEvent?.ctrlKey);
+}
+
+function isPrimaryButton(event) {
+  return Number(event?.button ?? event?.nativeEvent?.button ?? event?.originalEvent?.button ?? 0) === 0;
 }
 
 function labelBounds(text, align) {
