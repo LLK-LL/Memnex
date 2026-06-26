@@ -149,7 +149,14 @@ function applyFilters() {
   const filtered = currentFilteredGalaxy();
   visibleGraph = buildSphereGalaxyLayout(filtered, { maxNodes: focusLimit });
   drawSphere();
-  renderStats({ node_count: `${visibleGraph.nodes.length}/${originalGraph.nodes.length}`, edge_count: `${visibleGraph.links.length}/${originalGraph.links.length}` });
+  renderStats({
+    node_count: filtered.nodes.length,
+    edge_count: filtered.links.length,
+    total_node_count: originalGraph.nodes.length,
+    total_edge_count: originalGraph.links.length,
+    visible_node_count: visibleGraph.nodes.length,
+    visible_edge_count: visibleGraph.links.length,
+  });
   emitEvent("view:filtered", null, { visible_nodes: visibleGraph.nodes.length });
 }
 
@@ -311,7 +318,16 @@ function currentTimelineCutoff() {
 }
 
 function renderStats(metadata) {
-  document.getElementById("stats").textContent = `${metadata.node_count} nodes, ${metadata.edge_count} edges`;
+  const totalNodes = Number(metadata.total_node_count ?? metadata.node_count ?? 0);
+  const totalEdges = Number(metadata.total_edge_count ?? metadata.edge_count ?? 0);
+  const filteredNodes = Number(metadata.node_count ?? totalNodes);
+  const filteredEdges = Number(metadata.edge_count ?? totalEdges);
+  const visibleNodes = Number(metadata.visible_node_count ?? filteredNodes);
+  const visibleEdges = Number(metadata.visible_edge_count ?? filteredEdges);
+  const visibleSuffix = visibleNodes !== filteredNodes || visibleEdges !== filteredEdges
+    ? ` (${visibleNodes}/${visibleEdges} shown)`
+    : "";
+  document.getElementById("stats").textContent = `${filteredNodes}/${totalNodes} nodes / ${filteredEdges}/${totalEdges} edges${visibleSuffix}`;
 }
 
 function parseColor(value) {

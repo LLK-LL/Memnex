@@ -620,8 +620,9 @@ function renderSystemSummary(systemKey) {
   const members = filteredGraph.nodes
     .filter(node => visibleNodeSystem(node) === systemKey)
     .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
-  const topPlanets = members
-    .filter(node => orbitRoleForNode(node) === "planet")
+  const solarLayout = buildSolarSystemLayout(filteredGraph, systemKey, { nodeScale: state.nodeScale || 0.48 });
+  const topPlanets = solarLayout.nodes
+    .filter(node => node.orbitalRole === "planet")
     .slice(0, 5)
     .map(node => ({ label: node.label, value: Number(node.raw?.importance || 0).toFixed(2) }));
   document.getElementById("systemSummary").innerHTML = `
