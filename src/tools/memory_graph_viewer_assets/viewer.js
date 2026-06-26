@@ -532,7 +532,7 @@ function showNodeSelection(node) {
 
 function showSystemSelection(systemKey) {
   const members = filteredGraph.nodes.filter(node => visibleNodeSystem(node) === systemKey);
-  const counts = summarizeOrbitRoles(members);
+  const counts = summarizeSystemStructure(systemKey);
   const lead = members.sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a))[0];
   document.getElementById("selectionCard").innerHTML = `
     <div class="selection-title-row">
@@ -663,6 +663,15 @@ function summarizeOrbitRoles(nodes) {
     acc[role] = (acc[role] || 0) + 1;
     acc.external = acc.external || 0;
     if (node.layer === "external" || visibleNodeSystem(node) === "source") acc.external += 1;
+    return acc;
+  }, { planet: 0, moon: 0, evidence: 0, external: 0 });
+}
+
+function summarizeSystemStructure(systemKey) {
+  const layout = buildSolarSystemLayout(filteredGraph, systemKey, { nodeScale: state.nodeScale || 0.48 });
+  return layout.nodes.reduce((acc, node) => {
+    if (node.orbitalRole === "planet") acc.planet += 1;
+    else if (node.orbitalRole === "satellite") acc.moon += 1;
     return acc;
   }, { planet: 0, moon: 0, evidence: 0, external: 0 });
 }
