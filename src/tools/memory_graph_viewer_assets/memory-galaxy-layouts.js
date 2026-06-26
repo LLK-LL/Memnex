@@ -29,8 +29,7 @@ const layerRadii = {
 };
 
 const layerOrder = ["control", "execution", "context", "evidence", "archive"];
-const systemOrder = ["router", "rule", "persona", "skill", "harness", "preference", "project", "knowledge", "event", "source", "archive"];
-
+const layoutSystemOrder = ["router", "rule", "persona", "skill", "harness", "preference", "project", "knowledge", "event", "source", "archive"];
 export function buildGalaxyOverviewLayout(galaxy, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
   const nodes = cloneGraphNodes(galaxy);
@@ -44,7 +43,7 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
 
   for (const system of systems) {
     if (system.key === "router") {
-      const routerNode = grouped.get("router")?.[0] || syntheticNode("system:router", "Router", "router", nodeScale);
+      const routerNode = syntheticNode("system:router", "Router Core", "router", nodeScale);
       outputNodes.push(placeNode(routerNode, system.x, system.y, {
         memorySystem: "router",
         orbitRole: "core",
@@ -61,6 +60,8 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
       orbitRole: "star",
       orbitalRole: "star",
       renderRadius: Math.max(10, priorityRadiusForData(star.raw || star, { scale: nodeScale })),
+      isSystemNode: true,
+      systemKey: system.key,
     }));
 
     const bodies = overviewSummaryNodes(members).sort(compareNodePriority);
@@ -74,18 +75,19 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
     for (const [role, roleNodes, baseRadius] of roleSpecs) {
       const tracks = splitTracks(roleNodes, baseRadius * Math.max(0.82, nodeScale / 0.48), 26, nodeScale);
       if (tracks.length === 0) system.miniOrbits.push({ kind: role, radius: baseRadius * Math.max(0.82, nodeScale / 0.48) });
-      else system.miniOrbits.push(...tracks.map(track => ({ kind: role, radius: track.radius })));
+      else system.miniOrbits.push(...tracks.map(track => ({ kind: role, radius: track.radius, aspect: 1 })));
       for (const track of tracks) {
         outputNodes.push(...placeOrbit(track.nodes, {
           centerX: system.x,
           centerY: system.y,
           radiusX: track.radius,
-          radiusY: track.radius * 0.62,
+          radiusY: track.radius,
           startAngle: roleStartAngle(role),
           memorySystem: system.key,
           orbitRole: role,
           orbitalRole: role,
           nodeScale,
+          parentSystemKey: system.key,
         }));
       }
     }
@@ -103,65 +105,126 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
 
 export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
+  const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
-  const localIds = new Set(nodes.filter(node => node.memorySystem === systemKey).map(node => node.id));
-  const neighborIds = oneHopNeighborIds(galaxy.links || [], localIds);
-  const localNodes = nodes
-    .filter(node => localIds.has(node.id) || neighborIds.has(node.id))
-    .sort(compareNodePriority);
+  const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], systemKey);
   const center = syntheticNode(`system:${systemKey}`, systemLabels[systemKey] || systemKey, systemKey, nodeScale);
   const outputNodes = [
     placeNode(center, 0, 0, {
       memorySystem: systemKey,
       orbitRole: "star",
       orbitalRole: "central-star",
-      renderRadius: Math.max(22, priorityRadiusForData(center.raw || center, { scale: nodeScale })),
+      renderRadius: Math.max(28, priorityRadiusForData(center.raw || center, { scale: nodeScale }) * 1.18),
     }),
   ];
-
-  const categoryNodes = buildCategoryNodes(systemKey, localNodes, nodeScale);
-  const buckets = splitByRole(localNodes);
-  const orbitGroups = [
-    ["category", categoryNodes, 110],
-    ["planet", buckets.planet, 210],
-    ["moon", buckets.moon, 330],
-    ["evidence", buckets.evidence, 470],
-  ];
+  const planetSystems = buildSolarPlanetSystems(localNodes, localLinks, systemKey);
+  const planetNodes = [];
+  const satelliteSystems = [];
   const orbits = [];
-  for (const [kind, groupNodes, radius] of orbitGroups) {
-    const tracks = splitTracks(groupNodes, radius, 70, nodeScale);
-    if (tracks.length === 0) orbits.push({ kind, radius });
-    for (const track of tracks) {
-      orbits.push({ kind, radius: track.radius });
-      outputNodes.push(...placeOrbit(track.nodes, {
-        centerX: 0,
-        centerY: 0,
+  const planetTracks = splitTracks(planetSystems.map(system => system.anchor), 210, 92, nodeScale, 4);
+  let offset = 0;
+  for (const [trackIndex, track] of planetTracks.entries()) {
+    const trackSystems = planetSystems.slice(offset, offset + track.nodes.length);
+    offset += track.nodes.length;
+    orbits.push({ kind: "planet", radius: track.radius, aspect: orbitAspect });
+    const placed = placeOrbit(trackSystems.map(system => ({
+      ...system.anchor,
+      childCount: system.children.length,
+      planetSystemId: system.anchor.id,
+      parentPlanetId: system.anchor.id,
+      renderRadius: Math.max(
+        system.children.length > 0 ? 14 : 11,
+        priorityRadiusForData(system.anchor.raw || system.anchor, { scale: nodeScale }) * (system.children.length > 0 ? 1.5 : 1.18),
+      ),
+    })), {
+      centerX: 0,
+      centerY: 0,
+      radiusX: track.radius,
+      radiusY: track.radius * orbitAspect,
+      startAngle: roleStartAngle("planet") + trackIndex * 0.41,
+      memorySystem: systemKey,
+      orbitRole: "planet",
+      orbitalRole: "planet",
+      nodeScale,
+      orbitSpeed: 0.028,
+    });
+    planetNodes.push(...placed);
+  }
+  outputNodes.push(...planetNodes);
+
+  const placedPlanetById = new Map(planetNodes.map(node => [node.id, node]));
+  for (const system of planetSystems) {
+    const parent = placedPlanetById.get(system.anchor.id);
+    if (!parent || system.children.length === 0) continue;
+    const visibleChildren = system.children.slice(0, 3);
+    const childTracks = splitTracks(visibleChildren, 34, 24, nodeScale, 4);
+    const childOrbits = [];
+    const childNodes = [];
+    for (const [trackIndex, track] of childTracks.entries()) {
+      childOrbits.push({ kind: "satellite", radius: track.radius, aspect: orbitAspect });
+      childNodes.push(...placeOrbit(track.nodes.map(node => ({
+        ...node,
+        parentPlanetId: parent.id,
+        renderRadius: Math.max(3, priorityRadiusForData(node.raw || node, { scale: nodeScale }) * 0.72),
+      })), {
+        centerX: parent.x,
+        centerY: parent.y,
         radiusX: track.radius,
-        radiusY: track.radius * 0.58,
-        startAngle: roleStartAngle(kind),
+        radiusY: track.radius * orbitAspect,
+        startAngle: roleStartAngle("satellite") + trackIndex * 0.73,
         memorySystem: systemKey,
-        orbitRole: kind === "category" ? "category" : kind,
-        orbitalRole: kind,
+        orbitRole: "satellite",
+        orbitalRole: "satellite",
         nodeScale,
+        orbitSpeed: 0.04,
+        spinSpeed: 0.025,
+        parentNodeId: parent.id,
+        parentPlanetId: parent.id,
       }));
     }
+    satelliteSystems.push({
+      parentId: parent.id,
+      x: parent.x,
+      y: parent.y,
+      radius: childOrbits.at(-1)?.radius || 34,
+      aspect: orbitAspect,
+      orbits: childOrbits,
+      nodes: childNodes,
+    });
   }
-  const satelliteSystems = buildSatelliteSystems(outputNodes, nodeScale);
+  const visibleNodes = [...outputNodes, ...satelliteSystems.flatMap(system => system.nodes)];
+  const visibleIds = new Set(visibleNodes.map(node => String(node.id)));
 
   return {
     view: "solar",
     systemKey,
-    nodes: resolveOverlaps([...outputNodes, ...satelliteSystems.flatMap(system => system.nodes)]),
-    links: cloneLinks(galaxy.links || []),
+    nodes: visibleNodes,
+    links: localLinks.filter(link => {
+      const source = String(link.source?.id || link.source);
+      const target = String(link.target?.id || link.target);
+      return visibleIds.has(source) && visibleIds.has(target);
+    }),
     systems: [],
     orbits,
     satelliteSystems,
-    bounds: boundsFor(outputNodes, [], orbits),
+    bounds: boundsFor(
+      visibleNodes,
+      [],
+      [
+        ...orbits,
+        ...satelliteSystems.flatMap(system => system.orbits.map(orbit => ({
+          ...orbit,
+          centerX: system.x,
+          centerY: system.y,
+        }))),
+      ],
+    ),
   };
 }
 
 export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.5);
+  const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
   const source = nodes.find(node => node.id === planetId) || nodes.find(node => node.memorySystem === systemKey) || syntheticNode(planetId || `planet:${systemKey}`, planetId || systemKey, systemKey, nodeScale);
   const directIds = oneHopNeighborIds(galaxy.links || [], new Set([source.id]));
@@ -179,7 +242,7 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
       memorySystem: systemKey,
       orbitRole: "planet",
       orbitalRole: "central-planet",
-      renderRadius: Math.max(18, priorityRadiusForData(source.raw || source, { scale: nodeScale })),
+      renderRadius: Math.max(24, priorityRadiusForData(source.raw || source, { scale: nodeScale }) * 1.35),
     }),
   ];
   const orbitGroups = [
@@ -191,20 +254,21 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
   const orbits = [];
   for (const [kind, groupNodes, radius] of orbitGroups) {
     const fallbackNodes = kind === "direct-moon" && groupNodes.length === 0 ? nodes.filter(node => node.memorySystem === systemKey && node.id !== source.id).slice(0, 3) : groupNodes;
-    const tracks = splitTracks(fallbackNodes, radius, 64, nodeScale);
-    if (tracks.length === 0) orbits.push({ kind, radius });
-    for (const track of tracks) {
-      orbits.push({ kind, radius: track.radius });
+    const tracks = splitTracks(fallbackNodes, radius, 54, nodeScale, 5);
+    if (tracks.length === 0) orbits.push({ kind, radius, aspect: orbitAspect });
+    for (const [trackIndex, track] of tracks.entries()) {
+      orbits.push({ kind, radius: track.radius, aspect: orbitAspect });
       outputNodes.push(...placeOrbit(track.nodes, {
         centerX: 0,
         centerY: 0,
         radiusX: track.radius,
-        radiusY: track.radius * 0.58,
-        startAngle: roleStartAngle(kind),
+        radiusY: track.radius * orbitAspect,
+        startAngle: roleStartAngle(kind) + trackIndex * 0.73,
         memorySystem: systemKey,
         orbitRole: kind,
         orbitalRole: kind,
         nodeScale,
+        orbitSpeed: orbitSpeedForPlanetRing(kind),
       }));
     }
   }
@@ -213,11 +277,16 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
     view: "planet",
     systemKey,
     planetId: source.id,
-    nodes: resolveOverlaps(outputNodes),
-    links: cloneLinks(galaxy.links || []),
+    nodes: outputNodes,
+    links: cloneLinks(galaxy.links || []).filter(link => {
+      const visibleIds = new Set(outputNodes.map(node => String(node.id)));
+      const sourceId = String(link.source?.id || link.source);
+      const targetId = String(link.target?.id || link.target);
+      return visibleIds.has(sourceId) && visibleIds.has(targetId);
+    }),
     systems: [],
-    orbits,
-    bounds: boundsFor(outputNodes, [], orbits),
+    orbits: orbits.map(orbit => ({ ...orbit, aspect: orbitAspect })),
+    bounds: boundsFor(outputNodes, [], orbits.map(orbit => ({ ...orbit, aspect: orbitAspect }))),
   };
 }
 
@@ -266,17 +335,57 @@ export function buildCometOverlayLayout(galaxyLayout, comets = []) {
       head,
       hitRadius: 24,
       tail,
+      path: buildCometPath(head, trajectory, influences, index),
+      trailHistory: tail.map(point => ({ x: point.x, y: point.y, alpha: point.alpha })),
       trajectory,
       influences,
+      animation: {
+        pathProgress: 0,
+        pathSpeed: 1.4 + index * 0.15,
+      },
     };
   });
   return { comets: activeComets };
 }
 
+function buildCometPath(head, trajectory, influences, index) {
+  const anchors = [head, ...(trajectory.length ? trajectory : influences)].map(point => ({ x: point.x, y: point.y }));
+  if (anchors.length <= 1) return anchors;
+  const path = [anchors[0]];
+  for (let i = 0; i < anchors.length - 1; i += 1) {
+    const start = anchors[i];
+    const end = anchors[i + 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    const bend = Math.min(120, Math.max(32, distance * 0.22));
+    const direction = ((i + index) % 2 === 0 ? 1 : -1);
+    const control = {
+      x: midpoint.x + (-dy / distance) * bend * direction,
+      y: midpoint.y + (dx / distance) * bend * direction,
+    };
+    const steps = Math.max(6, Math.round(distance / 90));
+    for (let step = 1; step <= steps; step += 1) {
+      const t = step / steps;
+      path.push(quadraticBezier(start, control, end, t));
+    }
+  }
+  return path;
+}
+
+function quadraticBezier(start, control, end, t) {
+  const inv = 1 - t;
+  return {
+    x: inv * inv * start.x + 2 * inv * t * control.x + t * t * end.x,
+    y: inv * inv * start.y + 2 * inv * t * control.y + t * t * end.y,
+  };
+}
+
 function cloneGraphNodes(galaxy) {
   return (galaxy.nodes || []).map(node => {
     const raw = node.raw || node;
-    const memorySystem = memorySystemForData(raw);
+    const memorySystem = node.memorySystem || memorySystemForData(raw);
     return {
       ...node,
       raw,
@@ -306,7 +415,7 @@ function groupBySystem(nodes) {
 
 function buildSystemDescriptors(grouped, nodeScale) {
   const byLayer = new Map(layerOrder.map(layer => [layer, []]));
-  for (const key of systemOrder) {
+  for (const key of layoutSystemOrder) {
     if (key === "router") continue;
     if (!grouped.has(key)) continue;
     const layer = systemLayerForKey(key);
@@ -315,12 +424,21 @@ function buildSystemDescriptors(grouped, nodeScale) {
   }
   const systems = [{
     key: "router",
-    label: "Router",
+    label: "Router Core",
     layer: "core",
     x: 0,
     y: 0,
     radius: 72,
     miniOrbits: [],
+    orbitAspect: 1,
+    animation: {
+      orbitCenterX: 0,
+      orbitCenterY: 0,
+      orbitRadiusX: 0,
+      orbitRadiusY: 0,
+      orbitAngle: 0,
+      orbitSpeed: 0,
+    },
   }];
   layerOrder.forEach((layer, layerIndex) => {
     const keys = byLayer.get(layer) || [];
@@ -329,18 +447,27 @@ function buildSystemDescriptors(grouped, nodeScale) {
     keys.forEach((key, index) => {
       const angle = angleOffset + (index * Math.PI * 2) / Math.max(1, keys.length);
       const miniRadius = 98 * Math.max(0.82, nodeScale / 0.48);
-      systems.push({
-        key,
-        label: systemLabels[key] || key,
-        layer,
-        color: systemColor(key),
-        x: Math.cos(angle) * radius,
-        y: Math.sin(angle) * radius * 0.58,
-        radius: miniRadius,
-        miniOrbits: [],
+        systems.push({
+          key,
+          label: systemLabels[key] || key,
+          layer,
+          color: systemColor(key),
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius * 0.58,
+          radius: miniRadius,
+          miniOrbits: [],
+          orbitAspect: 0.58,
+          animation: {
+            orbitCenterX: 0,
+            orbitCenterY: 0,
+            orbitRadiusX: radius,
+            orbitRadiusY: radius * 0.58,
+            orbitAngle: angle,
+            orbitSpeed: 0.06 + layerIndex * 0.012,
+          },
+        });
       });
     });
-  });
   return systems;
 }
 
@@ -369,10 +496,11 @@ function overviewSummaryNodes(nodes) {
   });
 }
 
-function splitTracks(nodes, baseRadius, step, nodeScale) {
+function splitTracks(nodes, baseRadius, step, nodeScale, maxPerTrack = Infinity) {
   if (!nodes.length) return [];
   const maxRadius = Math.max(...nodes.map(node => priorityRadiusForData(node.raw || node, { scale: nodeScale })));
-  const capacity = Math.max(1, Math.floor((Math.PI * 2 * Math.max(24, baseRadius)) / Math.max(14, maxRadius * 2 + 8)));
+  const autoCapacity = Math.max(1, Math.floor((Math.PI * 2 * Math.max(24, baseRadius)) / Math.max(14, maxRadius * 2 + 8)));
+  const capacity = Math.max(1, Math.min(autoCapacity, Number.isFinite(maxPerTrack) ? maxPerTrack : autoCapacity));
   const tracks = [];
   for (let start = 0; start < nodes.length; start += capacity) {
     tracks.push({
@@ -393,10 +521,17 @@ function placeOrbit(nodes, options) {
       memorySystem: options.memorySystem,
       orbitRole: options.orbitRole,
       orbitalRole: options.orbitalRole,
-      renderRadius: priorityRadiusForData(node.raw || node, { scale: options.nodeScale }),
+      renderRadius: node.renderRadius || priorityRadiusForData(node.raw || node, { scale: options.nodeScale }),
       labelAnchor: labelAnchor(x, y, angle),
       orbitCenterX: options.centerX,
       orbitCenterY: options.centerY,
+      orbitRadiusX: options.radiusX,
+      orbitRadiusY: options.radiusY,
+      orbitSpeed: options.orbitSpeed,
+      spinSpeed: options.spinSpeed,
+      parentSystemKey: options.parentSystemKey,
+      parentNodeId: options.parentNodeId,
+      parentPlanetId: options.parentPlanetId || node.parentPlanetId,
     });
   });
 }
@@ -420,14 +555,20 @@ function placeNode(node, x, y, overrides = {}) {
     homeX: x,
     homeY: y,
     labelAnchor: overrides.labelAnchor || labelAnchor(x, y, Math.atan2(y, x)),
+    parentPlanetId: overrides.parentPlanetId || node.parentPlanetId || null,
+    childCount: overrides.childCount ?? node.childCount ?? 0,
+    isSystemNode: overrides.isSystemNode ?? node.isSystemNode ?? false,
+    systemKey: overrides.systemKey ?? node.systemKey ?? null,
     animation: {
       orbitCenterX: overrides.orbitCenterX ?? 0,
       orbitCenterY: overrides.orbitCenterY ?? 0,
-      orbitRadiusX: Math.abs(x - (overrides.orbitCenterX ?? 0)),
-      orbitRadiusY: Math.abs(y - (overrides.orbitCenterY ?? 0)),
+      orbitRadiusX: overrides.orbitRadiusX ?? Math.abs(x - (overrides.orbitCenterX ?? 0)),
+      orbitRadiusY: overrides.orbitRadiusY ?? Math.abs(y - (overrides.orbitCenterY ?? 0)),
       orbitAngle: Math.atan2(y - (overrides.orbitCenterY ?? 0), x - (overrides.orbitCenterX ?? 0)),
       orbitSpeed: overrides.orbitSpeed ?? animationSpeedFor(overrides.orbitalRole || node.orbitalRole),
       spinSpeed: overrides.spinSpeed ?? 0.018,
+      parentSystemKey: overrides.parentSystemKey,
+      parentNodeId: overrides.parentNodeId,
     },
   };
 }
@@ -493,6 +634,7 @@ function buildSatelliteSystems(outputNodes, nodeScale) {
         orbitCenterY: parent.y,
         orbitSpeed: 0.012 + index * 0.002,
         spinSpeed: 0.025,
+        parentNodeId: parent.id,
       });
     });
     return {
@@ -503,6 +645,178 @@ function buildSatelliteSystems(outputNodes, nodeScale) {
       orbits: [{ kind: "satellite", radius }],
       nodes: satelliteNodes,
     };
+  });
+}
+
+function buildSolarPlanetSystems(localNodes, localLinks, systemKey) {
+  if (localNodes.length === 0) return [];
+  const adjacency = buildAdjacencyMap(localLinks);
+  const maxChildrenPerSystem = 3;
+  const systemNodes = localNodes
+    .filter(node => node.memorySystem === systemKey)
+    .sort(compareNodePriority);
+  const ranked = [...localNodes].sort((a, b) => {
+    const degreeDelta = (adjacency.get(String(b.id))?.size || 0) - (adjacency.get(String(a.id))?.size || 0);
+    return degreeDelta || compareNodePriority(a, b);
+  });
+  const maxSeeds = Math.min(10, Math.max(2, Math.ceil(localNodes.length / maxChildrenPerSystem)));
+  const seeds = [];
+  const seedIds = new Set();
+
+  for (const node of [...systemNodes, ...ranked]) {
+    if (seedIds.has(node.id)) continue;
+    seeds.push(node);
+    seedIds.add(node.id);
+    if (seeds.length >= maxSeeds) break;
+  }
+
+  let systems = seeds.map(anchor => ({ anchor, children: [] }));
+
+  for (const node of localNodes) {
+    if (seedIds.has(node.id)) continue;
+    const neighbors = adjacency.get(String(node.id)) || new Set();
+    const directMatches = systems
+      .filter(system => neighbors.has(String(system.anchor.id)))
+      .sort((a, b) => a.children.length - b.children.length || scoreNode(b.anchor.raw || b.anchor) - scoreNode(a.anchor.raw || a.anchor));
+    const preferredSystem = node.memorySystem === systemKey
+      ? systems.find(system => system.anchor.memorySystem === systemKey && system.anchor.id !== node.id)
+      : null;
+    const fallbackMatches = systems
+      .filter(system => system.anchor.id !== node.id)
+      .sort((a, b) => a.children.length - b.children.length || scoreNode(b.anchor.raw || b.anchor) - scoreNode(a.anchor.raw || a.anchor));
+    const target = directMatches[0] || preferredSystem || fallbackMatches[0];
+    if (target && target.children.length < maxChildrenPerSystem) {
+      target.children.push(node);
+      continue;
+    }
+    if (systems.length < maxSeeds) {
+      systems.push({ anchor: node, children: [] });
+      seedIds.add(node.id);
+      continue;
+    }
+    if (target) target.children.push(node);
+  }
+
+  if (!systems.some(system => system.children.length > 0)) {
+    const fallbackChild = localNodes.find(node => !seedIds.has(node.id));
+    if (fallbackChild && systems[0]) systems[0].children.push(fallbackChild);
+  }
+
+  while (systems.length < maxSeeds) {
+    const donor = systems
+      .filter(system => system.children.length > maxChildrenPerSystem)
+      .sort((a, b) => b.children.length - a.children.length)[0];
+    if (!donor) break;
+    const peeledIndex = donor.children.findIndex(node => node.memorySystem === systemKey);
+    const peeled = donor.children.splice(peeledIndex >= 0 ? peeledIndex : donor.children.length - 1, 1)[0];
+    if (!peeled) break;
+    seedIds.add(peeled.id);
+    systems.push({ anchor: peeled, children: [] });
+  }
+
+  systems = systems.map(system => ({ anchor: system.anchor, children: [] }));
+  for (const node of localNodes) {
+    if (seedIds.has(node.id)) continue;
+    const neighbors = adjacency.get(String(node.id)) || new Set();
+    const directMatches = systems
+      .filter(system => neighbors.has(String(system.anchor.id)))
+      .sort((a, b) => a.children.length - b.children.length || scoreNode(b.anchor.raw || b.anchor) - scoreNode(a.anchor.raw || a.anchor));
+    const preferredSystem = node.memorySystem === systemKey
+      ? systems.find(system => system.anchor.memorySystem === systemKey && system.anchor.id !== node.id && system.children.length < maxChildrenPerSystem)
+      : null;
+    const fallbackMatches = systems
+      .filter(system => system.anchor.id !== node.id)
+      .sort((a, b) => a.children.length - b.children.length || scoreNode(b.anchor.raw || b.anchor) - scoreNode(a.anchor.raw || a.anchor));
+    const target = directMatches.find(system => system.children.length < maxChildrenPerSystem)
+      || preferredSystem
+      || fallbackMatches.find(system => system.children.length < maxChildrenPerSystem)
+      || directMatches[0]
+      || fallbackMatches[0];
+    if (target) target.children.push(node);
+  }
+
+  for (const system of systems) {
+    const seen = new Set();
+    system.children = system.children.filter(node => {
+      if (node.id === system.anchor.id || seen.has(node.id)) return false;
+      seen.add(node.id);
+      return true;
+    }).sort(compareNodePriority);
+  }
+
+  return systems
+    .filter(system => system.anchor)
+    .sort((a, b) => {
+      const childDelta = Number(b.children.length > 0) - Number(a.children.length > 0);
+      return childDelta || scoreNode(b.anchor.raw || b.anchor) - scoreNode(a.anchor.raw || a.anchor);
+    });
+}
+
+function buildSolarSubgraph(nodes, links, systemKey) {
+  const clonedLinks = cloneLinks(links);
+  const adjacency = buildAdjacencyMap(clonedLinks);
+  const systemNodes = nodes
+    .filter(node => node.memorySystem === systemKey)
+    .sort(compareNodePriority);
+  const systemIds = new Set(systemNodes.map(node => String(node.id)));
+  const directIds = new Set();
+  for (const id of systemIds) {
+    for (const neighbor of adjacency.get(id) || []) {
+      if (!systemIds.has(neighbor)) directIds.add(neighbor);
+    }
+  }
+  const directNodes = nodes
+    .filter(node => directIds.has(String(node.id)))
+    .sort(compareNodePriority)
+    .slice(0, 10);
+  const directNodeIds = new Set(directNodes.map(node => String(node.id)));
+  const secondIds = new Set();
+  for (const id of directNodeIds) {
+    for (const neighbor of adjacency.get(id) || []) {
+      if (systemIds.has(neighbor) || directNodeIds.has(neighbor)) continue;
+      secondIds.add(neighbor);
+    }
+  }
+  const secondNodes = nodes
+    .filter(node => secondIds.has(String(node.id)))
+    .sort(compareNodePriority)
+    .slice(0, 12);
+  const selectedNodes = dedupeNodes([
+    ...systemNodes,
+    ...directNodes,
+    ...secondNodes,
+  ]);
+  const selectedIds = new Set(selectedNodes.map(node => String(node.id)));
+  return {
+    nodes: selectedNodes,
+    links: clonedLinks.filter(link => {
+      const source = String(link.source?.id || link.source);
+      const target = String(link.target?.id || link.target);
+      return selectedIds.has(source) && selectedIds.has(target);
+    }),
+  };
+}
+
+function buildAdjacencyMap(links) {
+  const adjacency = new Map();
+  for (const link of links) {
+    const source = String(link.source?.id || link.source);
+    const target = String(link.target?.id || link.target);
+    if (!adjacency.has(source)) adjacency.set(source, new Set());
+    if (!adjacency.has(target)) adjacency.set(target, new Set());
+    adjacency.get(source).add(target);
+    adjacency.get(target).add(source);
+  }
+  return adjacency;
+}
+
+function dedupeNodes(nodes) {
+  const seen = new Set();
+  return nodes.filter(node => {
+    const id = String(node.id);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
   });
 }
 
@@ -552,10 +866,13 @@ function boundsFor(nodes, systems = [], orbits = []) {
   }
   for (const orbit of orbits) {
     const pad = (orbit.radius || 0) + 80;
-    minX = Math.min(minX, -pad);
-    maxX = Math.max(maxX, pad);
-    minY = Math.min(minY, -pad * 0.62);
-    maxY = Math.max(maxY, pad * 0.62);
+    const centerX = Number(orbit.centerX || 0);
+    const centerY = Number(orbit.centerY || 0);
+    const aspect = Number(orbit.aspect || 0.62);
+    minX = Math.min(minX, centerX - pad);
+    maxX = Math.max(maxX, centerX + pad);
+    minY = Math.min(minY, centerY - pad * aspect);
+    maxY = Math.max(maxY, centerY + pad * aspect);
   }
   if (!Number.isFinite(minX)) return { minX: -100, minY: -100, maxX: 100, maxY: 100, width: 200, height: 200 };
   return {
@@ -586,6 +903,7 @@ function roleStartAngle(role) {
     planet: -Math.PI / 3,
     moon: -Math.PI / 5,
     evidence: Math.PI / 8,
+    satellite: -Math.PI / 2,
     "direct-moon": -Math.PI / 2,
     "derived-moon": -Math.PI / 4,
     external: Math.PI / 5,
@@ -604,6 +922,15 @@ function animationSpeedFor(role) {
     evidence: 0.007,
     satellite: 0.014,
   }[role] ?? 0.004;
+}
+
+function orbitSpeedForPlanetRing(kind) {
+  return {
+    "direct-moon": 0.032,
+    "derived-moon": 0.024,
+    evidence: 0.018,
+    external: 0.014,
+  }[kind] || 0.02;
 }
 
 function labelAnchor(x, y, angle) {

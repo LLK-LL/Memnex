@@ -78,7 +78,7 @@ export function convertGraphToGalaxy(graph) {
     const orbit = layerOrbit[layer] || layerOrbit.external;
     const angle = index * 2.399963229728653;
     const lift = ((index % 9) - 4) * 14;
-    return {
+    const galaxyNode = {
       id: String(data.id),
       label: data.label || data.name || String(data.id),
       type: data.type || "default",
@@ -91,6 +91,8 @@ export function convertGraphToGalaxy(graph) {
       z: Math.sin(angle) * orbit,
       raw: data,
     };
+    galaxyNode.memorySystem = memorySystemForNode(galaxyNode);
+    return galaxyNode;
   });
 
   const links = graph.elements.edges.map(edge => ({
@@ -423,10 +425,10 @@ export function buildEditIntent(action, payload) {
 export function memorySystemForNode(node) {
   const text = semanticText(node);
   if (/\b(router|routing|route|dispatch|orchestrat)/.test(text)) return "router";
+  if (node.type === "rule" || /\b(rule|policy|must|never|required|guardrail)\b/.test(text)) return "rule";
   if (/\b(persona|personality|identity|tone|style|voice|character)\b/.test(text)) return "persona";
   if (/\b(skill|capability|trigger|workflow|procedure)\b/.test(text) || node.type === "capability") return "skill";
-  if (/\b(harness|eval|evaluation|pytest|test runner|smoke test|verification|browser automation|playwright|workflow runner)\b/.test(text)) return "harness";
-  if (node.type === "rule" || /\b(rule|policy|must|never|required)\b/.test(text)) return "rule";
+  if (/\b(harness|eval|evaluation|pytest|test runner|smoke test|verification|playwright|benchmark|browser automation|workflow runner)\b/.test(text)) return "harness";
   if (/\b(preference|prefers|user wants|style preference|interaction preference)\b/.test(text)) return "preference";
   if (node.type === "project") return "project";
   if (["event", "episode", "session", "observation"].includes(node.type) || node.layer === "episode") return "event";
@@ -544,6 +546,8 @@ function semanticText(node) {
   return [
     node.id,
     node.label,
+    node.raw?.label,
+    node.raw?.name,
     node.type,
     node.layer,
     node.raw?.content,
@@ -665,3 +669,5 @@ function inferLayer(data) {
   if (["episode", "session", "observation"].includes(data.type)) return "episode";
   return "external";
 }
+
+

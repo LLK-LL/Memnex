@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 from datetime import datetime, timezone
@@ -16,6 +17,25 @@ DEFAULT_DB = Path.home() / ".tam" / "memory.db"
 ASSET_DIR = Path(__file__).with_name("memory_graph_viewer_assets")
 DEFAULT_GALAXY_CACHE_ROOT = Path("D:/TotalAgentMemory/memory-galaxy-cache")
 GALAXY_LAYOUT_NAMESPACE = "memory-galaxy"
+VIEWER_BUNDLES = {
+    "index.html": [
+        "memory-galaxy-systems.js",
+        "memory-galaxy-core.js",
+        "memory-galaxy-events.js",
+        "memory-galaxy-layouts.js",
+        "memory-galaxy-renderer.js",
+        "memory-galaxy-view-state.js",
+        "viewer-shared.js",
+        "viewer.js",
+    ],
+    "viewer-3d.html": [
+        "memory-galaxy-systems.js",
+        "memory-galaxy-core.js",
+        "memory-galaxy-events.js",
+        "viewer-shared.js",
+        "viewer-3d.js",
+    ],
+}
 
 
 def connect_readonly(db_path: Path) -> sqlite3.Connection:
@@ -281,7 +301,114 @@ def write_graph_json(graph: dict[str, Any], output_dir: Path) -> Path:
     return path
 
 
-def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR) -> None:
+def embed_graph_data(graph: dict[str, Any], output_dir: Path) -> None:
+    payload = json.dumps(graph, ensure_ascii=False).replace("<", "\\u003c")
+    snippet = f'<script id="graph-data" type="application/json">{payload}</script>'
+    for asset in ("index.html", "viewer-3d.html"):
+        path = output_dir / asset
+        text = path.read_text(encoding="utf-8")
+        if 'id="graph-data"' in text:
+            continue
+        text, count = re.subn(
+            r"(\s*<script type=\"module\" src=\"viewer(?:-3d)?\.js[^\"]*\"></script>)",
+            lambda match: f"\n  {snippet}{match.group(1)}",
+            text,
+            count=1,
+        )
+        if count != 1:
+            raise ValueError(f"Unable to embed graph data into {path}")
+        path.write_text(text, encoding="utf-8")
+
+
+def _version_local_asset_refs(text: str, version: str) -> str:
+    def _append_version(url: str) -> str:
+        if "?v=" in url or "://" in url or url.startswith("data:"):
+            return url
+        joiner = "&" if "?" in url else "?"
+        return f"{url}{joiner}v={version}"
+
+    text = re.sub(
+        r'((?:src|href)=["\'])([^"\']+\.(?:js|css|html))(["\'])',
+        lambda match: f"{match.group(1)}{_append_version(match.group(2))}{match.group(3)}",
+        text,
+    )
+    text = re.sub(
+        r'((?:from|import)\s*["\'])(\./[^"\']+\.js)(["\'])',
+        lambda match: f"{match.group(1)}{_append_version(match.group(2))}{match.group(3)}",
+        text,
+    )
+    text = re.sub(
+        r'fetch\((["\'])graph\.json\1\)',
+        lambda match: f'fetch({match.group(1)}graph.json?v={version}{match.group(1)})',
+        text,
+    )
+    return text
+
+
+def _strip_local_imports(text: str) -> str:
+    output: list[str] = []
+    block: list[str] = []
+    in_import = False
+    for line in text.splitlines(keepends=True):
+        stripped = line.lstrip()
+        if not in_import and stripped.startswith("import "):
+            in_import = True
+            block = [line]
+            if ";" in line:
+                joined = "".join(block)
+                if 'from "./' not in joined and "from './" not in joined:
+                    output.append(joined)
+                in_import = False
+                block = []
+            continue
+        if in_import:
+            block.append(line)
+            if ";" in line:
+                joined = "".join(block)
+                if 'from "./' not in joined and "from './" not in joined:
+                    output.append(joined)
+                in_import = False
+                block = []
+            continue
+        output.append(line)
+    if in_import and block:
+        output.extend(block)
+    return "".join(output)
+
+
+def _strip_exports(text: str) -> str:
+    return re.sub(r"(?m)^export\s+", "", text)
+
+
+def _build_inline_module(asset_names: list[str], asset_dir: Path) -> str:
+    chunks: list[str] = []
+    for asset_name in asset_names:
+        text = (asset_dir / asset_name).read_text(encoding="utf-8")
+        text = _strip_local_imports(text)
+        text = _strip_exports(text)
+        chunks.append("// " + asset_name + "\n" + text.strip() + "\n")
+    return "\n".join(chunks)
+
+
+def inline_viewer_modules(output_dir: Path, asset_dir: Path = ASSET_DIR) -> None:
+    for html_name, assets in VIEWER_BUNDLES.items():
+        path = output_dir / html_name
+        text = path.read_text(encoding="utf-8")
+        entry_asset = assets[-1]
+        module_code = _build_inline_module(assets, asset_dir)
+        inline_tag = f"<script type=\"module\">\n{module_code}</script>"
+        text, count = re.subn(
+            rf"\s*<script type=\"module\" src=\"{re.escape(entry_asset)}[^\"]*\"></script>",
+            lambda _match, tag=inline_tag: "\n  " + tag,
+            text,
+            count=1,
+        )
+        if count != 1:
+            raise ValueError(f"Unable to inline module script into {path}")
+        path.write_text(text, encoding="utf-8")
+
+
+def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR, *, version: str | None = None) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     for asset in (
         "index.html",
@@ -298,6 +425,11 @@ def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR) -> None:
         "viewer-shared.js",
     ):
         shutil.copy2(asset_dir / asset, output_dir / asset)
+    if not version:
+        return
+    for asset in ("index.html", "viewer.js", "viewer-3d.html", "viewer-3d.js"):
+        path = output_dir / asset
+        path.write_text(_version_local_asset_refs(path.read_text(encoding="utf-8"), version), encoding="utf-8")
 
 
 def export_viewer(
@@ -315,8 +447,11 @@ def export_viewer(
             max_edges=max_edges,
             min_edge_weight=min_edge_weight,
         )
-    copy_assets(output_dir)
+    version = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    copy_assets(output_dir, version=version)
     write_graph_json(graph, output_dir)
+    embed_graph_data(graph, output_dir)
+    inline_viewer_modules(output_dir)
     return graph["metadata"]
 
 

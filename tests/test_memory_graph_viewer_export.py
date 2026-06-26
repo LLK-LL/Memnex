@@ -6,6 +6,7 @@ import sqlite3
 from src.tools.memory_graph_viewer_export import (
     connect_readonly,
     copy_assets,
+    inline_viewer_modules,
     load_graph,
     write_graph_json,
 )
@@ -149,6 +150,9 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     output = tmp_path / "viewer"
     graph_path = write_graph_json(graph, output)
     copy_assets(output)
+    from src.tools.memory_graph_viewer_export import embed_graph_data
+    embed_graph_data(graph, output)
+    inline_viewer_modules(output)
 
     assert json.loads(graph_path.read_text(encoding="utf-8")) == graph
     assert (output / "index.html").exists()
@@ -163,3 +167,11 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     assert (output / "memory-galaxy-renderer.js").exists()
     assert (output / "memory-galaxy-view-state.js").exists()
     assert (output / "viewer-shared.js").exists()
+    index_html = (output / "index.html").read_text(encoding="utf-8")
+    viewer_3d_html = (output / "viewer-3d.html").read_text(encoding="utf-8")
+    assert 'id="graph-data"' in index_html
+    assert 'id="graph-data"' in viewer_3d_html
+    assert 'src="viewer.js"' not in index_html
+    assert 'src="viewer-3d.js"' not in viewer_3d_html
+    assert "type=\"module\">" in index_html
+    assert "type=\"module\">" in viewer_3d_html

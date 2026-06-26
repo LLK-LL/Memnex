@@ -41,11 +41,24 @@ let pointerMoved = false;
 let lastPointer = { x: 0, y: 0 };
 let rotation = { x: -0.28, y: 0.42 };
 
+function loadEmbeddedGraph() {
+  const el = document.getElementById("graph-data");
+  if (!el?.textContent) return null;
+  return JSON.parse(el.textContent);
+}
+
+async function loadGraph() {
+  const embedded = loadEmbeddedGraph();
+  if (embedded) return embedded;
+  const response = await fetch("graph.json");
+  if (!response.ok) throw new Error(`graph.json load failed: ${response.status}`);
+  return response.json();
+}
+
 async function init() {
   raycaster = new THREE.Raycaster();
   pointer = new THREE.Vector2();
-  const response = await fetch("graph.json");
-  const graph = await response.json();
+  const graph = await loadGraph();
   originalGraph = convertGraphToGalaxy(graph);
   activeTypes = new Set(Object.keys(graph.metadata.type_counts));
   renderTypeFilters(graph.metadata.type_counts);

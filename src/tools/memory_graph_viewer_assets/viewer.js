@@ -2,7 +2,8 @@ import { convertGraphToGalaxy, filterGalaxy } from "./memory-galaxy-core.js";
 import { createInteractionLog, createMemoryGalaxyEvent, suggestAgentPrompt } from "./memory-galaxy-events.js";
 import { buildCometOverlayLayout, buildGalaxyOverviewLayout, buildPlanetSatelliteLayout, buildSolarSystemLayout } from "./memory-galaxy-layouts.js";
 import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js";
-import { createGalaxyViewState, enterGalaxyView, enterPlanetView, enterSolarView, goBackView } from "./memory-galaxy-view-state.js";
+import { memorySystemForData } from "./memory-galaxy-systems.js";
+import { createGalaxyViewState, enterGalaxyView, enterPlanetView, enterSolarView, goBackView, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
 import { escapeHtml, formatNodeDetails, renderPromptText, timelineCutoffFromPercent } from "./viewer-shared.js";
 
 const viewName = "2d-memory-galaxy";
@@ -19,11 +20,42 @@ let activeTypes = new Set();
 let activeLayers = new Set(["core", "active", "knowledge", "episode", "external"]);
 let renderTimer = null;
 let lastSystemTap = { key: null, time: 0 };
+let lastPlanetTap = { id: null, time: 0 };
+window.__memoryGalaxyDebug = {
+  getState: () => ({
+    view: state.view,
+    selectedSystem: state.selectedSystem,
+    selectedPlanet: state.selectedPlanet,
+    selectedNodeId: state.selectedNodeId,
+    animationSpeed: state.animationSpeed,
+  }),
+  getLayout: () => currentLayout,
+  getTransform: () => renderer?.getTransform?.() || null,
+  getGraphSummary: () => ({
+    original: summarizeSystems(originalGraph.nodes),
+    filtered: summarizeSystems(filteredGraph.nodes),
+    layout: summarizeSystems(currentLayout?.nodes || []),
+    systems: (currentLayout?.systems || []).map(system => system.key),
+  }),
+};
+
+function loadEmbeddedGraph() {
+  const el = document.getElementById("graph-data");
+  if (!el?.textContent) return null;
+  return JSON.parse(el.textContent);
+}
+
+async function loadGraph() {
+  const embedded = loadEmbeddedGraph();
+  if (embedded) return embedded;
+  const response = await fetch("graph.json");
+  if (!response.ok) throw new Error(`graph.json load failed: ${response.status}`);
+  return response.json();
+}
 
 async function init() {
   if (!window.PIXI) throw new Error("PixiJS failed to load from CDN.");
-  const response = await fetch("graph.json");
-  const graph = await response.json();
+  const graph = await loadGraph();
   originalGraph = convertGraphToGalaxy(graph);
   activeTypes = new Set(Object.keys(graph.metadata.type_counts || {}));
   renderTypeFilters(graph.metadata.type_counts || {});
@@ -46,6 +78,7 @@ async function createPixi() {
   });
   container.appendChild(app.canvas);
   renderer = createMemoryGalaxyRenderer({ PIXI: window.PIXI, app, stage: app.stage });
+  app.canvas.addEventListener("dblclick", handleCanvasDoubleClick);
   window.addEventListener("resize", () => {
     if (currentLayout) requestAnimationFrame(() => renderer.fitToBounds(currentLayout.bounds));
   });
@@ -75,6 +108,10 @@ function bindControls() {
     state.nodeScale = Number(event.target.value);
     document.getElementById("nodeScaleValue").textContent = state.nodeScale.toFixed(2);
     drawCurrentLayout();
+  });
+  document.getElementById("animationSpeed")?.addEventListener("input", event => {
+    state.animationSpeed = Number(event.target.value);
+    document.getElementById("animationSpeedValue").textContent = `${state.animationSpeed.toFixed(2)}x`;
   });
   document.getElementById("relationshipMode")?.addEventListener("change", event => {
     state.relationshipMode = event.target.value;
@@ -110,13 +147,14 @@ function applyFilters() {
     timelineCutoff,
   });
   if (filteredGraph.nodes.length > focusLimit) {
+    const visibleNodes = capNodesBySystem(filteredGraph.nodes, focusLimit);
+    const visible = new Set(visibleNodes.map(node => node.id));
     filteredGraph = {
       ...filteredGraph,
-      nodes: filteredGraph.nodes.slice(0, focusLimit),
-      links: filteredGraph.links.filter(link => {
-        const visible = new Set(filteredGraph.nodes.slice(0, focusLimit).map(node => node.id));
-        return visible.has(String(link.source.id || link.source)) && visible.has(String(link.target.id || link.target));
-      }),
+      nodes: visibleNodes,
+      links: filteredGraph.links.filter(link =>
+        visible.has(String(link.source.id || link.source)) && visible.has(String(link.target.id || link.target))
+      ),
     };
   }
   drawCurrentLayout();
@@ -127,21 +165,65 @@ function applyFilters() {
   emitEvent("view:filtered", null, { visible_nodes: filteredGraph.nodes.length });
 }
 
+function capNodesBySystem(nodes, limit) {
+  const selected = [];
+  const selectedIds = new Set();
+  const sorted = [...nodes].sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
+  const systems = [...new Set(sorted.map(node => visibleNodeSystem(node)).filter(Boolean))];
+
+  for (const system of systems) {
+    const representative = sorted.find(node => visibleNodeSystem(node) === system && !selectedIds.has(node.id));
+    if (!representative) continue;
+    selected.push(representative);
+    selectedIds.add(representative.id);
+    if (selected.length >= limit) return selected;
+  }
+
+  for (const node of sorted) {
+    if (selectedIds.has(node.id)) continue;
+    selected.push(node);
+    selectedIds.add(node.id);
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
+function visibleNodeSystem(node) {
+  return node.memorySystem || memorySystemForData(node.raw || node);
+}
+
+function scoreVisibleNode(node) {
+  const raw = node.raw || {};
+  const layerScore = { core: 80, active: 50, knowledge: 25, episode: 10, external: 6 }[node.layer] || 0;
+  return layerScore
+    + Number(raw.importance || 0) * 10
+    + Number(raw.activity || 0) * 5
+    + Math.log1p(Number(raw.mention_count || 0)) * 3;
+}
+
+function summarizeSystems(nodes) {
+  return (nodes || []).reduce((acc, node) => {
+    const system = visibleNodeSystem(node);
+    acc[system] = (acc[system] || 0) + 1;
+    return acc;
+  }, {});
+}
+
 function drawCurrentLayout() {
   if (!renderer || !app) return;
   currentLayout = buildActiveLayout();
   renderer.draw(currentLayout, state, {
-    onSystemClick: system => {
-      if (state.view !== "galaxy" || system.key === "router") return;
-      const now = Date.now();
-      const doubleTap = lastSystemTap.key === system.key && now - lastSystemTap.time < 420;
-      lastSystemTap = { key: system.key, time: now };
-      state.selectedSystem = system.key;
-      state.selectedNodeId = null;
+    onSystemClick: (system, event) => {
+      const result = selectGalaxySystem(state, system.key, {
+        lastSystemTap,
+        now: Date.now(),
+        forceEnter: clickCount(event) >= 2,
+      });
+      lastSystemTap = result.lastSystemTap;
       showSystemDetails(system);
       emitEvent("system:selected", null, { system: system.key });
-      if (doubleTap) enterSolarView(state, system.key);
       drawCurrentLayout();
+      if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
     },
     onSystemHover: system => {
       if (state.view !== "galaxy") return;
@@ -156,12 +238,44 @@ function drawCurrentLayout() {
       showDetails(node);
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
     },
-    onNodeTap: node => {
+    onNodeTap: (node, event) => {
+      if (state.view === "galaxy") {
+        const systemKey = node.systemKey || (node.memorySystem && node.memorySystem !== "router" ? node.memorySystem : null);
+        const system = systemKey ? currentLayout?.systems?.find(item => item.key === systemKey) : null;
+        if (system) {
+          const result = selectGalaxySystem(state, system.key, {
+            lastSystemTap,
+            now: Date.now(),
+            forceEnter: clickCount(event) >= 2,
+          });
+          lastSystemTap = result.lastSystemTap;
+          state.selectedNodeId = node.id;
+          showSystemDetails(system);
+          emitEvent("system:selected", null, { system: system.key });
+          drawCurrentLayout();
+          if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+          return;
+        }
+      }
+      if (state.view === "solar") {
+        const planetNode = resolveSolarPlanetNode(currentLayout, node);
+        if (planetNode) {
+          const result = selectSolarPlanet(state, planetNode.id, {
+            lastPlanetTap,
+            now: Date.now(),
+            forceEnter: clickCount(event) >= 2,
+          });
+          lastPlanetTap = result.lastPlanetTap;
+          state.selectedNodeId = planetNode.id;
+          showDetails(planetNode);
+          emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
+          drawCurrentLayout();
+          if (clickCount(event) < 2) renderer.focusOn(planetNode.x, planetNode.y, 1.06);
+          return;
+        }
+      }
       state.selectedNodeId = node.id;
       showDetails(node);
-      if (state.view === "solar" && (node.orbitRole === "planet" || String(node.orbitalRole || "").includes("planet"))) {
-        enterPlanetView(state, node.id);
-      }
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
       drawCurrentLayout();
     },
@@ -243,6 +357,91 @@ function renderTypeFilters(typeCounts) {
     label.innerHTML = `<input type="checkbox" data-type="${escapeHtml(type)}" checked><span><span class="pill">${escapeHtml(type)}</span>${count}</span>`;
     root.appendChild(label);
   });
+}
+
+function clickCount(event) {
+  return Number(
+    event?.detail
+    ?? event?.nativeEvent?.detail
+    ?? event?.originalEvent?.detail
+    ?? 0,
+  );
+}
+
+function handleCanvasDoubleClick(event) {
+  if (!renderer || !currentLayout) return;
+  const point = screenToWorldPoint(event);
+  if (!point) return;
+
+  if (state.view === "galaxy") {
+    const system = (state.selectedSystem
+      ? currentLayout?.systems?.find(item => item.key === state.selectedSystem)
+      : null) || findGalaxySystemAt(point.x, point.y, currentLayout);
+    if (!system) return;
+    const result = selectGalaxySystem(state, system.key, {
+      lastSystemTap,
+      now: Date.now(),
+      forceEnter: true,
+    });
+    lastSystemTap = result.lastSystemTap;
+    showSystemDetails(system);
+    emitEvent("system:selected", null, { system: system.key });
+    drawCurrentLayout();
+    return;
+  }
+
+  if (state.view === "solar") {
+    const selectedNode = state.selectedNodeId
+      ? currentLayout?.nodes?.find(node => node.id === state.selectedNodeId)
+      : null;
+    const planetNode = resolveSolarPlanetNode(currentLayout, selectedNode) || findSolarPlanetAt(point.x, point.y, currentLayout);
+    if (!planetNode) return;
+    const result = selectSolarPlanet(state, planetNode.id, {
+      lastPlanetTap,
+      now: Date.now(),
+      forceEnter: true,
+    });
+    lastPlanetTap = result.lastPlanetTap;
+    state.selectedNodeId = planetNode.id;
+    showDetails(planetNode);
+    emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
+    drawCurrentLayout();
+  }
+}
+
+function screenToWorldPoint(event) {
+  const canvas = app?.canvas;
+  const transform = renderer?.getTransform?.();
+  if (!canvas || !transform) return null;
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (event.clientX - rect.left - transform.pan.x) / transform.scale,
+    y: (event.clientY - rect.top - transform.pan.y) / transform.scale,
+  };
+}
+
+function findGalaxySystemAt(x, y, layout) {
+  return (layout?.systems || []).find(system => {
+    if (system.key === "router") return false;
+    return Math.hypot(x - system.x, y - system.y) <= Math.max(26, (system.radius || 60) * 0.72);
+  }) || null;
+}
+
+function findSolarPlanetAt(x, y, layout) {
+  const satelliteSystemByParent = new Map((layout?.satelliteSystems || []).map(system => [system.parentId, system]));
+  return (layout?.nodes || []).find(node => {
+    if (node.orbitalRole !== "planet") return false;
+    const system = satelliteSystemByParent.get(node.id);
+    const radius = Math.max(18, (system?.radius || 0) + 12, (node.renderRadius || 0) + 10);
+    return Math.hypot(x - node.x, y - node.y) <= radius;
+  }) || null;
+}
+
+function resolveSolarPlanetNode(layout, node) {
+  if (!layout || !node) return null;
+  if (node.orbitalRole === "planet") return node;
+  if (!node.parentPlanetId) return null;
+  return layout.nodes.find(item => item.id === node.parentPlanetId) || null;
 }
 
 function renderLayerFilters() {

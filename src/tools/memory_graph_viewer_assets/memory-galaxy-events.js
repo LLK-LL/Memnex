@@ -1,4 +1,5 @@
 const allowedEventTypes = new Set([
+  "system:selected",
   "node:selected",
   "node:hovered",
   "node:drag-started",

@@ -103,7 +103,7 @@ const {
 
 const layoutsHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-layouts.js");
 const layoutsHelperSource = readFileSync(layoutsHelperPath, "utf8")
-  .replace(/import[\s\S]*?from ".\/memory-galaxy-systems\.js";\n/, "")
+  .replace(/^import[\s\S]*?from\s+"\.\/memory-galaxy-systems\.js";\r?\n/, "")
   .replaceAll("export function ", "function ");
 const layoutsContext = {
   exports: {},
@@ -128,6 +128,30 @@ const {
   buildPlanetSatelliteLayout,
   buildCometOverlayLayout,
 } = layoutsContext.exports;
+
+const viewStateHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-view-state.js");
+const viewStateHelperSource = readFileSync(viewStateHelperPath, "utf8").replaceAll("export function ", "function ");
+const viewStateContext = { exports: {} };
+vm.runInNewContext(
+  `${viewStateHelperSource}
+exports.createGalaxyViewState = createGalaxyViewState;
+exports.selectGalaxySystem = selectGalaxySystem;
+exports.selectSolarPlanet = selectSolarPlanet;`,
+  viewStateContext,
+  { filename: viewStateHelperPath },
+);
+const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet } = viewStateContext.exports;
+
+const rendererHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-renderer.js");
+const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll("export function ", "function ");
+const rendererContext = { exports: {} };
+vm.runInNewContext(
+  `${rendererHelperSource}
+exports.advanceGalaxyAnimationNodes = advanceGalaxyAnimationNodes;`,
+  rendererContext,
+  { filename: rendererHelperPath },
+);
+const { advanceGalaxyAnimationNodes } = rendererContext.exports;
 
 const fixture = {
   metadata: {
@@ -382,6 +406,8 @@ assert.equal(finalOverview.view, "galaxy");
 assert.ok(finalOverview.systems.some(system => system.key === "router"));
 assert.ok(finalOverview.systems.some(system => system.key === "skill"));
 assert.ok(finalOverview.systems.every(system => system.key === "router" || system.miniOrbits.length >= 2));
+assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => system.animation && Number(system.animation.orbitRadiusX) > 0));
+assert.ok(finalOverview.nodes.some(node => node.id === "system:skill" && node.isSystemNode === true && node.systemKey === "skill"));
 assert.ok(finalOverview.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
 assert.ok(finalOverview.nodes.every(node => node.renderRadius <= 28));
 assert.ok(finalOverview.bounds.width > 0);
@@ -397,15 +423,26 @@ for (let i = 0; i < finalOverview.nodes.length; i += 1) {
 const skillSolar = buildSolarSystemLayout(orbitalGalaxy, "skill", { nodeScale: 0.48, width: 1400, height: 900 });
 assert.equal(skillSolar.view, "solar");
 assert.equal(skillSolar.systemKey, "skill");
-assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "category"));
 assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "planet"));
-assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "moon"));
-assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "evidence"));
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "central-star"));
 assert.ok(skillSolar.satelliteSystems.length >= 1);
 assert.ok(skillSolar.satelliteSystems.every(system => system.parentId && system.orbits.some(orbit => orbit.kind === "satellite")));
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "satellite"));
 assert.ok(skillSolar.nodes.every(node => node.animation && Number.isFinite(node.animation.orbitSpeed) && Number.isFinite(node.animation.spinSpeed)));
+assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "satellite" && node.animation.parentNodeId));
+assert.ok(skillSolar.orbits.every(orbit => Number(orbit.aspect || 1) > 0 && Number(orbit.aspect || 1) <= 1));
+assert.ok(skillSolar.satelliteSystems.every(system => Number(system.aspect || 1) > 0 && Number(system.aspect || 1) <= 1));
+assert.ok(skillSolar.satelliteSystems.every(system => system.orbits.every(orbit => Number(orbit.aspect || 1) > 0 && Number(orbit.aspect || 1) <= 1)));
+assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => Math.abs(node.animation.orbitRadiusX - Math.hypot(node.animation.orbitRadiusX, 0)) < 0.0001));
+assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => node.animation.orbitRadiusX >= 200 && node.animation.orbitRadiusY < node.animation.orbitRadiusX));
+assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "planet" && node.childCount > 0));
+assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").length >= 2);
+assert.ok(skillSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
+{
+  const visibleIds = new Set(skillSolar.nodes.map(node => String(node.id)));
+  assert.ok(skillSolar.links.length < orbitalGalaxy.links.length);
+  assert.ok(skillSolar.links.every(link => visibleIds.has(String(link.source?.id || link.source)) && visibleIds.has(String(link.target?.id || link.target))));
+}
 
 const skillPlanet = buildPlanetSatelliteLayout(orbitalGalaxy, "skill", "skill", { nodeScale: 0.5, width: 1200, height: 800 });
 assert.equal(skillPlanet.view, "planet");
@@ -414,6 +451,77 @@ assert.equal(skillPlanet.planetId, "skill");
 assert.ok(skillPlanet.orbits.some(orbit => orbit.kind === "direct-moon"));
 assert.ok(skillPlanet.orbits.some(orbit => orbit.kind === "evidence"));
 assert.ok(skillPlanet.nodes.some(node => node.orbitalRole === "central-planet"));
+assert.ok(skillPlanet.orbits.every(orbit => Number(orbit.aspect || 1) > 0 && Number(orbit.aspect || 1) < 1));
+assert.ok(skillPlanet.nodes.filter(node => node.orbitalRole !== "central-planet").every(node => node.animation.orbitRadiusY < node.animation.orbitRadiusX));
+assert.ok(skillPlanet.nodes.filter(node => node.orbitalRole !== "central-planet").some(node => Number(node.animation.orbitSpeed || 0) !== 0 && Number(node.animation.spinSpeed || 0) !== 0));
+{
+  const orbiting = skillPlanet.nodes.filter(node => node.orbitalRole !== "central-planet");
+  const angles = orbiting.map(node => Math.round(Math.atan2(node.y, node.x) * 100) / 100);
+  assert.ok(new Set(angles).size > 2);
+}
+
+const crowdedSolarFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "router-crowded", label: "Router Crowded", type: "pattern", content: "routing dispatch", mention_count: 50, importance: 2, galaxy_layer: "core", knowledge: [] } },
+      { data: { id: "skill-hub", label: "Skill Hub", type: "capability", content: "skill workflow trigger", mention_count: 20, importance: 1.3, galaxy_layer: "active", knowledge: [] } },
+      ...Array.from({ length: 8 }, (_, index) => ({
+        data: {
+          id: `skill-child-${index}`,
+          label: `skill child ${index}`,
+          type: "concept",
+          content: "skill child concept",
+          mention_count: 6 - Math.min(index, 5),
+          importance: 0.6,
+          galaxy_layer: "knowledge",
+          knowledge: [],
+        },
+      })),
+    ],
+    edges: [
+      { data: { id: "crowded-route", source: "router-crowded", target: "skill-hub", relation: "routes", weight: 10 } },
+      ...Array.from({ length: 8 }, (_, index) => ({
+        data: { id: `crowded-edge-${index}`, source: "skill-hub", target: `skill-child-${index}`, relation: "related", weight: 8 - index * 0.2 },
+      })),
+    ],
+  },
+};
+const crowdedSolar = buildSolarSystemLayout(convertGraphToGalaxy(crowdedSolarFixture), "skill", { nodeScale: 0.48, width: 1200, height: 800 });
+assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.length <= 3));
+assert.ok(crowdedSolar.nodes.filter(node => node.orbitalRole === "planet").length >= 3);
+assert.ok(crowdedSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => Number(node.childCount || 0) <= 3));
+assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.every(node => {
+  const distance = Math.hypot(node.x - system.x, node.y - system.y);
+  return distance > 0;
+})));
+assert.ok(crowdedSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
+
+const influenceSolarFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "router-inf", label: "Router Influence", type: "pattern", content: "routing dispatch", mention_count: 90, importance: 2, galaxy_layer: "core", knowledge: [] } },
+      { data: { id: "skill-high", label: "High impact skill", type: "capability", content: "skill workflow trigger", mention_count: 40, importance: 1.4, galaxy_layer: "active", knowledge: [] } },
+      { data: { id: "skill-mid", label: "Mid impact skill", type: "concept", content: "skill context", mention_count: 12, importance: 0.9, galaxy_layer: "knowledge", knowledge: [] } },
+      { data: { id: "skill-low", label: "Low impact skill", type: "concept", content: "skill context", mention_count: 2, importance: 0.2, galaxy_layer: "knowledge", knowledge: [] } },
+      { data: { id: "skill-low-2", label: "Low impact skill 2", type: "concept", content: "skill context", mention_count: 1, importance: 0.1, galaxy_layer: "knowledge", knowledge: [] } },
+    ],
+    edges: [
+      { data: { id: "inf-route", source: "router-inf", target: "skill-high", relation: "routes", weight: 10 } },
+      { data: { id: "inf-mid", source: "skill-high", target: "skill-mid", relation: "related", weight: 7 } },
+      { data: { id: "inf-low", source: "skill-high", target: "skill-low", relation: "related", weight: 4 } },
+      { data: { id: "inf-low-2", source: "skill-mid", target: "skill-low-2", relation: "related", weight: 3 } },
+    ],
+  },
+};
+const influenceSolar = buildSolarSystemLayout(convertGraphToGalaxy(influenceSolarFixture), "skill", { nodeScale: 0.48, width: 1200, height: 800 });
+const influencePlanets = influenceSolar.nodes.filter(node => node.orbitalRole === "planet");
+const highPlanet = influencePlanets.find(node => node.id === "skill-high");
+const lowPlanet = influenceSolar.nodes.find(node => node.id === "skill-low" || node.id === "skill-low-2");
+assert.ok(highPlanet);
+assert.ok(lowPlanet);
+assert.ok(highPlanet.renderRadius >= lowPlanet.renderRadius);
 
 const cometOverlay = buildCometOverlayLayout(finalOverview, [{
   id: "comet:test",
@@ -431,6 +539,7 @@ const cometOverlay = buildCometOverlayLayout(finalOverview, [{
 assert.equal(cometOverlay.comets.length, 2);
 assert.ok(cometOverlay.comets[0].influences.some(item => item.system === "skill" && item.weight > 0.9));
 assert.ok(cometOverlay.comets[0].tail.length >= 2);
+assert.ok(Array.isArray(cometOverlay.comets[0].trailHistory));
 for (const comet of cometOverlay.comets) {
   assert.ok(Number.isFinite(comet.head.x));
   assert.ok(Number.isFinite(comet.head.y));
@@ -439,6 +548,148 @@ for (const comet of cometOverlay.comets) {
     assert.ok(Math.hypot(comet.head.x - influence.x, comet.head.y - influence.y) > influence.radius + comet.hitRadius);
   }
 }
+
+const galaxyClickState = createGalaxyViewState();
+let systemTap = { key: null, time: 0 };
+const firstTap = selectGalaxySystem(galaxyClickState, "skill", {
+  now: 1000,
+  lastSystemTap: systemTap,
+  doubleTapMs: 420,
+});
+systemTap = firstTap.lastSystemTap;
+assert.equal(firstTap.enteredSolar, false);
+assert.equal(galaxyClickState.view, "galaxy");
+const secondTap = selectGalaxySystem(galaxyClickState, "skill", {
+  now: 1200,
+  lastSystemTap: systemTap,
+  doubleTapMs: 420,
+});
+assert.equal(secondTap.enteredSolar, true);
+assert.equal(galaxyClickState.view, "solar");
+
+const forcedTapState = createGalaxyViewState();
+const forcedTap = selectGalaxySystem(forcedTapState, "skill", {
+  now: 1000,
+  lastSystemTap: { key: null, time: 0 },
+  forceEnter: true,
+});
+assert.equal(forcedTap.enteredSolar, true);
+assert.equal(forcedTapState.view, "solar");
+
+const solarClickState = createGalaxyViewState();
+solarClickState.view = "solar";
+solarClickState.selectedSystem = "skill";
+let planetTap = { id: null, time: 0 };
+const firstPlanetTap = selectSolarPlanet(solarClickState, "planet-1", {
+  now: 2000,
+  lastPlanetTap: planetTap,
+  doubleTapMs: 420,
+});
+planetTap = firstPlanetTap.lastPlanetTap;
+assert.equal(firstPlanetTap.enteredPlanet, false);
+assert.equal(solarClickState.view, "solar");
+const forcedPlanetTap = selectSolarPlanet(solarClickState, "planet-1", {
+  now: 2200,
+  lastPlanetTap: planetTap,
+  forceEnter: true,
+});
+assert.equal(forcedPlanetTap.enteredPlanet, true);
+assert.equal(solarClickState.view, "planet");
+
+const animatedLayout = {
+  systems: [{
+    key: "skill",
+    x: 10,
+    y: 0,
+    animation: {
+      orbitCenterX: 0,
+      orbitCenterY: 0,
+      orbitRadiusX: 10,
+      orbitRadiusY: 10,
+      orbitAngle: 0,
+      orbitSpeed: Math.PI / 2,
+    },
+  }],
+  nodes: [{
+    id: "system:skill",
+    isSystemNode: true,
+    systemKey: "skill",
+    x: 10,
+    y: 0,
+    animation: {
+      orbitCenterX: 10,
+      orbitCenterY: 0,
+      orbitRadiusX: 0,
+      orbitRadiusY: 0,
+      orbitAngle: 0,
+      orbitSpeed: 0,
+      spinSpeed: 0,
+    },
+  }, {
+    id: "planet:skill",
+    x: 8,
+    y: 0,
+    animation: {
+      orbitCenterX: 0,
+      orbitCenterY: 0,
+      orbitRadiusX: 8,
+      orbitRadiusY: 8,
+      orbitAngle: 0,
+      orbitSpeed: Math.PI / 2,
+      spinSpeed: 0,
+    },
+  }, {
+    id: "satellite:skill:0",
+    x: 10,
+    y: 0,
+    animation: {
+      orbitCenterX: 8,
+      orbitCenterY: 0,
+      orbitRadiusX: 2,
+      orbitRadiusY: 2,
+      orbitAngle: 0,
+      orbitSpeed: Math.PI / 2,
+      spinSpeed: 0,
+      parentNodeId: "planet:skill",
+    },
+  }],
+  satelliteSystems: [{
+    parentId: "planet:skill",
+    x: 8,
+    y: 0,
+    radius: 2,
+    orbits: [{ kind: "satellite", radius: 2 }],
+  }],
+  comets: [{
+    head: { x: 100, y: 0 },
+    tail: [],
+    trailHistory: [{ x: 90, y: 0, alpha: 0.72 }],
+    path: [{ x: 100, y: 0 }, { x: 0, y: 100 }],
+    animation: { pathProgress: 0, pathSpeed: 1 },
+  }],
+};
+assert.equal(advanceGalaxyAnimationNodes(animatedLayout, 1, new Map(), 1), true);
+assert.ok(Math.abs(animatedLayout.systems[0].x) < 0.0001);
+assert.ok(Math.abs(animatedLayout.systems[0].y - 10) < 0.0001);
+assert.ok(Math.abs(animatedLayout.nodes[0].x - animatedLayout.systems[0].x) < 0.0001);
+assert.ok(Math.abs(animatedLayout.nodes[1].x) < 0.0001);
+assert.ok(Math.abs(animatedLayout.nodes[1].y - 8) < 0.0001);
+assert.ok(Math.abs(animatedLayout.nodes[2].x - animatedLayout.nodes[1].x) < 2.0001);
+assert.ok(Math.abs(animatedLayout.nodes[2].y - (animatedLayout.nodes[1].y + 2)) < 0.0001);
+assert.ok(Math.abs(animatedLayout.satelliteSystems[0].x - animatedLayout.nodes[1].x) < 0.0001);
+assert.ok(Math.abs(animatedLayout.satelliteSystems[0].y - animatedLayout.nodes[1].y) < 0.0001);
+assert.ok(animatedLayout.comets[0].trailHistory[0].alpha < 0.72);
+const stationaryLayout = JSON.parse(JSON.stringify(animatedLayout));
+advanceGalaxyAnimationNodes(stationaryLayout, 1, new Map(), 0);
+assert.equal(stationaryLayout.systems[0].x, animatedLayout.systems[0].x);
+assert.equal(stationaryLayout.systems[0].y, animatedLayout.systems[0].y);
+assert.equal(stationaryLayout.nodes[1].x, animatedLayout.nodes[1].x);
+assert.equal(stationaryLayout.nodes[1].y, animatedLayout.nodes[1].y);
+const animatedSystemNode = {
+  ...animatedLayout.nodes[0],
+  labelAnchor: { x: 40, y: 0, align: "left" },
+};
+assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
 
 const denseOverviewFixture = {
   metadata: { type_counts: {}, timeline: {} },
