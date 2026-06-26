@@ -313,7 +313,9 @@ button:hover,
 }
 
 .filter-card {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: initial;
   padding: 8px 10px;
   background: rgba(13, 21, 34, 0.9);
   border: 1px solid var(--line-soft);
@@ -332,6 +334,8 @@ button:hover,
 .filter-card span:last-child {
   color: var(--text-2);
   flex: 0 0 auto;
+  padding-left: 8px;
+  text-align: right;
 }
 
 .filter-card input {
@@ -369,15 +373,18 @@ button:hover,
 }
 
 .segmented-control button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 34px;
   min-width: 0;
-  padding: 8px 4px;
+  padding: 8px 2px;
   border-radius: 0;
   border: 0;
   border-right: 1px solid var(--line-soft);
   background: rgba(13, 21, 34, 0.92);
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
