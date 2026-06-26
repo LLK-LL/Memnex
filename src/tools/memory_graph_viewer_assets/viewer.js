@@ -1,15 +1,21 @@
-import { convertGraphToGalaxy, filterGalaxy } from "./memory-galaxy-core.js";
+import { convertGraphToGalaxy, filterGalaxy, groupNeighborRelations } from "./memory-galaxy-core.js";
 import { createInteractionLog, createMemoryGalaxyEvent, suggestAgentPrompt } from "./memory-galaxy-events.js";
 import { buildCometOverlayLayout, buildGalaxyOverviewLayout, buildPlanetSatelliteLayout, buildSolarSystemLayout } from "./memory-galaxy-layouts.js";
 import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js";
-import { memorySystemForData } from "./memory-galaxy-systems.js";
-import { createGalaxyViewState, enterGalaxyView, enterPlanetView, enterSolarView, goBackView, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
-import { escapeHtml, formatNodeDetails, renderPromptText, timelineCutoffFromPercent } from "./viewer-shared.js";
+import { memorySystemForData, systemColors } from "./memory-galaxy-systems.js";
+import { createGalaxyViewState, enterGalaxyView, goBackView, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
+import { copyableInline, escapeHtml, formatNodeDetails, renderInspectorList, renderMetricGrid, renderPromptText, renderTag, timelineCutoffFromPercent } from "./viewer-shared.js";
 
 const viewName = "2d-memory-galaxy";
 const focusLimit = 900;
 const interactionLog = createInteractionLog();
 const state = createGalaxyViewState();
+
+state.relationshipMode = "all";
+state.labelMode = "medium";
+state.showComets = false;
+state.showOrbitGuides = true;
+state.motionEnabled = true;
 
 let app;
 let renderer;
@@ -21,6 +27,8 @@ let activeLayers = new Set(["core", "active", "knowledge", "episode", "external"
 let renderTimer = null;
 let lastSystemTap = { key: null, time: 0 };
 let lastPlanetTap = { id: null, time: 0 };
+let shouldAutoFit = true;
+
 window.__memoryGalaxyDebug = {
   getState: () => ({
     view: state.view,
@@ -31,12 +39,6 @@ window.__memoryGalaxyDebug = {
   }),
   getLayout: () => currentLayout,
   getTransform: () => renderer?.getTransform?.() || null,
-  getGraphSummary: () => ({
-    original: summarizeSystems(originalGraph.nodes),
-    filtered: summarizeSystems(filteredGraph.nodes),
-    layout: summarizeSystems(currentLayout?.nodes || []),
-    systems: (currentLayout?.systems || []).map(system => system.key),
-  }),
 };
 
 function loadEmbeddedGraph() {
@@ -61,6 +63,7 @@ async function init() {
   renderTypeFilters(graph.metadata.type_counts || {});
   renderLayerFilters();
   renderStats(graph.metadata);
+  renderOrbitLegend();
   await createPixi();
   bindControls();
   applyFilters();
@@ -87,7 +90,7 @@ async function createPixi() {
 function bindControls() {
   document.getElementById("search")?.addEventListener("input", scheduleApplyFilters);
   document.getElementById("weightFilter")?.addEventListener("input", event => {
-    document.getElementById("weightValue").textContent = event.target.value;
+    document.getElementById("weightValue").textContent = Number(event.target.value).toFixed(1);
     scheduleApplyFilters();
   });
   document.getElementById("timelineFilter")?.addEventListener("input", scheduleApplyFilters);
@@ -103,32 +106,108 @@ function bindControls() {
     else activeLayers.delete(event.target.dataset.layer);
     scheduleApplyFilters();
   });
-  document.getElementById("labelMode")?.addEventListener("change", drawCurrentLayout);
+  document.getElementById("selectAllTypes")?.addEventListener("click", () => {
+    activeTypes = new Set(Object.keys(originalGraph.metadata.type_counts || {}));
+    for (const input of document.querySelectorAll("#typeFilters input[type='checkbox']")) input.checked = true;
+    scheduleApplyFilters();
+  });
+
+  bindSegmentedControl("relationModeButtons", "relationshipMode", value => {
+    state.relationshipMode = value;
+    drawCurrentLayout({ preserveView: true });
+  });
+  bindSegmentedControl("labelModeButtons", "labelMode", value => {
+    state.labelMode = value;
+    drawCurrentLayout({ preserveView: true });
+  });
+
   document.getElementById("nodeScale")?.addEventListener("input", event => {
-    state.nodeScale = Number(event.target.value);
-    document.getElementById("nodeScaleValue").textContent = state.nodeScale.toFixed(2);
+    const uiValue = Number(event.target.value);
+    state.nodeScale = 0.48 * uiValue;
+    document.getElementById("nodeScaleValue").textContent = uiValue.toFixed(2);
+    shouldAutoFit = true;
     drawCurrentLayout();
   });
+
   document.getElementById("animationSpeed")?.addEventListener("input", event => {
     state.animationSpeed = Number(event.target.value);
     document.getElementById("animationSpeedValue").textContent = `${state.animationSpeed.toFixed(2)}x`;
   });
-  document.getElementById("relationshipMode")?.addEventListener("change", event => {
-    state.relationshipMode = event.target.value;
-    drawCurrentLayout();
+
+  document.getElementById("motionToggle")?.addEventListener("change", event => {
+    state.motionEnabled = event.target.checked;
+    state.animationSpeed = state.motionEnabled ? 1 : 0;
+    document.getElementById("animationSpeed").value = String(state.animationSpeed);
+    document.getElementById("animationSpeedValue").textContent = `${state.animationSpeed.toFixed(2)}x`;
   });
-  document.getElementById("fit")?.addEventListener("click", () => {
-    if (currentLayout) renderer.fitToBounds(currentLayout.bounds);
+
+  document.getElementById("cometsToggle")?.addEventListener("change", event => {
+    state.showComets = event.target.checked;
+    drawCurrentLayout({ preserveView: true });
   });
+
+  document.getElementById("orbitGuidesToggle")?.addEventListener("change", event => {
+    state.showOrbitGuides = event.target.checked;
+    drawCurrentLayout({ preserveView: true });
+  });
+
+  const fit = () => {
+    shouldAutoFit = true;
+    if (currentLayout) drawCurrentLayout();
+  };
+  document.getElementById("fit")?.addEventListener("click", fit);
+  document.getElementById("fitTop")?.addEventListener("click", fit);
+
   document.getElementById("clearFocus")?.addEventListener("click", () => {
     enterGalaxyView(state);
     state.selectedNodeId = null;
+    shouldAutoFit = true;
     drawCurrentLayout();
   });
-  document.getElementById("focusView")?.addEventListener("click", drawCurrentLayout);
+
   document.getElementById("backView")?.addEventListener("click", () => {
     goBackView(state);
+    shouldAutoFit = true;
     drawCurrentLayout();
+  });
+
+  document.getElementById("resetView")?.addEventListener("click", () => {
+    enterGalaxyView(state);
+    state.selectedNodeId = null;
+    state.hoveredNodeId = null;
+    state.selectedSystem = null;
+    state.selectedPlanet = null;
+    shouldAutoFit = true;
+    drawCurrentLayout();
+  });
+
+  document.getElementById("crumbGalaxy")?.addEventListener("click", () => {
+    enterGalaxyView(state);
+    state.selectedNodeId = null;
+    shouldAutoFit = true;
+    drawCurrentLayout();
+  });
+
+  document.getElementById("crumbSystem")?.addEventListener("click", () => {
+    if (!state.selectedSystem || state.view === "galaxy") return;
+    state.view = "solar";
+    state.selectedPlanet = null;
+    state.selectedNodeId = null;
+    shouldAutoFit = true;
+    drawCurrentLayout();
+  });
+}
+
+function bindSegmentedControl(groupId, selectId, onChange) {
+  const group = document.getElementById(groupId);
+  const select = document.getElementById(selectId);
+  group?.addEventListener("click", event => {
+    const button = event.target.closest("button[data-value]");
+    if (!button) return;
+    const value = button.dataset.value;
+    select.value = value;
+    for (const item of group.querySelectorAll("button[data-value]")) item.classList.toggle("is-active", item === button);
+    onChange(value);
   });
 }
 
@@ -139,13 +218,14 @@ function scheduleApplyFilters() {
 
 function applyFilters() {
   const timelineCutoff = currentTimelineCutoff();
-  filteredGraph = filterGalaxy(originalGraph, {
+  const scopedGraph = filterGalaxy(originalGraph, {
     query: document.getElementById("search")?.value || "",
     activeTypes,
     activeLayers,
     minWeight: Number(document.getElementById("weightFilter")?.value || 0),
     timelineCutoff,
   });
+  filteredGraph = scopedGraph;
   if (filteredGraph.nodes.length > focusLimit) {
     const visibleNodes = capNodesBySystem(filteredGraph.nodes, focusLimit);
     const visible = new Set(visibleNodes.map(node => node.id));
@@ -153,14 +233,19 @@ function applyFilters() {
       ...filteredGraph,
       nodes: visibleNodes,
       links: filteredGraph.links.filter(link =>
-        visible.has(String(link.source.id || link.source)) && visible.has(String(link.target.id || link.target))
+        visible.has(String(link.source.id || link.source)) && visible.has(String(link.target.id || link.target)),
       ),
     };
   }
+  shouldAutoFit = true;
   drawCurrentLayout();
   renderStats({
-    node_count: `${filteredGraph.nodes.length}/${originalGraph.nodes.length}`,
-    edge_count: `${filteredGraph.links.length}/${originalGraph.links.length}`,
+    node_count: scopedGraph.nodes.length,
+    edge_count: scopedGraph.links.length,
+    total_node_count: originalGraph.nodes.length,
+    total_edge_count: originalGraph.links.length,
+    visible_node_count: filteredGraph.nodes.length,
+    visible_edge_count: filteredGraph.links.length,
   });
   emitEvent("view:filtered", null, { visible_nodes: filteredGraph.nodes.length });
 }
@@ -201,15 +286,7 @@ function scoreVisibleNode(node) {
     + Math.log1p(Number(raw.mention_count || 0)) * 3;
 }
 
-function summarizeSystems(nodes) {
-  return (nodes || []).reduce((acc, node) => {
-    const system = visibleNodeSystem(node);
-    acc[system] = (acc[system] || 0) + 1;
-    return acc;
-  }, {});
-}
-
-function drawCurrentLayout() {
+function drawCurrentLayout(options = {}) {
   if (!renderer || !app) return;
   currentLayout = buildActiveLayout();
   renderer.draw(currentLayout, state, {
@@ -220,22 +297,21 @@ function drawCurrentLayout() {
         forceEnter: clickCount(event) >= 2,
       });
       lastSystemTap = result.lastSystemTap;
-      showSystemDetails(system);
+      state.selectedNodeId = `system:${system.key}`;
+      showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
-      drawCurrentLayout();
+      shouldAutoFit = clickCount(event) >= 2;
+      drawCurrentLayout({ preserveView: clickCount(event) < 2 });
       if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
     },
-    onSystemHover: system => {
-      if (state.view !== "galaxy") return;
-      drawCurrentLayout();
-    },
+    onSystemHover: () => {},
     onCometTap: comet => {
-      showCometDetails(comet);
-      document.getElementById("agentPrompt").textContent = `彗星 ${comet.label} 正在影响 ${comet.influences.map(item => item.system).join(", ")}`;
+      showCometSelection(comet);
+      document.getElementById("agentPrompt").textContent = `Comet ${comet.label} influences ${comet.influences.map(item => item.system).join(", ")}`;
     },
     onNodePointerDown: node => {
       state.selectedNodeId = node.id;
-      showDetails(node);
+      showNodeSelection(node);
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
     },
     onNodeTap: (node, event) => {
@@ -250,9 +326,10 @@ function drawCurrentLayout() {
           });
           lastSystemTap = result.lastSystemTap;
           state.selectedNodeId = node.id;
-          showSystemDetails(system);
+          showNodeSelection(node);
           emitEvent("system:selected", null, { system: system.key });
-          drawCurrentLayout();
+          shouldAutoFit = clickCount(event) >= 2;
+          drawCurrentLayout({ preserveView: clickCount(event) < 2 });
           if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
           return;
         }
@@ -267,25 +344,26 @@ function drawCurrentLayout() {
           });
           lastPlanetTap = result.lastPlanetTap;
           state.selectedNodeId = planetNode.id;
-          showDetails(planetNode);
+          showNodeSelection(planetNode);
           emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
-          drawCurrentLayout();
+          shouldAutoFit = clickCount(event) >= 2;
+          drawCurrentLayout({ preserveView: clickCount(event) < 2 });
           if (clickCount(event) < 2) renderer.focusOn(planetNode.x, planetNode.y, 1.06);
           return;
         }
       }
       state.selectedNodeId = node.id;
-      showDetails(node);
+      showNodeSelection(node);
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
-      drawCurrentLayout();
+      drawCurrentLayout({ preserveView: true });
     },
     onNodePointerOver: node => {
       state.hoveredNodeId = node.id;
-      drawCurrentLayout();
+      drawCurrentLayout({ preserveView: true });
     },
     onNodePointerOut: () => {
       state.hoveredNodeId = null;
-      drawCurrentLayout();
+      drawCurrentLayout({ preserveView: true });
     },
     onNodeDrag: node => {
       state.selectedNodeId = node.id;
@@ -294,14 +372,20 @@ function drawCurrentLayout() {
     onNodeDragEnd: node => {
       state.selectedNodeId = node.id;
       emitEvent("node:drag-ended", node, { system: node.memorySystem });
+      showNodeSelection(node);
     },
   });
-  renderer.fitToBounds(currentLayout.bounds);
-  updateViewBadge();
+  if (shouldAutoFit && !options.preserveView) {
+    renderer.fitToBounds(currentLayout.bounds);
+    shouldAutoFit = false;
+  }
+  syncToolbarState();
+  renderBreadcrumbs();
+  renderSelectionFromState();
 }
 
 function buildActiveLayout() {
-  const size = { width: app.screen.width, height: app.screen.height, nodeScale: state.nodeScale };
+  const size = { width: app.screen.width, height: app.screen.height, nodeScale: state.nodeScale || 0.48 };
   if (state.view === "solar") {
     return buildSolarSystemLayout(filteredGraph, state.selectedSystem, size);
   }
@@ -309,6 +393,7 @@ function buildActiveLayout() {
     return buildPlanetSatelliteLayout(filteredGraph, state.selectedSystem, state.selectedPlanet, size);
   }
   const layout = buildGalaxyOverviewLayout(filteredGraph, size);
+  if (!state.showComets) return { ...layout, comets: [] };
   const overlay = buildCometOverlayLayout(layout, buildActiveComets());
   return { ...layout, comets: overlay.comets };
 }
@@ -325,26 +410,6 @@ function buildActiveComets() {
       { system: "preference", weight: 0.78 },
       { system: "rule", weight: 0.55 },
     ],
-  }, {
-    id: "comet:verification-trail",
-    label: "Verification Trail",
-    comet_type: "verification",
-    trajectory: ["harness", "source", "rule"],
-    influenced_systems: [
-      { system: "harness", weight: 0.86 },
-      { system: "source", weight: 0.64 },
-      { system: "rule", weight: 0.48 },
-    ],
-  }, {
-    id: "comet:user-feedback",
-    label: "User Feedback",
-    comet_type: "feedback",
-    trajectory: ["preference", "persona", "knowledge"],
-    influenced_systems: [
-      { system: "preference", weight: 0.9 },
-      { system: "persona", weight: 0.58 },
-      { system: "knowledge", weight: 0.5 },
-    ],
   }];
 }
 
@@ -354,9 +419,304 @@ function renderTypeFilters(typeCounts) {
   root.innerHTML = "";
   Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).forEach(([type, count]) => {
     const label = document.createElement("label");
-    label.innerHTML = `<input type="checkbox" data-type="${escapeHtml(type)}" checked><span><span class="pill">${escapeHtml(type)}</span>${count}</span>`;
+    label.className = "filter-card";
+    label.innerHTML = `
+      <span><input type="checkbox" data-type="${escapeHtml(type)}" checked> ${escapeHtml(type)}</span>
+      <span>${escapeHtml(count)}</span>
+    `;
     root.appendChild(label);
   });
+}
+
+function renderLayerFilters() {
+  const root = document.getElementById("layerFilters");
+  if (!root) return;
+  root.innerHTML = "";
+  for (const [layer, labelText] of [["core", "Core"], ["active", "Active"], ["knowledge", "Knowledge"], ["episode", "Episodes"], ["external", "External"]]) {
+    const label = document.createElement("label");
+    label.className = "filter-pill";
+    label.innerHTML = `<input type="checkbox" data-layer="${escapeHtml(layer)}" checked><span>${escapeHtml(labelText)}</span>`;
+    root.appendChild(label);
+  }
+}
+
+function renderOrbitLegend() {
+  document.getElementById("orbitLegend").innerHTML = `
+    <span class="legend-item"><i class="legend-dot" style="background:#4ea1ff;box-shadow:0 0 12px #4ea1ff"></i>System</span>
+    <span class="legend-item"><i class="legend-dot" style="background:#63d7d6;box-shadow:0 0 12px #63d7d6"></i>Planet</span>
+    <span class="legend-item"><i class="legend-dot" style="background:#ae8cff;box-shadow:0 0 12px #ae8cff"></i>Moon</span>
+    <span class="legend-item"><i class="legend-diamond" style="color:#f2c14e"></i>Evidence</span>
+    <span class="legend-item"><i class="legend-square" style="color:#b5c0d4"></i>External</span>
+    <span class="legend-item"><i class="legend-line" style="color:#f4f7fb"></i>Direct Relation</span>
+    <span class="legend-item"><i class="legend-line legend-line-dashed" style="color:#7f8da7"></i>Indirect Relation</span>
+  `;
+}
+
+function renderBreadcrumbs() {
+  const galaxy = document.getElementById("crumbGalaxy");
+  const system = document.getElementById("crumbSystem");
+  galaxy.classList.toggle("chip-active", state.view === "galaxy");
+  system.classList.toggle("chip-active", state.view !== "galaxy" && !!state.selectedSystem);
+  system.textContent = state.selectedSystem ? systemLabel(state.selectedSystem) : "No System";
+}
+
+function syncToolbarState() {
+  const badge = document.getElementById("viewBadge");
+  badge.textContent = state.view === "galaxy"
+    ? "Galaxy Overview"
+    : state.view === "solar"
+      ? systemLabel(state.selectedSystem)
+      : `Planet Focus: ${selectedNodeLabel(state.selectedPlanet)}`;
+}
+
+function currentTimelineCutoff() {
+  const slider = document.getElementById("timelineFilter");
+  const cutoff = timelineCutoffFromPercent(originalGraph.metadata.timeline || {}, Number(slider?.value || 100));
+  const label = document.getElementById("timelineValue");
+  if (label) label.textContent = cutoff ? cutoff.slice(0, 10) : "All Time";
+  return cutoff;
+}
+
+function renderSelectionFromState() {
+  if (state.selectedNodeId?.startsWith("system:") && state.selectedSystem) {
+    showSystemSelection(state.selectedSystem);
+    return;
+  }
+  if (state.selectedNodeId) {
+    const node = (currentLayout?.nodes || []).find(item => item.id === state.selectedNodeId)
+      || filteredGraph.nodes.find(item => item.id === state.selectedNodeId);
+    if (node) {
+      showNodeSelection(node);
+      return;
+    }
+  }
+  if (state.selectedSystem) {
+    showSystemSelection(state.selectedSystem);
+    return;
+  }
+  document.getElementById("selectionCard").innerHTML = '<div class="empty-state">Select a system or node to inspect it.</div>';
+  document.getElementById("relationsPanel").innerHTML = '<div class="empty-state">Relations appear here when a node is selected.</div>';
+  document.getElementById("systemSummary").innerHTML = '<div class="empty-state">System counts and top members appear here.</div>';
+}
+
+function showNodeSelection(node) {
+  const raw = node.raw || node;
+  const system = node.memorySystem || visibleNodeSystem(node);
+  const status = raw.galaxy_layer || node.layer || "knowledge";
+  document.getElementById("selectionCard").innerHTML = `
+    <div class="selection-title-row">
+      <div class="selection-title">
+        <span class="selection-glow" style="color:${escapeHtml(systemColor(system))}"></span>
+        <div>
+          <div class="selection-name">${escapeHtml(node.label || raw.label || raw.name || raw.id)}</div>
+          <div class="meta-inline">${escapeHtml(raw.type || node.type)} in ${escapeHtml(systemLabel(system))}</div>
+        </div>
+      </div>
+      <span class="status-badge">${escapeHtml(capitalize(status))}</span>
+    </div>
+    ${renderMetricGrid([
+      { label: "Mentions", value: raw.mention_count ?? 0 },
+      { label: "Importance", value: raw.importance ?? 0 },
+      { label: "Layer", value: raw.galaxy_layer || node.layer || "unknown" },
+      { label: "System", value: systemLabel(system) },
+    ])}
+    <div class="meta-stack">
+      <div>${escapeHtml(raw.content || "No node content.")}</div>
+      ${copyableInline("Node ID", raw.id || node.id)}
+      ${copyableInline("Last seen", raw.last_seen_at || "unknown")}
+    </div>
+  `;
+  renderRelationsForNode(node);
+  renderSystemSummary(system);
+}
+
+function showSystemSelection(systemKey) {
+  const members = filteredGraph.nodes.filter(node => visibleNodeSystem(node) === systemKey);
+  const counts = summarizeOrbitRoles(members);
+  const lead = members.sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a))[0];
+  document.getElementById("selectionCard").innerHTML = `
+    <div class="selection-title-row">
+      <div class="selection-title">
+        <span class="selection-glow" style="color:${escapeHtml(systemColor(systemKey))}"></span>
+        <div>
+          <div class="selection-name">${escapeHtml(systemLabel(systemKey))}</div>
+          <div class="meta-inline">${escapeHtml(systemLayerLabel(systemKey))}</div>
+        </div>
+      </div>
+      <span class="status-badge">${escapeHtml(layerBadgeForSystem(members))}</span>
+    </div>
+    ${renderMetricGrid([
+      { label: "Planets", value: counts.planet },
+      { label: "Moons", value: counts.moon },
+      { label: "Evidence", value: counts.evidence },
+      { label: "External", value: counts.external },
+    ])}
+    <div class="meta-stack">
+      <div>${escapeHtml(systemDescription(systemKey, lead))}</div>
+      ${copyableInline("System ID", `sys_${systemKey}`)}
+    </div>
+  `;
+  renderRelationsForSystem(systemKey);
+  renderSystemSummary(systemKey);
+}
+
+function showCometSelection(comet) {
+  document.getElementById("selectionCard").innerHTML = `
+    <div class="selection-title-row">
+      <div class="selection-title">
+        <span class="selection-glow" style="color:#f97316"></span>
+        <div>
+          <div class="selection-name">${escapeHtml(comet.label)}</div>
+          <div class="meta-inline">Context overlay</div>
+        </div>
+      </div>
+      <span class="status-badge">Overlay</span>
+    </div>
+    <div class="meta-stack">
+      <div>${escapeHtml(comet.cometType || "active_task")}</div>
+      <div>${escapeHtml(comet.influences.map(item => `${item.system} ${Math.round(item.weight * 100)}%`).join(", "))}</div>
+    </div>
+  `;
+  document.getElementById("relationsPanel").innerHTML = '<div class="empty-state">Comet overlays summarize active context rather than graph edges.</div>';
+}
+
+function renderRelationsForNode(node) {
+  const groups = groupNeighborRelations(filteredGraph, node.id);
+  const relationTypes = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  document.getElementById("relationsPanel").innerHTML = relationTypes.length
+    ? relationTypes.map(([relation, items]) => `
+      <div class="relation-group">
+        <div class="relation-group-title">${escapeHtml(relation)} (${items.length})</div>
+        ${items.slice(0, 3).map(item => `
+          <div class="relation-item">
+            <strong>${escapeHtml(item.neighbor.label)}</strong>
+            <span class="weight-value">${Number(item.link.weight || 0).toFixed(2)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `).join("")
+    : formatNodeDetails(node.raw || node);
+}
+
+function renderRelationsForSystem(systemKey) {
+  const groups = groupSystemRelations(systemKey);
+  const entries = Object.entries(groups).sort((a, b) => b[1].items.length - a[1].items.length);
+  document.getElementById("relationsPanel").innerHTML = entries.length
+    ? entries.map(([relation, group]) => `
+      <div class="relation-group">
+        <div class="relation-group-title">${escapeHtml(relation)} (${group.items.length})</div>
+        ${group.items.slice(0, 3).map(item => `
+          <div class="relation-item">
+            <strong>${escapeHtml(systemLabel(item.system))}</strong>
+            <span class="weight-value">${item.weight.toFixed(2)}</span>
+          </div>
+        `).join("")}
+      </div>
+    `).join("")
+    : '<div class="empty-state">No cross-system relations are visible in the current scope.</div>';
+}
+
+function renderSystemSummary(systemKey) {
+  const members = filteredGraph.nodes
+    .filter(node => visibleNodeSystem(node) === systemKey)
+    .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
+  const topPlanets = members
+    .filter(node => orbitRoleForNode(node) === "planet")
+    .slice(0, 5)
+    .map(node => ({ label: node.label, value: Number(node.raw?.importance || 0).toFixed(2) }));
+  document.getElementById("systemSummary").innerHTML = `
+    <div class="meta-inline">Top planets in ${escapeHtml(systemLabel(systemKey))}</div>
+    ${renderInspectorList(topPlanets)}
+    <div class="meta-inline"><a class="view-link" href="#">View all ${members.length} members</a></div>
+  `;
+}
+
+function groupSystemRelations(systemKey) {
+  const memberIds = new Set(filteredGraph.nodes.filter(node => visibleNodeSystem(node) === systemKey).map(node => node.id));
+  const grouped = {};
+  for (const link of filteredGraph.links) {
+    const sourceId = String(link.source.id || link.source);
+    const targetId = String(link.target.id || link.target);
+    const sourceIn = memberIds.has(sourceId);
+    const targetIn = memberIds.has(targetId);
+    if (sourceIn === targetIn) continue;
+    const neighborId = sourceIn ? targetId : sourceId;
+    const neighbor = filteredGraph.nodes.find(node => node.id === neighborId);
+    if (!neighbor) continue;
+    const relation = link.relation || "related";
+    const neighborSystem = visibleNodeSystem(neighbor);
+    if (!grouped[relation]) grouped[relation] = { items: [], bySystem: new Map() };
+    const current = grouped[relation].bySystem.get(neighborSystem) || 0;
+    grouped[relation].bySystem.set(neighborSystem, current + Number(link.weight || 0));
+  }
+  for (const relation of Object.keys(grouped)) {
+    grouped[relation].items = [...grouped[relation].bySystem.entries()]
+      .map(([system, weight]) => ({ system, weight }))
+      .sort((a, b) => b.weight - a.weight);
+  }
+  return grouped;
+}
+
+function summarizeOrbitRoles(nodes) {
+  return nodes.reduce((acc, node) => {
+    const role = orbitRoleForNode(node);
+    acc[role] = (acc[role] || 0) + 1;
+    acc.external = acc.external || 0;
+    if (node.layer === "external" || visibleNodeSystem(node) === "source") acc.external += 1;
+    return acc;
+  }, { planet: 0, moon: 0, evidence: 0, external: 0 });
+}
+
+function orbitRoleForNode(node) {
+  if (node.orbitRole) return node.orbitRole;
+  if (node.layer === "external" || node.layer === "episode" || visibleNodeSystem(node) === "source") return "evidence";
+  if (Number(node.raw?.importance || 0) >= 0.9 || Number(node.raw?.mention_count || 0) >= 10) return "planet";
+  return "moon";
+}
+
+function layerBadgeForSystem(nodes) {
+  if (nodes.some(node => node.layer === "core")) return "Core";
+  if (nodes.some(node => node.layer === "active")) return "Active";
+  if (nodes.some(node => node.layer === "knowledge")) return "Knowledge";
+  if (nodes.some(node => node.layer === "episode")) return "Episodes";
+  return "External";
+}
+
+function systemDescription(systemKey, lead) {
+  const descriptions = {
+    router: "Encapsulates global routing and top-level agent coordination.",
+    rule: "Captures hard constraints, policies, and durable guardrails.",
+    persona: "Represents tone, identity, and behavior-shaping traits.",
+    skill: "Encapsulates executable capabilities, techniques, and procedural knowledge.",
+    harness: "Contains tests, evaluation harnesses, and verification workflows.",
+    preference: "Tracks stable user preferences and interaction choices.",
+    project: "Holds active project context and local domain memory.",
+    knowledge: "Stores reusable concepts and longer-lived contextual knowledge.",
+    event: "Contains episodes, sessions, and time-bound observations.",
+    source: "Groups provenance, citations, and external supporting evidence.",
+  };
+  return descriptions[systemKey] || lead?.raw?.content || "No system description available.";
+}
+
+function systemLayerLabel(systemKey) {
+  if (["rule", "persona"].includes(systemKey)) return "Control Layer";
+  if (["skill", "harness", "preference"].includes(systemKey)) return "Execution Layer";
+  if (["project", "knowledge"].includes(systemKey)) return "Context Layer";
+  if (["event", "source"].includes(systemKey)) return "Evidence Layer";
+  return "Core Layer";
+}
+
+function systemLabel(systemKey) {
+  return `${capitalize(systemKey)} System`;
+}
+
+function systemColor(systemKey) {
+  return systemColors[systemKey] || "#4ea1ff";
+}
+
+function selectedNodeLabel(nodeId) {
+  const node = filteredGraph.nodes.find(item => item.id === nodeId) || currentLayout?.nodes?.find(item => item.id === nodeId);
+  return node?.label || nodeId || "Node";
 }
 
 function clickCount(event) {
@@ -384,8 +744,8 @@ function handleCanvasDoubleClick(event) {
       forceEnter: true,
     });
     lastSystemTap = result.lastSystemTap;
-    showSystemDetails(system);
-    emitEvent("system:selected", null, { system: system.key });
+    state.selectedNodeId = `system:${system.key}`;
+    shouldAutoFit = true;
     drawCurrentLayout();
     return;
   }
@@ -403,8 +763,8 @@ function handleCanvasDoubleClick(event) {
     });
     lastPlanetTap = result.lastPlanetTap;
     state.selectedNodeId = planetNode.id;
-    showDetails(planetNode);
-    emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
+    showNodeSelection(planetNode);
+    shouldAutoFit = true;
     drawCurrentLayout();
   }
 }
@@ -444,46 +804,6 @@ function resolveSolarPlanetNode(layout, node) {
   return layout.nodes.find(item => item.id === node.parentPlanetId) || null;
 }
 
-function renderLayerFilters() {
-  const root = document.getElementById("layerFilters");
-  if (!root) return;
-  root.innerHTML = "";
-  for (const [layer, labelText] of [["core", "Core"], ["active", "Active"], ["knowledge", "Knowledge"], ["episode", "Episodes"], ["external", "External"]]) {
-    const label = document.createElement("label");
-    label.innerHTML = `<input type="checkbox" data-layer="${escapeHtml(layer)}" checked><span><span class="pill">${escapeHtml(labelText)}</span></span>`;
-    root.appendChild(label);
-  }
-}
-
-function currentTimelineCutoff() {
-  const slider = document.getElementById("timelineFilter");
-  const cutoff = timelineCutoffFromPercent(originalGraph.metadata.timeline || {}, Number(slider?.value || 100));
-  const label = document.getElementById("timelineValue");
-  if (label) label.textContent = cutoff ? cutoff.slice(0, 10) : "All time";
-  return cutoff;
-}
-
-function showDetails(node) {
-  document.getElementById("details").innerHTML = formatNodeDetails(node.raw || node);
-}
-
-function showSystemDetails(system) {
-  document.getElementById("details").innerHTML = `
-    <div class="node-title">${escapeHtml(system.label)}</div>
-    <div class="meta">Layer: ${escapeHtml(system.layer)} · Mini orbits: ${(system.miniOrbits || []).length}</div>
-    <p>单击高亮整个太阳系；双击进入该太阳系内部视图。行星、卫星和证据轨道会在太阳系视图中展开。</p>
-  `;
-  document.getElementById("agentPrompt").textContent = `已选中 ${system.label}。要查看这个太阳系内部结构，可以双击它。`;
-}
-
-function showCometDetails(comet) {
-  document.getElementById("details").innerHTML = `
-    <div class="node-title">${escapeHtml(comet.label)}</div>
-    <div class="meta">Comet type: ${escapeHtml(comet.cometType || "active_task")}</div>
-    <p>Influenced systems: ${escapeHtml(comet.influences.map(item => `${item.system} ${Math.round(item.weight * 100)}%`).join(", "))}</p>
-  `;
-}
-
 function emitEvent(type, node, context) {
   const event = createMemoryGalaxyEvent(type, {
     node_id: node?.id,
@@ -496,28 +816,27 @@ function emitEvent(type, node, context) {
   if (prompt) document.getElementById("agentPrompt").textContent = renderPromptText(prompt);
 }
 
-function updateViewBadge() {
-  let badge = document.getElementById("viewBadge");
-  if (!badge) {
-    badge = document.createElement("div");
-    badge.id = "viewBadge";
-    badge.className = "view-badge";
-    document.querySelector(".sidebar header")?.appendChild(badge);
-  }
-  badge.textContent = state.view === "galaxy"
-    ? "Galaxy Overview"
-    : state.view === "solar"
-      ? `Solar Focus: ${state.selectedSystem}`
-      : `Planet Focus: ${state.selectedPlanet}`;
-}
-
 function renderStats(metadata) {
   const stats = document.getElementById("stats");
   if (!stats) return;
-  stats.textContent = `${metadata.node_count} nodes, ${metadata.edge_count} edges`;
+  const totalNodes = Number(metadata.total_node_count ?? metadata.node_count ?? 0);
+  const totalEdges = Number(metadata.total_edge_count ?? metadata.edge_count ?? 0);
+  const filteredNodes = Number(metadata.node_count ?? totalNodes);
+  const filteredEdges = Number(metadata.edge_count ?? totalEdges);
+  const visibleNodes = Number(metadata.visible_node_count ?? filteredNodes);
+  const visibleEdges = Number(metadata.visible_edge_count ?? filteredEdges);
+  const visibleSuffix = visibleNodes !== filteredNodes || visibleEdges !== filteredEdges
+    ? ` (${visibleNodes}/${visibleEdges} shown)`
+    : "";
+  stats.textContent = `${filteredNodes}/${totalNodes} nodes / ${filteredEdges}/${totalEdges} edges${visibleSuffix}`;
+}
+
+function capitalize(value) {
+  const text = String(value || "");
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 init().catch(error => {
   document.getElementById("stats").textContent = "Failed to load galaxy.";
-  document.getElementById("details").textContent = String(error);
+  document.getElementById("selectionCard").textContent = String(error);
 });
