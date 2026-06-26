@@ -25,7 +25,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   stage.eventMode = "static";
   stage.hitArea = app.screen;
   stage.on("pointerdown", event => {
-    if (!hasCtrlModifier(event) || !isPrimaryButton(event)) return;
+    if (!isPrimaryButton(event)) return;
     panState = {
       start: event.global.clone(),
       origin: { ...pan },
@@ -56,7 +56,6 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   stage.on("pointerup", endDrag);
   stage.on("pointerupoutside", endDrag);
   stage.on("wheel", event => {
-    if (!hasCtrlModifier(event)) return;
     event.preventDefault();
     scale = Math.max(0.25, Math.min(3.5, scale * (event.deltaY > 0 ? 0.9 : 1.1)));
     applyTransform();
@@ -211,7 +210,6 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       drawNodeBody(graphics, node, state);
       nodeGraphicsById.set(node.id, graphics);
       graphics.on("pointerdown", event => {
-        if (hasCtrlModifier(event)) return;
         event.stopPropagation();
         dragState = { node, graphic: graphics, start: event.global.clone(), origin: { x: node.x, y: node.y } };
         pressState = {
@@ -527,10 +525,6 @@ function pointerDetail(event) {
     ?? event?.originalEvent?.detail
     ?? 0
   );
-}
-
-function hasCtrlModifier(event) {
-  return Boolean(event?.ctrlKey ?? event?.nativeEvent?.ctrlKey ?? event?.originalEvent?.ctrlKey);
 }
 
 function isPrimaryButton(event) {
