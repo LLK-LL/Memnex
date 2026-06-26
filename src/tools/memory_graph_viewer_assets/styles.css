@@ -320,12 +320,23 @@ button:hover,
   border-radius: var(--radius-control);
 }
 
+.filter-card span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
 .filter-card span:last-child {
   color: var(--text-2);
+  flex: 0 0 auto;
 }
 
 .filter-card input {
   margin: 0;
+  flex: 0 0 auto;
 }
 
 .filter-pills {
@@ -359,11 +370,18 @@ button:hover,
 
 .segmented-control button {
   min-height: 34px;
+  min-width: 0;
+  padding: 8px 4px;
   border-radius: 0;
   border: 0;
   border-right: 1px solid var(--line-soft);
   background: rgba(13, 21, 34, 0.92);
   color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .segmented-control button:last-child {
