@@ -328,12 +328,15 @@ button:hover,
   gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .filter-card span:last-child {
   color: var(--text-2);
   flex: 0 0 auto;
+  min-width: 32px;
   padding-left: 8px;
   text-align: right;
 }
