@@ -843,7 +843,15 @@ button:hover,
   font-size: 18px;
 }
 
+.integrity-gauge > div {
+  display: grid;
+  place-items: center;
+  line-height: 1.05;
+  text-align: center;
+}
+
 .integrity-gauge span {
+  display: block;
   color: var(--accent-green);
   font-size: 10px;
 }
