@@ -117,13 +117,14 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const nodes = cloneGraphNodes(galaxy);
   const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], systemKey);
   const center = syntheticNode(`system:${systemKey}`, systemLabels[systemKey] || systemKey, systemKey, nodeScale);
-  const centralRenderRadius = Math.max(44, priorityRadiusForData(center.raw || center, { scale: nodeScale }) * 1.42);
+  const centralRenderRadius = Math.max(44, priorityRadiusForData(center.raw || center, { scale: nodeScale }) * 1.42) * 3;
   const outputNodes = [
     placeNode(center, 0, 0, {
       memorySystem: systemKey,
       orbitRole: "star",
       orbitalRole: "central-star",
       renderRadius: centralRenderRadius,
+      isSolarCenterStar: true,
     }),
   ];
   const planetSystems = buildSolarPlanetSystems(localNodes, localLinks, systemKey);
@@ -562,6 +563,7 @@ function placeNode(node, x, y, overrides = {}) {
     parentPlanetId: overrides.parentPlanetId || node.parentPlanetId || null,
     childCount: overrides.childCount ?? node.childCount ?? 0,
     isSystemNode: overrides.isSystemNode ?? node.isSystemNode ?? false,
+    isSolarCenterStar: overrides.isSolarCenterStar ?? node.isSolarCenterStar ?? false,
     systemKey: overrides.systemKey ?? node.systemKey ?? null,
     animation: {
       orbitCenterX: overrides.orbitCenterX ?? 0,

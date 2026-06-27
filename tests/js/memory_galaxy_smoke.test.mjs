@@ -469,7 +469,8 @@ assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(n
 assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => node.animation.orbitRadiusX >= 300 && node.animation.orbitRadiusY < node.animation.orbitRadiusX));
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "planet" && node.childCount > 0));
 assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").length >= 2);
-assert.ok(skillSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
+assert.ok(skillSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 84);
+assert.equal(skillSolar.nodes.find(node => node.orbitalRole === "central-star")?.isSolarCenterStar, true);
 assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet" && Number(node.childCount || 0) > 0).every(node => node.isPlanetSystemNode === true));
 assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => systemLabelLines(node)[1] === "Planet System"));
 assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => Number(node.animation?.spinSpeed || 0) === 0));
@@ -574,7 +575,7 @@ assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.every(node 
   const distance = Math.hypot(node.x - system.x, node.y - system.y);
   return distance > 0;
 })));
-assert.ok(crowdedSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
+assert.ok(crowdedSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 84);
 
 const denseSolarOrbitFixture = {
   metadata: { type_counts: {}, timeline: {} },
@@ -1009,7 +1010,10 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   assert.ok(labelLayer);
   const planetLabel = labelLayer.children.find(child => child.text === "DENSE PLANET 0");
   assert.ok(planetLabel);
-  assert.ok(Number(planetLabel.style.fontSize || 0) >= 17);
+  assert.ok(Number(planetLabel.style.fontSize || 0) >= 24);
+  const centerLabel = labelLayer.children.find(child => child.text === "SKILL SYSTEM");
+  assert.ok(centerLabel);
+  assert.equal(centerLabel.style.fontSize, planetLabel.style.fontSize);
   const leaderLayer = root.children.find(layer => layer.children.some(child => child.commands?.some(command => command.name === "moveTo")));
   const leader = leaderLayer.children.find(child => child.commands?.some(command => command.name === "moveTo") && child.commands?.filter(command => command.name === "lineTo").length >= 2);
   assert.ok(leader);

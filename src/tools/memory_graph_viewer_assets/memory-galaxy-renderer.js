@@ -886,16 +886,16 @@ function createNodeLabel(PIXI, node, state, anchor) {
 function createSystemLabel(PIXI, node, anchor) {
   const color = parseColor(node.color || "#7dd3fc");
   const lines = systemLabelLines(node);
-  const isPlanetSystem = Boolean(node.isPlanetSystemNode);
+  const prominentSolarLabel = Boolean(node.isPlanetSystemNode || node.isSolarCenterStar);
   const title = new PIXI.Text({
     text: lines[0],
     resolution: 2,
     style: {
       fill: 0xf8fbff,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: node.orbitalRole === "galactic-core" ? 16 : isPlanetSystem ? 18 : 14,
+      fontSize: node.orbitalRole === "galactic-core" ? 16 : prominentSolarLabel ? 24 : 14,
       fontWeight: "800",
-      stroke: { color: 0x020617, width: 4, alpha: 0.9 },
+      stroke: { color: 0x020617, width: prominentSolarLabel ? 5 : 4, alpha: 0.9 },
     },
   });
   const subtitle = new PIXI.Text({
@@ -904,9 +904,9 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: color,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: isPlanetSystem ? 13 : 11,
+      fontSize: prominentSolarLabel ? 16 : 11,
       fontWeight: "700",
-      stroke: { color: 0x020617, width: 3, alpha: 0.86 },
+      stroke: { color: 0x020617, width: prominentSolarLabel ? 4 : 3, alpha: 0.86 },
     },
   });
   const count = new PIXI.Text({
@@ -915,7 +915,7 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: 0xd8e4f7,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: isPlanetSystem ? 12 : 11,
+      fontSize: prominentSolarLabel ? 15 : 11,
       fontWeight: "500",
       stroke: { color: 0x020617, width: 3, alpha: 0.82 },
     },
@@ -929,10 +929,12 @@ function createSystemLabel(PIXI, node, anchor) {
 function positionLabel(label, anchor) {
   const alignAnchor = anchor.align === "right" ? 1 : 0;
   if (label.kind === "system") {
+    const lineGap = label.texts.some(text => Number(text.style?.fontSize || 0) >= 20) ? 23 : 17;
+    const yStart = label.texts.length > 2 ? -lineGap * 1.14 : -lineGap * 0.82;
     label.texts.forEach((text, index) => {
       text.anchor?.set?.(alignAnchor, 0);
       text.x = anchor.x;
-      text.y = anchor.y - (label.texts.length > 2 ? 20 : 14) + index * 17;
+      text.y = anchor.y + yStart + index * lineGap;
     });
     label.bounds = groupLabelBounds(label.texts, anchor.align);
     return;
