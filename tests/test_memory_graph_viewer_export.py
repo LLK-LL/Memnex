@@ -157,6 +157,7 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     assert json.loads(graph_path.read_text(encoding="utf-8")) == graph
     assert (output / "index.html").exists()
     assert (output / "styles.css").exists()
+    assert (output / "pixi.min.js").exists()
     assert (output / "viewer.js").exists()
     assert (output / "viewer-3d.html").exists()
     assert (output / "viewer-3d.js").exists()
@@ -170,6 +171,7 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     index_html = (output / "index.html").read_text(encoding="utf-8")
     viewer_3d_html = (output / "viewer-3d.html").read_text(encoding="utf-8")
     assert 'id="graph-data"' in index_html
+    assert 'src="pixi.min.js' in index_html
     assert 'id="graph-data"' in viewer_3d_html
     assert 'src="viewer.js"' not in index_html
     assert 'src="viewer-3d.js"' not in viewer_3d_html

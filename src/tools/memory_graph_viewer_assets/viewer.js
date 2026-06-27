@@ -101,7 +101,7 @@ async function loadBackendGraph() {
 }
 
 async function init() {
-  if (!window.PIXI) throw new Error("PixiJS failed to load from CDN.");
+  if (!window.PIXI) throw new Error("PixiJS failed to load from local viewer assets.");
   const graph = await loadGraph();
   originalGraph = convertGraphToGalaxy(graph);
   activeTypes = new Set(Object.keys(graph.metadata.type_counts || {}));

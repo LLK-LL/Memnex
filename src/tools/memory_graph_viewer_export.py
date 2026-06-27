@@ -413,6 +413,7 @@ def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR, *, version: str |
     for asset in (
         "index.html",
         "styles.css",
+        "pixi.min.js",
         "viewer.js",
         "viewer-3d.html",
         "viewer-3d.js",
