@@ -148,11 +148,12 @@ const rendererContext = { exports: {} };
 vm.runInNewContext(
   `${rendererHelperSource}
 exports.createMemoryGalaxyRenderer = createMemoryGalaxyRenderer;
-exports.advanceGalaxyAnimationNodes = advanceGalaxyAnimationNodes;`,
+exports.advanceGalaxyAnimationNodes = advanceGalaxyAnimationNodes;
+exports.dynamicLabelAnchor = dynamicLabelAnchor;`,
   rendererContext,
   { filename: rendererHelperPath },
 );
-const { createMemoryGalaxyRenderer, advanceGalaxyAnimationNodes } = rendererContext.exports;
+const { createMemoryGalaxyRenderer, advanceGalaxyAnimationNodes, dynamicLabelAnchor } = rendererContext.exports;
 
 const fixture = {
   metadata: {
@@ -715,14 +716,18 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
     on() {}
   }
   class FakeGraphics extends FakeContainer {
-    clear() { return this; }
-    circle() { return this; }
-    ellipse() { return this; }
+    constructor() {
+      super();
+      this.commands = [];
+    }
+    clear() { this.commands = []; return this; }
+    circle(...args) { this.commands.push({ name: "circle", args }); return this; }
+    ellipse(...args) { this.commands.push({ name: "ellipse", args }); return this; }
     fill() { return this; }
     stroke() { return this; }
-    moveTo() { return this; }
-    lineTo() { return this; }
-    quadraticCurveTo() { return this; }
+    moveTo(...args) { this.commands.push({ name: "moveTo", args }); return this; }
+    lineTo(...args) { this.commands.push({ name: "lineTo", args }); return this; }
+    quadraticCurveTo(...args) { this.commands.push({ name: "quadraticCurveTo", args }); return this; }
     destroy() { destroyedChildren += 1; }
   }
   class FakeText extends FakeContainer {
@@ -749,14 +754,26 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   perfLayout.view = "galaxy";
   perfLayout.nodes[1].label = "Animated planet";
   perfLayout.nodes[1].renderRadius = 8;
-  fakeRenderer.draw(perfLayout, { selectedNodeId: null, hoveredNodeId: null, labelMode: "medium", animationSpeed: 1 }, {});
+  fakeRenderer.draw(perfLayout, { selectedNodeId: perfLayout.nodes[1].id, hoveredNodeId: null, labelMode: "medium", animationSpeed: 1 }, {});
   const afterInitialDrawRemoveCalls = removeChildrenCalls;
   const afterInitialDestroyedChildren = destroyedChildren;
+  const root = stage.children[0];
+  const orbitLayer = root.children[0];
+  const labelLayer = root.children[4];
+  const animatedLabel = labelLayer.children.find(child => child.text === "Animated planet");
+  const animatedSystemGuide = orbitLayer.children.find(child => child.commands?.some(command => command.name === "ellipse"));
+  assert.ok(animatedLabel);
+  assert.ok(animatedSystemGuide);
   for (let frame = 0; frame < 12; frame += 1) {
     tickerCallbacks.forEach(callback => callback({ deltaMS: 16.67 }));
   }
   assert.equal(removeChildrenCalls, afterInitialDrawRemoveCalls);
   assert.equal(destroyedChildren, afterInitialDestroyedChildren);
+  assert.ok(Math.abs(animatedLabel.x - dynamicLabelAnchor(perfLayout.nodes[1]).x) < 0.0001);
+  assert.ok(Math.abs(animatedLabel.y - dynamicLabelAnchor(perfLayout.nodes[1]).y) < 0.0001);
+  const guideEllipse = animatedSystemGuide.commands.find(command => command.name === "ellipse");
+  assert.ok(Math.abs(guideEllipse.args[0] - perfLayout.systems[0].x) < 0.0001);
+  assert.ok(Math.abs(guideEllipse.args[1] - perfLayout.systems[0].y) < 0.0001);
 }
 
 const denseOverviewFixture = {

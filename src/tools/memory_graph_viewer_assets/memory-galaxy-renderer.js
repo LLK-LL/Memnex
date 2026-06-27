@@ -19,6 +19,9 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   let lastTap = { kind: null, key: null, time: 0 };
   const nodeGraphicsById = new Map();
   const systemHitByKey = new Map();
+  const systemOrbitGuidesByKey = new Map();
+  const satelliteOrbitGuidesByParent = new Map();
+  const labelsByNodeId = new Map();
   const dragThreshold = 5;
 
   stage.eventMode = "static";
@@ -72,6 +75,9 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     clearLayer(labelLayer);
     nodeGraphicsById.clear();
     systemHitByKey.clear();
+    systemOrbitGuidesByKey.clear();
+    satelliteOrbitGuidesByParent.clear();
+    labelsByNodeId.clear();
     drawOrbits(layout, state);
     drawLinks(layout, state);
     drawNodes(layout, state, handlers);
@@ -134,23 +140,14 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     for (const system of layout.systems || []) {
       if (system.key === "router") continue;
       const guide = new PIXI.Graphics();
-      const aspect = Number(system.orbitAspect || 0.58);
-      guide.ellipse(system.x, system.y, system.radius || 70, (system.radius || 70) * aspect);
-      guide.stroke({ width: 1, color: parseColor(system.color || "#7dd3fc"), alpha: 0.18 });
-      for (const miniOrbit of system.miniOrbits || []) {
-        guide.ellipse(system.x, system.y, miniOrbit.radius, miniOrbit.radius * Number(miniOrbit.aspect || 0.62));
-        guide.stroke({ width: 0.8, color: parseColor(system.color || "#7dd3fc"), alpha: 0.12 });
-      }
+      drawSystemOrbitGuide(guide, system);
+      systemOrbitGuidesByKey.set(system.key, guide);
       orbitLayer.addChild(guide);
     }
     for (const satelliteSystem of layout.satelliteSystems || []) {
       const guide = new PIXI.Graphics();
-      guide.ellipse(satelliteSystem.x, satelliteSystem.y, satelliteSystem.radius, satelliteSystem.radius * Number(satelliteSystem.aspect || 0.62));
-      guide.stroke({ width: 0.8, color: 0x94a3b8, alpha: 0.18 });
-      for (const orbit of satelliteSystem.orbits || []) {
-        guide.ellipse(satelliteSystem.x, satelliteSystem.y, orbit.radius, orbit.radius * Number(orbit.aspect || 0.62));
-        guide.stroke({ width: 0.7, color: 0x64748b, alpha: 0.14 });
-      }
+      drawSatelliteOrbitGuide(guide, satelliteSystem);
+      satelliteOrbitGuidesByParent.set(satelliteSystem.parentId, guide);
       orbitLayer.addChild(guide);
     }
   }
@@ -313,13 +310,15 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       const bounds = labelBounds(text, anchor.align);
       if (!isPinned(node, state) && placed.some(item => overlaps(item, bounds))) continue;
       placed.push(bounds);
+      let leader = null;
       if (isPinned(node, state)) {
-        const leader = new PIXI.Graphics();
+        leader = new PIXI.Graphics();
         leader.moveTo(node.x, node.y).lineTo(anchor.x, anchor.y);
         leader.stroke({ width: 0.8, color: 0xc8d8ff, alpha: 0.34 });
         labelLayer.addChild(leader);
       }
       labelLayer.addChild(text);
+      labelsByNodeId.set(node.id, { text, leader });
     }
   }
 
@@ -359,7 +358,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     if (!currentLayout || dragState) return;
     const changed = advanceGalaxyAnimationNodes(currentLayout, deltaSeconds, nodeGraphicsById, currentState?.animationSpeed ?? 1);
     if (!changed || !currentState) return;
-    updateSystemHitTargets(currentLayout);
+    updateAnimatedSceneVisuals(currentLayout, currentState);
   }
 
   return {
@@ -379,6 +378,52 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       hit.circle(system.x, system.y, Math.max(26, (system.radius || 60) * 0.72));
       hit.fill({ color: 0xffffff, alpha: 0.001 });
     }
+  }
+
+  function updateAnimatedSceneVisuals(layout, state) {
+    updateSystemHitTargets(layout);
+    for (const system of layout.systems || []) {
+      const guide = systemOrbitGuidesByKey.get(system.key);
+      if (guide) drawSystemOrbitGuide(guide, system);
+    }
+    for (const satelliteSystem of layout.satelliteSystems || []) {
+      const guide = satelliteOrbitGuidesByParent.get(satelliteSystem.parentId);
+      if (guide) drawSatelliteOrbitGuide(guide, satelliteSystem);
+    }
+    for (const node of layout.nodes || []) {
+      const label = labelsByNodeId.get(node.id);
+      if (!label) continue;
+      const anchor = dynamicLabelAnchor(node);
+      label.text.anchor?.set?.(anchor.align === "right" ? 1 : 0, 0.5);
+      label.text.x = anchor.x;
+      label.text.y = anchor.y;
+      if (label.leader) {
+        label.leader.clear();
+        label.leader.moveTo(node.x, node.y).lineTo(anchor.x, anchor.y);
+        label.leader.stroke({ width: 0.8, color: 0xc8d8ff, alpha: 0.34 });
+      }
+    }
+  }
+}
+
+function drawSystemOrbitGuide(guide, system) {
+  guide.clear();
+  const aspect = Number(system.orbitAspect || 0.58);
+  guide.ellipse(system.x, system.y, system.radius || 70, (system.radius || 70) * aspect);
+  guide.stroke({ width: 1, color: parseColor(system.color || "#7dd3fc"), alpha: 0.18 });
+  for (const miniOrbit of system.miniOrbits || []) {
+    guide.ellipse(system.x, system.y, miniOrbit.radius, miniOrbit.radius * Number(miniOrbit.aspect || 0.62));
+    guide.stroke({ width: 0.8, color: parseColor(system.color || "#7dd3fc"), alpha: 0.12 });
+  }
+}
+
+function drawSatelliteOrbitGuide(guide, satelliteSystem) {
+  guide.clear();
+  guide.ellipse(satelliteSystem.x, satelliteSystem.y, satelliteSystem.radius, satelliteSystem.radius * Number(satelliteSystem.aspect || 0.62));
+  guide.stroke({ width: 0.8, color: 0x94a3b8, alpha: 0.18 });
+  for (const orbit of satelliteSystem.orbits || []) {
+    guide.ellipse(satelliteSystem.x, satelliteSystem.y, orbit.radius, orbit.radius * Number(orbit.aspect || 0.62));
+    guide.stroke({ width: 0.7, color: 0x64748b, alpha: 0.14 });
   }
 }
 
