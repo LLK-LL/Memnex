@@ -41,6 +41,21 @@ function Wait-ViewerHealthy {
     return $false
 }
 
+function Resolve-ChromePath {
+    $chrome = Get-Command chrome -ErrorAction SilentlyContinue
+    if ($chrome) { return $chrome.Source }
+
+    $candidates = @(
+        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+        "$env:LocalAppData\Google\Chrome\Application\chrome.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { return $candidate }
+    }
+    throw "Google Chrome was not found. Install Chrome or add chrome.exe to PATH."
+}
+
 if (-not (Test-ViewerHealthy)) {
     Stop-ViewerServers
     Start-Sleep -Milliseconds 400
@@ -60,4 +75,6 @@ if (-not (Wait-ViewerHealthy)) {
 }
 
 $fresh = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-Start-Process "${BaseUrl}/?fresh=${fresh}"
+$launchUrl = "${BaseUrl}/?fresh=${fresh}"
+$chromePath = Resolve-ChromePath
+Start-Process -FilePath $chromePath -ArgumentList @($launchUrl)

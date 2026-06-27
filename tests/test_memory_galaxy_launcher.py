@@ -17,3 +17,11 @@ def test_memory_galaxy_launcher_waits_for_graph_api_before_opening_browser():
     assert "/api/graph" in script
     assert "memory_graph_viewer_server" in script
     assert "Stop-Process" in script
+
+
+def test_memory_galaxy_launcher_opens_google_chrome_directly():
+    script = (ROOT / "scripts" / "launch-memory-galaxy-viewer.ps1").read_text(encoding="utf-8")
+
+    assert "function Resolve-ChromePath" in script
+    assert "Google\\Chrome\\Application\\chrome.exe" in script
+    assert "Start-Process -FilePath $chromePath" in script
