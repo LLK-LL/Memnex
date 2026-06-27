@@ -175,3 +175,4 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     assert 'src="viewer-3d.js"' not in viewer_3d_html
     assert "type=\"module\">" in index_html
     assert "type=\"module\">" in viewer_3d_html
+    assert index_html.count("function systemColor(") == 1

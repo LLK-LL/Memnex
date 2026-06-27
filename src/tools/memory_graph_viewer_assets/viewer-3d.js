@@ -48,11 +48,24 @@ function loadEmbeddedGraph() {
 }
 
 async function loadGraph() {
+  const backendGraph = await loadBackendGraph();
+  if (backendGraph) return backendGraph;
   const embedded = loadEmbeddedGraph();
   if (embedded) return embedded;
   const response = await fetch("graph.json");
   if (!response.ok) throw new Error(`graph.json load failed: ${response.status}`);
   return response.json();
+}
+
+async function loadBackendGraph() {
+  try {
+    const response = await fetch("/api/graph", { cache: "no-store" });
+    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return null;
+    const graph = await response.json();
+    return graph?.elements?.nodes && graph?.elements?.edges ? graph : null;
+  } catch {
+    return null;
+  }
 }
 
 async function init() {

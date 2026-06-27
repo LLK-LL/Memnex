@@ -101,6 +101,14 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     applyTransform();
   }
 
+  function centerOn(x, y) {
+    pan = {
+      x: app.screen.width / 2 - x * scale,
+      y: app.screen.height / 2 - y * scale,
+    };
+    applyTransform();
+  }
+
   function drawOrbits(layout, state) {
     if (state?.showOrbitGuides === false) return;
     for (const orbit of layout.orbits || []) {
@@ -152,7 +160,15 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       if (relationMode === "inbound" && String(link.target?.id || link.target) !== state.selectedNodeId) continue;
       if (relationMode === "outbound" && String(link.source?.id || link.source) !== state.selectedNodeId) continue;
       const line = new PIXI.Graphics();
-      line.moveTo(source.x, source.y).lineTo(target.x, target.y);
+      const midX = (source.x + target.x) / 2;
+      const midY = (source.y + target.y) / 2;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const distance = Math.hypot(dx, dy) || 1;
+      const bend = Math.min(120, Math.max(26, distance * 0.16));
+      const controlX = midX + (-dy / distance) * bend;
+      const controlY = midY + (dx / distance) * bend;
+      line.moveTo(source.x, source.y).quadraticCurveTo(controlX, controlY, target.x, target.y);
       line.stroke({
         width: selected ? 2.2 : 1.6,
         color: selected ? 0xfacc15 : 0x7dd3fc,
@@ -286,6 +302,12 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
       const bounds = labelBounds(text, anchor.align);
       if (!isPinned(node, state) && placed.some(item => overlaps(item, bounds))) continue;
       placed.push(bounds);
+      if (isPinned(node, state)) {
+        const leader = new PIXI.Graphics();
+        leader.moveTo(node.x, node.y).lineTo(anchor.x, anchor.y);
+        leader.stroke({ width: 0.8, color: 0xc8d8ff, alpha: 0.34 });
+        labelLayer.addChild(leader);
+      }
       labelLayer.addChild(text);
     }
   }
@@ -337,6 +359,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     draw,
     fitToBounds,
     focusOn,
+    centerOn,
     getTransform: () => ({ scale, pan: { ...pan } }),
   };
 }
@@ -463,13 +486,54 @@ function drawNodeBody(graphics, node, state) {
   const hovered = node.id === state.hoveredNodeId;
   const color = parseColor(node.color || "#94a3b8");
   const radius = Number(node.renderRadius || 4);
+  const systemLike = node.isSystemNode || ["galactic-core", "central-star", "star"].includes(node.orbitalRole);
+  if (systemLike) {
+    drawSystemBody(graphics, node, { selected, hovered, color, radius });
+    return;
+  }
   graphics.circle(0, 0, radius + 10);
   graphics.fill({ color, alpha: selected || hovered ? 0.22 : 0.12 });
   graphics.circle(0, 0, radius);
-  graphics.fill({ color: color, alpha: 0.92 });
+  graphics.fill({ color, alpha: 0.92 });
+  graphics.circle(-radius * 0.28, -radius * 0.34, Math.max(1.2, radius * 0.22));
+  graphics.fill({ color: 0xffffff, alpha: 0.36 });
   if (selected || hovered) {
     graphics.circle(0, 0, radius + 6);
     graphics.stroke({ width: selected ? 2.2 : 1.4, color: selected ? 0xfacc15 : 0x7dd3fc, alpha: 0.9 });
+  }
+}
+
+function drawSystemBody(graphics, node, context) {
+  const { selected, hovered, color, radius } = context;
+  const glowRadius = Math.max(28, radius + 24);
+  graphics.circle(0, 0, glowRadius);
+  graphics.fill({ color, alpha: selected || hovered ? 0.26 : 0.16 });
+  for (let index = 0; index < 5; index += 1) {
+    const ring = radius + 12 + index * 8;
+    graphics.ellipse(0, 0, ring * 1.55, ring * 0.58);
+    graphics.stroke({ width: index === 0 ? 1.2 : 0.8, color, alpha: Math.max(0.08, 0.24 - index * 0.035) });
+  }
+  const particles = Math.max(16, Math.min(36, Math.round(radius * 1.4)));
+  for (let index = 0; index < particles; index += 1) {
+    const angle = (index / particles) * Math.PI * 2 + hashPhase(node.id) * 0.2;
+    const ring = radius + 16 + (index % 5) * 7;
+    const x = Math.cos(angle) * ring * (1.15 + (index % 3) * 0.18);
+    const y = Math.sin(angle) * ring * 0.48;
+    const dot = 1 + (index % 4 === 0 ? 1.4 : 0);
+    graphics.circle(x, y, dot);
+    graphics.fill({ color: index % 7 === 0 ? 0xffffff : color, alpha: index % 7 === 0 ? 0.72 : 0.58 });
+  }
+  graphics.ellipse(0, 0, radius * 2.2, radius * 0.62);
+  graphics.fill({ color, alpha: 0.18 });
+  graphics.circle(0, 0, radius + 3);
+  graphics.fill({ color, alpha: 0.92 });
+  graphics.circle(-radius * 0.22, -radius * 0.28, Math.max(2, radius * 0.26));
+  graphics.fill({ color: 0xffffff, alpha: 0.55 });
+  if (selected || hovered || node.orbitalRole === "galactic-core") {
+    graphics.moveTo(-glowRadius * 1.35, -2).lineTo(glowRadius * 1.35, 2);
+    graphics.stroke({ width: selected ? 2.2 : 1.4, color: selected ? 0xfacc15 : 0xe7f0ff, alpha: selected ? 0.72 : 0.38 });
+    graphics.circle(0, 0, radius + 10);
+    graphics.stroke({ width: selected ? 2.4 : 1.4, color: selected ? 0xfacc15 : 0x7dd3fc, alpha: 0.9 });
   }
 }
 
@@ -479,6 +543,14 @@ function clearLayer(layer) {
 
 function parseColor(value) {
   return Number.parseInt(String(value || "#94a3b8").replace("#", ""), 16);
+}
+
+function hashPhase(value) {
+  let hash = 0;
+  for (const char of String(value || "")) {
+    hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  }
+  return (Math.abs(hash) % 6283) / 1000;
 }
 
 function orbitColor(kind) {

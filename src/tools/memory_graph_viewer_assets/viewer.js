@@ -28,6 +28,31 @@ let renderTimer = null;
 let lastSystemTap = { key: null, time: 0 };
 let lastPlanetTap = { id: null, time: 0 };
 let shouldAutoFit = true;
+let activeInspectorTab = "overview";
+let minimapDragActive = false;
+
+const PERF_SAMPLE_LIMIT = 36;
+const PERF_SAMPLE_INTERVAL_MS = 1000;
+const perfState = {
+  frames: 0,
+  frameTimeTotal: 0,
+  lastSampleAt: performance.now(),
+  samples: new Array(PERF_SAMPLE_LIMIT).fill(0),
+  sampleIndex: 0,
+  sampleCount: 0,
+  bars: [],
+  gpuRenderer: "",
+  backendPerformance: null,
+  backendPerformanceAt: 0,
+  backendUnavailable: false,
+  lastStats: {
+    fps: 0,
+    frameTime: 0,
+    cpuLoad: 0,
+    memory: "N/A",
+    gpuEstimate: 0,
+  },
+};
 
 window.__memoryGalaxyDebug = {
   getState: () => ({
@@ -39,6 +64,11 @@ window.__memoryGalaxyDebug = {
   }),
   getLayout: () => currentLayout,
   getTransform: () => renderer?.getTransform?.() || null,
+  getPerformanceStats: () => ({
+    ...perfState.lastStats,
+    sampleCount: perfState.sampleCount,
+    sampleLimit: PERF_SAMPLE_LIMIT,
+  }),
 };
 
 function loadEmbeddedGraph() {
@@ -48,11 +78,24 @@ function loadEmbeddedGraph() {
 }
 
 async function loadGraph() {
+  const backendGraph = await loadBackendGraph();
+  if (backendGraph) return backendGraph;
   const embedded = loadEmbeddedGraph();
   if (embedded) return embedded;
   const response = await fetch("graph.json");
   if (!response.ok) throw new Error(`graph.json load failed: ${response.status}`);
   return response.json();
+}
+
+async function loadBackendGraph() {
+  try {
+    const response = await fetch("/api/graph", { cache: "no-store" });
+    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return null;
+    const graph = await response.json();
+    return graph?.elements?.nodes && graph?.elements?.edges ? graph : null;
+  } catch {
+    return null;
+  }
 }
 
 async function init() {
@@ -81,6 +124,8 @@ async function createPixi() {
   });
   container.appendChild(app.canvas);
   renderer = createMemoryGalaxyRenderer({ PIXI: window.PIXI, app, stage: app.stage });
+  initPerformancePanel();
+  app.ticker.add(ticker => recordPerformanceFrame(Number(ticker.deltaMS || 16.67)));
   app.canvas.addEventListener("dblclick", handleCanvasDoubleClick);
   window.addEventListener("resize", () => {
     if (currentLayout) requestAnimationFrame(() => renderer.fitToBounds(currentLayout.bounds));
@@ -88,7 +133,16 @@ async function createPixi() {
 }
 
 function bindControls() {
-  document.getElementById("search")?.addEventListener("input", scheduleApplyFilters);
+  const search = document.getElementById("search");
+  const stageSearch = document.getElementById("stageSearchMirror");
+  search?.addEventListener("input", event => {
+    if (stageSearch && stageSearch.value !== event.target.value) stageSearch.value = event.target.value;
+    scheduleApplyFilters();
+  });
+  stageSearch?.addEventListener("input", event => {
+    if (search) search.value = event.target.value;
+    scheduleApplyFilters();
+  });
   document.getElementById("weightFilter")?.addEventListener("input", event => {
     document.getElementById("weightValue").textContent = Number(event.target.value).toFixed(1);
     scheduleApplyFilters();
@@ -121,6 +175,13 @@ function bindControls() {
     drawCurrentLayout({ preserveView: true });
   });
 
+  document.querySelector(".inspector-tabs")?.addEventListener("click", event => {
+    const button = event.target.closest("button[data-tab]");
+    if (!button) return;
+    activeInspectorTab = button.dataset.tab || "overview";
+    updateInspectorTabs();
+  });
+
   document.getElementById("nodeScale")?.addEventListener("input", event => {
     const uiValue = Number(event.target.value);
     state.nodeScale = 0.48 * uiValue;
@@ -139,6 +200,12 @@ function bindControls() {
     state.animationSpeed = state.motionEnabled ? 1 : 0;
     document.getElementById("animationSpeed").value = String(state.animationSpeed);
     document.getElementById("animationSpeedValue").textContent = `${state.animationSpeed.toFixed(2)}x`;
+  });
+  document.getElementById("motionButton")?.addEventListener("click", () => {
+    const toggle = document.getElementById("motionToggle");
+    if (!toggle) return;
+    toggle.checked = !toggle.checked;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
   });
 
   document.getElementById("cometsToggle")?.addEventListener("change", event => {
@@ -196,6 +263,8 @@ function bindControls() {
     shouldAutoFit = true;
     drawCurrentLayout();
   });
+
+  bindMinimapControls();
 }
 
 function bindSegmentedControl(groupId, selectId, onChange) {
@@ -381,6 +450,7 @@ function drawCurrentLayout(options = {}) {
   }
   syncToolbarState();
   renderBreadcrumbs();
+  renderMinimap(currentLayout);
   renderSelectionFromState();
 }
 
@@ -452,6 +522,127 @@ function renderOrbitLegend() {
   `;
 }
 
+function renderMinimap(layout) {
+  const root = document.getElementById("minimapDots");
+  const windowEl = document.getElementById("minimapWindow");
+  if (!root || !layout?.bounds) return;
+  const viewport = minimapViewport(layout);
+  const points = minimapPoints(layout);
+  root.innerHTML = points.map(system => {
+    const point = worldToMinimapPercent(system.x, system.y, layout);
+    return `<span class="minimap-dot" style="left:${point.x.toFixed(2)}%;top:${point.y.toFixed(2)}%;background:${escapeHtml(system.color || viewerSystemColor(system.key || system.memorySystem))};color:${escapeHtml(system.color || viewerSystemColor(system.key || system.memorySystem))}"></span>`;
+  }).join("");
+  if (windowEl && viewport) {
+    windowEl.style.left = `${viewport.left.toFixed(2)}%`;
+    windowEl.style.top = `${viewport.top.toFixed(2)}%`;
+    windowEl.style.width = `${viewport.width.toFixed(2)}%`;
+    windowEl.style.height = `${viewport.height.toFixed(2)}%`;
+  }
+}
+
+function bindMinimapControls() {
+  const minimap = document.querySelector(".galaxy-minimap");
+  if (!minimap) return;
+  const navigate = event => {
+    if (!currentLayout?.bounds || !renderer?.centerOn) return;
+    const world = minimapEventToWorld(event, currentLayout);
+    if (!world) return;
+    renderer.centerOn(world.x, world.y);
+    renderMinimap(currentLayout);
+  };
+  minimap.addEventListener("pointerdown", event => {
+    minimapDragActive = true;
+    minimap.setPointerCapture?.(event.pointerId);
+    navigate(event);
+  });
+  minimap.addEventListener("pointermove", event => {
+    if (!minimapDragActive) return;
+    navigate(event);
+  });
+  minimap.addEventListener("pointerup", event => {
+    minimapDragActive = false;
+    minimap.releasePointerCapture?.(event.pointerId);
+  });
+  minimap.addEventListener("pointercancel", () => {
+    minimapDragActive = false;
+  });
+}
+
+function minimapPoints(layout) {
+  if (layout.view === "galaxy") return (layout.systems || []).filter(system => system.key !== "router");
+  const ranked = [...(layout.nodes || [])]
+    .filter(node => node.orbitalRole !== "satellite" || Number(node.raw?.importance || 0) >= 0.5 || Number(node.raw?.mention_count || 0) >= 3)
+    .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a))
+    .slice(0, 80);
+  return ranked.map(node => ({
+    x: node.x,
+    y: node.y,
+    key: node.memorySystem,
+    memorySystem: node.memorySystem,
+    color: node.color || viewerSystemColor(node.memorySystem),
+  }));
+}
+
+function minimapEventToWorld(event, layout) {
+  const minimap = document.querySelector(".galaxy-minimap");
+  if (!minimap || !layout?.bounds) return null;
+  const rect = minimap.getBoundingClientRect();
+  const xPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+  const yPercent = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+  const bounds = paddedMinimapBounds(layout.bounds);
+  return {
+    x: bounds.minX + xPercent * bounds.width,
+    y: bounds.minY + yPercent * bounds.height,
+  };
+}
+
+function worldToMinimapPercent(x, y, layout) {
+  const bounds = paddedMinimapBounds(layout.bounds);
+  return {
+    x: ((x - bounds.minX) / bounds.width) * 100,
+    y: ((y - bounds.minY) / bounds.height) * 100,
+  };
+}
+
+function minimapViewport(layout) {
+  const transform = renderer?.getTransform?.();
+  if (!transform || !app?.screen?.width || !layout?.bounds) return null;
+  const bounds = paddedMinimapBounds(layout.bounds);
+  const view = {
+    minX: (0 - transform.pan.x) / transform.scale,
+    minY: (0 - transform.pan.y) / transform.scale,
+    maxX: (app.screen.width - transform.pan.x) / transform.scale,
+    maxY: (app.screen.height - transform.pan.y) / transform.scale,
+  };
+  const left = clampPercent(((view.minX - bounds.minX) / bounds.width) * 100);
+  const top = clampPercent(((view.minY - bounds.minY) / bounds.height) * 100);
+  const right = clampPercent(((view.maxX - bounds.minX) / bounds.width) * 100);
+  const bottom = clampPercent(((view.maxY - bounds.minY) / bounds.height) * 100);
+  return {
+    left,
+    top,
+    width: Math.max(3, right - left),
+    height: Math.max(3, bottom - top),
+  };
+}
+
+function paddedMinimapBounds(bounds) {
+  const width = Math.max(1, bounds.width || bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.height || bounds.maxY - bounds.minY);
+  const padX = width * 0.08;
+  const padY = height * 0.08;
+  return {
+    minX: bounds.minX - padX,
+    minY: bounds.minY - padY,
+    width: width + padX * 2,
+    height: height + padY * 2,
+  };
+}
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
 function renderBreadcrumbs() {
   const galaxy = document.getElementById("crumbGalaxy");
   const system = document.getElementById("crumbSystem");
@@ -497,16 +688,20 @@ function renderSelectionFromState() {
   document.getElementById("selectionCard").innerHTML = '<div class="empty-state">Select a system or node to inspect it.</div>';
   document.getElementById("relationsPanel").innerHTML = '<div class="empty-state">Relations appear here when a node is selected.</div>';
   document.getElementById("systemSummary").innerHTML = '<div class="empty-state">System counts and top members appear here.</div>';
+  document.getElementById("systemDetails").innerHTML = '<div class="empty-state">System details appear here when a system is selected.</div>';
+  document.getElementById("nodesPanel").innerHTML = '<div class="empty-state">Memory nodes appear here when a system or node is selected.</div>';
+  updateInspectorTabs();
 }
 
 function showNodeSelection(node) {
   const raw = node.raw || node;
   const system = node.memorySystem || visibleNodeSystem(node);
   const status = raw.galaxy_layer || node.layer || "knowledge";
+  document.getElementById("systemDetails").innerHTML = '<div class="empty-state">Select a system to view breakdowns and activity.</div>';
   document.getElementById("selectionCard").innerHTML = `
     <div class="selection-title-row">
       <div class="selection-title">
-        <span class="selection-glow" style="color:${escapeHtml(systemColor(system))}"></span>
+        <span class="selection-glow" style="color:${escapeHtml(viewerSystemColor(system))}"></span>
         <div>
           <div class="selection-name">${escapeHtml(node.label || raw.label || raw.name || raw.id)}</div>
           <div class="meta-inline">${escapeHtml(raw.type || node.type)} in ${escapeHtml(systemLabel(system))}</div>
@@ -527,37 +722,39 @@ function showNodeSelection(node) {
     </div>
   `;
   renderRelationsForNode(node);
+  renderNodesForNode(node);
   renderSystemSummary(system);
+  updateInspectorTabs();
 }
 
 function showSystemSelection(systemKey) {
-  const members = filteredGraph.nodes.filter(node => visibleNodeSystem(node) === systemKey);
-  const counts = summarizeSystemStructure(systemKey);
-  const lead = members.sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a))[0];
+  const members = filteredGraph.nodes
+    .filter(node => visibleNodeSystem(node) === systemKey)
+    .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
+  const systemLinks = linksForNodes(new Set(members.map(node => node.id)));
+  const typeBreakdown = summarizeBy(members, node => node.raw?.type || node.type || "memory");
+  const layerBreakdown = summarizeBy(members, node => node.raw?.galaxy_layer || node.layer || "unknown");
+  const latest = latestNodeTimestamp(members);
   document.getElementById("selectionCard").innerHTML = `
-    <div class="selection-title-row">
-      <div class="selection-title">
-        <span class="selection-glow" style="color:${escapeHtml(systemColor(systemKey))}"></span>
+    <div class="inspector-title-row">
+      <div class="inspector-title-main">
+        <span class="selection-glow" style="color:${escapeHtml(viewerSystemColor(systemKey))}"></span>
         <div>
           <div class="selection-name">${escapeHtml(systemLabel(systemKey))}</div>
-          <div class="meta-inline">${escapeHtml(systemLayerLabel(systemKey))}</div>
+          <div class="meta-inline">${escapeHtml(formatSystemMix(typeBreakdown, "types"))}</div>
+          <div class="meta-inline">Latest memory: ${escapeHtml(formatShortDate(latest))}</div>
         </div>
       </div>
-      <span class="status-badge">${escapeHtml(layerBadgeForSystem(members))}</span>
     </div>
-    ${renderMetricGrid([
-      { label: "Planets", value: counts.planet },
-      { label: "Moons", value: counts.moon },
-      { label: "Evidence", value: counts.evidence },
-      { label: "External", value: counts.external },
-    ])}
+    <div class="active-row"><span class="live-dot"></span><span>${escapeHtml(formatSystemMix(layerBreakdown, "layers"))}</span></div>
     <div class="meta-stack">
-      <div>${escapeHtml(systemDescription(systemKey, lead))}</div>
-      ${copyableInline("System ID", `sys_${systemKey}`)}
+      <div>${escapeHtml(systemEvidenceSummary(members, systemLinks))}</div>
     </div>
   `;
   renderRelationsForSystem(systemKey);
+  renderNodesForSystem(systemKey);
   renderSystemSummary(systemKey);
+  updateInspectorTabs();
 }
 
 function showCometSelection(comet) {
@@ -578,6 +775,79 @@ function showCometSelection(comet) {
     </div>
   `;
   document.getElementById("relationsPanel").innerHTML = '<div class="empty-state">Comet overlays summarize active context rather than graph edges.</div>';
+  document.getElementById("nodesPanel").innerHTML = '<div class="empty-state">Comet overlays do not map to individual memory nodes.</div>';
+  updateInspectorTabs();
+}
+
+function updateInspectorTabs() {
+  for (const button of document.querySelectorAll(".inspector-tabs button[data-tab]")) {
+    button.classList.toggle("is-active", button.dataset.tab === activeInspectorTab);
+  }
+  for (const panel of document.querySelectorAll(".inspector-tab-panel[data-panel]")) {
+    panel.hidden = panel.dataset.panel !== activeInspectorTab;
+  }
+}
+
+function renderNodesForSystem(systemKey) {
+  const members = filteredGraph.nodes
+    .filter(node => visibleNodeSystem(node) === systemKey)
+    .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
+  document.getElementById("nodesPanel").innerHTML = renderNodeList(
+    members,
+    `${systemLabel(systemKey)} Nodes`,
+    `${formatCompactNumber(members.length)} visible memories from the current graph scope.`,
+  );
+}
+
+function renderNodesForNode(node) {
+  const neighborRelations = Object.values(groupNeighborRelations(filteredGraph, node.id)).flat();
+  const nodeById = new Map(filteredGraph.nodes.map(item => [item.id, item]));
+  const nodes = [
+    nodeById.get(node.id) || node.raw || node,
+    ...neighborRelations
+      .map(item => nodeById.get(item.neighbor.id))
+      .filter(Boolean)
+      .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a)),
+  ];
+  document.getElementById("nodesPanel").innerHTML = renderNodeList(
+    dedupeById(nodes),
+    "Selected Node Neighborhood",
+    `${formatCompactNumber(Math.max(0, nodes.length - 1))} linked visible memories from the current graph scope.`,
+  );
+}
+
+function renderNodeList(nodes, title, subtitle) {
+  const visibleNodes = nodes.slice(0, 36);
+  return `
+    <div class="inspector-list-head">
+      <span>${escapeHtml(title)}</span>
+      <strong>${escapeHtml(subtitle)}</strong>
+    </div>
+    ${visibleNodes.length ? visibleNodes.map(renderNodeListItem).join("") : '<div class="empty-state">No visible memory nodes in the current scope.</div>'}
+  `;
+}
+
+function renderNodeListItem(node) {
+  const raw = node.raw || node;
+  const system = visibleNodeSystem(node);
+  const title = node.label || raw.label || raw.name || raw.id || node.id;
+  const content = raw.content || raw.summary || "";
+  return `
+    <article class="memory-node-item">
+      <div class="memory-node-title">
+        <span class="breakdown-dot" style="background:${escapeHtml(viewerSystemColor(system))}"></span>
+        <strong>${escapeHtml(title)}</strong>
+      </div>
+      <div class="meta">${escapeHtml(raw.type || node.type || "memory")} · ${escapeHtml(systemLabel(system))} · ${escapeHtml(raw.galaxy_layer || node.layer || "unknown")}</div>
+      <div class="node-facts">
+        <span>importance ${escapeHtml(raw.importance ?? 0)}</span>
+        <span>mentions ${escapeHtml(raw.mention_count ?? 0)}</span>
+        <span>updated ${escapeHtml(formatShortDate(raw.last_seen_at || raw.updated_at || "unknown"))}</span>
+      </div>
+      ${content ? `<p>${escapeHtml(truncateText(content, 180))}</p>` : ""}
+      ${copyableInline("Node ID", raw.id || node.id)}
+    </article>
+  `;
 }
 
 function renderRelationsForNode(node) {
@@ -587,12 +857,7 @@ function renderRelationsForNode(node) {
     ? relationTypes.map(([relation, items]) => `
       <div class="relation-group">
         <div class="relation-group-title">${escapeHtml(relation)} (${items.length})</div>
-        ${items.slice(0, 3).map(item => `
-          <div class="relation-item">
-            <strong>${escapeHtml(item.neighbor.label)}</strong>
-            <span class="weight-value">${Number(item.link.weight || 0).toFixed(2)}</span>
-          </div>
-        `).join("")}
+        ${items.slice(0, 12).map(item => renderConnectionItem(item.link, node, item.neighbor, relation)).join("")}
       </div>
     `).join("")
     : formatNodeDetails(node.raw || node);
@@ -605,10 +870,18 @@ function renderRelationsForSystem(systemKey) {
     ? entries.map(([relation, group]) => `
       <div class="relation-group">
         <div class="relation-group-title">${escapeHtml(relation)} (${group.items.length})</div>
-        ${group.items.slice(0, 3).map(item => `
-          <div class="relation-item">
-            <strong>${escapeHtml(systemLabel(item.system))}</strong>
-            <span class="weight-value">${item.weight.toFixed(2)}</span>
+        ${group.items.slice(0, 12).map(item => `
+          <div class="connection-item">
+            <div class="connection-line">
+              <strong>${escapeHtml(systemLabel(systemKey))}</strong>
+              <span>→</span>
+              <strong>${escapeHtml(systemLabel(item.system))}</strong>
+            </div>
+            <div class="meta">${escapeHtml(relation)} · ${escapeHtml(formatCompactNumber(item.count))} links</div>
+            <div class="connection-weight">
+              <div class="progress-track"><span style="--bar:${Math.min(100, item.weight * 10).toFixed(1)}%"></span></div>
+              <span class="weight-value">${item.weight.toFixed(2)}</span>
+            </div>
           </div>
         `).join("")}
       </div>
@@ -616,20 +889,78 @@ function renderRelationsForSystem(systemKey) {
     : '<div class="empty-state">No cross-system relations are visible in the current scope.</div>';
 }
 
+function renderConnectionItem(link, sourceNode, targetNode, relation) {
+  const source = filteredGraph.nodes.find(node => node.id === String(link.source?.id || link.source)) || sourceNode;
+  const target = filteredGraph.nodes.find(node => node.id === String(link.target?.id || link.target)) || targetNode;
+  const sourceLabel = source.label || source.raw?.label || source.id;
+  const targetLabel = target.label || target.raw?.label || target.id;
+  const weight = Number(link.weight || 0);
+  return `
+    <div class="connection-item">
+      <div class="connection-line">
+        <strong>${escapeHtml(sourceLabel)}</strong>
+        <span>→</span>
+        <strong>${escapeHtml(targetLabel)}</strong>
+      </div>
+      <div class="meta">${escapeHtml(systemLabel(visibleNodeSystem(source)))} → ${escapeHtml(systemLabel(visibleNodeSystem(target)))} · ${escapeHtml(relation || link.relation || "related")}</div>
+      <div class="connection-weight">
+        <div class="progress-track"><span style="--bar:${Math.min(100, weight * 10).toFixed(1)}%"></span></div>
+        <span class="weight-value">${weight.toFixed(2)}</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderSystemSummary(systemKey) {
   const members = filteredGraph.nodes
     .filter(node => visibleNodeSystem(node) === systemKey)
     .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
   const solarLayout = buildSolarSystemLayout(filteredGraph, systemKey, { nodeScale: state.nodeScale || 0.48 });
+  const memberIds = new Set(members.map(node => node.id));
+  const systemLinks = linksForNodes(memberIds);
+  const avgConnections = members.length ? systemLinks.length / members.length : 0;
+  const density = members.length > 1 ? systemLinks.length / (members.length * (members.length - 1)) : 0;
+  const latest = latestNodeTimestamp(members);
+  const datedCount = members.filter(node => node.raw?.last_seen_at).length;
+  const timestampCoverage = members.length ? datedCount / members.length : 0;
   const topPlanets = solarLayout.nodes
     .filter(node => node.orbitalRole === "planet")
     .slice(0, 5)
     .map(node => ({ label: node.label, value: Number(node.raw?.importance || 0).toFixed(2) }));
+  const typeBreakdown = summarizeBy(members, node => node.raw?.type || node.type || "memory").slice(0, 5);
+  const relationBreakdown = Object.entries(groupSystemRelations(systemKey))
+    .map(([relation, group]) => ({ label: relation, value: group.items.reduce((sum, item) => sum + item.weight, 0) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5);
   document.getElementById("systemSummary").innerHTML = `
-    <div class="meta-inline">Top planets in ${escapeHtml(systemLabel(systemKey))}</div>
-    ${renderInspectorList(topPlanets)}
-    <div class="meta-inline"><a class="view-link" href="#">View all ${members.length} members</a></div>
+    <div class="overview-metrics">
+      <div class="integrity-gauge" style="--value:${timestampCoverage.toFixed(3)}">
+        <div><strong>${formatPercent(timestampCoverage * 100)}</strong><span>Dated</span></div>
+      </div>
+      <div class="metric-stack">
+        <div class="hud-row"><span>Total Nodes</span><strong>${escapeHtml(formatCompactNumber(members.length))}</strong></div>
+        <div class="hud-row"><span>Total Connections</span><strong>${escapeHtml(formatCompactNumber(systemLinks.length))}</strong></div>
+        <div class="hud-row"><span>Avg. Connections</span><strong>${avgConnections.toFixed(2)}</strong></div>
+        <div class="hud-row"><span>Density</span><strong>${density.toFixed(4)}</strong></div>
+        <div class="hud-row"><span>Last Updated</span><strong>${escapeHtml(formatShortDate(latest))}</strong></div>
+      </div>
+    </div>
   `;
+  document.getElementById("systemDetails").innerHTML = `
+    ${renderBreakdownSection("NODE TYPE BREAKDOWN", typeBreakdown, members.length)}
+    ${renderBreakdownSection("TOP CONNECTIONS", relationBreakdown, Math.max(1, relationBreakdown.reduce((sum, item) => sum + item.value, 0)))}
+    <div class="breakdown-section">
+      <div class="breakdown-head"><span>TOP PLANETS</span></div>
+      ${renderInspectorList(topPlanets)}
+    </div>
+    ${renderActivityList(members)}
+  `;
+}
+
+function linksForNodes(nodeIds) {
+  return filteredGraph.links.filter(link =>
+    nodeIds.has(String(link.source.id || link.source)) || nodeIds.has(String(link.target.id || link.target))
+  );
 }
 
 function groupSystemRelations(systemKey) {
@@ -647,15 +978,92 @@ function groupSystemRelations(systemKey) {
     const relation = link.relation || "related";
     const neighborSystem = visibleNodeSystem(neighbor);
     if (!grouped[relation]) grouped[relation] = { items: [], bySystem: new Map() };
-    const current = grouped[relation].bySystem.get(neighborSystem) || 0;
-    grouped[relation].bySystem.set(neighborSystem, current + Number(link.weight || 0));
+    const current = grouped[relation].bySystem.get(neighborSystem) || { weight: 0, count: 0 };
+    grouped[relation].bySystem.set(neighborSystem, {
+      weight: current.weight + Number(link.weight || 0),
+      count: current.count + 1,
+    });
   }
   for (const relation of Object.keys(grouped)) {
     grouped[relation].items = [...grouped[relation].bySystem.entries()]
-      .map(([system, weight]) => ({ system, weight }))
+      .map(([system, value]) => ({ system, weight: value.weight, count: value.count }))
       .sort((a, b) => b.weight - a.weight);
   }
   return grouped;
+}
+
+function dedupeById(nodes) {
+  const seen = new Set();
+  return nodes.filter(node => {
+    const id = node?.id || node?.raw?.id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
+}
+
+function summarizeBy(items, getKey) {
+  const counts = new Map();
+  for (const item of items) {
+    const key = String(getKey(item) || "Other");
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function renderBreakdownSection(title, items, total) {
+  const palette = ["#4ea1ff", "#b36cff", "#f7c65a", "#55dce0", "#b6c2d7"];
+  return `
+    <div class="breakdown-section">
+      <div class="breakdown-head"><span>${escapeHtml(title)}</span></div>
+      ${items.length ? items.map((item, index) => {
+        const percent = total ? (Number(item.value || 0) / total) * 100 : 0;
+        const color = palette[index % palette.length];
+        return `
+          <div class="breakdown-row">
+            <span class="breakdown-dot" style="background:${color}"></span>
+            <span>${escapeHtml(item.label)}</span>
+            <div class="progress-track"><span style="--bar:${Math.min(100, percent).toFixed(1)}%;background:${color}"></span></div>
+            <strong>${escapeHtml(formatCompactNumber(item.value))}</strong>
+          </div>
+        `;
+      }).join("") : '<div class="empty-state">No visible items in this scope.</div>'}
+    </div>
+  `;
+}
+
+function renderActivityList(members) {
+  const recent = [...members]
+    .filter(node => node.raw?.last_seen_at)
+    .sort((a, b) => String(b.raw.last_seen_at).localeCompare(String(a.raw.last_seen_at)))
+    .slice(0, 5);
+  return `
+    <div class="activity-list">
+      <div class="breakdown-head"><span>RECENT ACTIVITY</span></div>
+      ${recent.length ? recent.map(node => `
+        <div class="activity-item">
+          <span>${escapeHtml(node.label)}</span>
+          <strong>${escapeHtml(formatShortDate(node.raw.last_seen_at))}</strong>
+        </div>
+      `).join("") : '<div class="empty-state">No timestamps in this scope.</div>'}
+    </div>
+  `;
+}
+
+function formatShortDate(value) {
+  if (!value || value === "unknown") return "unknown";
+  return String(value).slice(0, 10);
+}
+
+function latestNodeTimestamp(nodes) {
+  return nodes.map(node => node.raw?.last_seen_at).filter(Boolean).sort().at(-1) || "unknown";
 }
 
 function summarizeOrbitRoles(nodes) {
@@ -684,43 +1092,25 @@ function orbitRoleForNode(node) {
   return "moon";
 }
 
-function layerBadgeForSystem(nodes) {
-  if (nodes.some(node => node.layer === "core")) return "Core";
-  if (nodes.some(node => node.layer === "active")) return "Active";
-  if (nodes.some(node => node.layer === "knowledge")) return "Knowledge";
-  if (nodes.some(node => node.layer === "episode")) return "Episodes";
-  return "External";
+function formatSystemMix(items, fallbackLabel) {
+  if (!items.length) return `0 ${fallbackLabel}`;
+  return items
+    .slice(0, 3)
+    .map(item => `${item.label} ${formatCompactNumber(item.value)}`)
+    .join(" / ");
 }
 
-function systemDescription(systemKey, lead) {
-  const descriptions = {
-    router: "Encapsulates global routing and top-level agent coordination.",
-    rule: "Captures hard constraints, policies, and durable guardrails.",
-    persona: "Represents tone, identity, and behavior-shaping traits.",
-    skill: "Encapsulates executable capabilities, techniques, and procedural knowledge.",
-    harness: "Contains tests, evaluation harnesses, and verification workflows.",
-    preference: "Tracks stable user preferences and interaction choices.",
-    project: "Holds active project context and local domain memory.",
-    knowledge: "Stores reusable concepts and longer-lived contextual knowledge.",
-    event: "Contains episodes, sessions, and time-bound observations.",
-    source: "Groups provenance, citations, and external supporting evidence.",
-  };
-  return descriptions[systemKey] || lead?.raw?.content || "No system description available.";
-}
-
-function systemLayerLabel(systemKey) {
-  if (["rule", "persona"].includes(systemKey)) return "Control Layer";
-  if (["skill", "harness", "preference"].includes(systemKey)) return "Execution Layer";
-  if (["project", "knowledge"].includes(systemKey)) return "Context Layer";
-  if (["event", "source"].includes(systemKey)) return "Evidence Layer";
-  return "Core Layer";
+function systemEvidenceSummary(members, links) {
+  const top = members.find(node => node.raw?.content || node.label);
+  const content = top?.raw?.content || top?.label || "No memory content is visible in this filtered scope.";
+  return `${formatCompactNumber(members.length)} memories and ${formatCompactNumber(links.length)} visible links. Top memory: ${truncateText(content, 150)}`;
 }
 
 function systemLabel(systemKey) {
   return `${capitalize(systemKey)} System`;
 }
 
-function systemColor(systemKey) {
+function viewerSystemColor(systemKey) {
   return systemColors[systemKey] || "#4ea1ff";
 }
 
@@ -828,7 +1218,6 @@ function emitEvent(type, node, context) {
 
 function renderStats(metadata) {
   const stats = document.getElementById("stats");
-  if (!stats) return;
   const totalNodes = Number(metadata.total_node_count ?? metadata.node_count ?? 0);
   const totalEdges = Number(metadata.total_edge_count ?? metadata.edge_count ?? 0);
   const filteredNodes = Number(metadata.node_count ?? totalNodes);
@@ -838,7 +1227,179 @@ function renderStats(metadata) {
   const visibleSuffix = visibleNodes !== filteredNodes || visibleEdges !== filteredEdges
     ? ` (${visibleNodes}/${visibleEdges} shown)`
     : "";
-  stats.textContent = `${filteredNodes}/${totalNodes} nodes / ${filteredEdges}/${totalEdges} edges${visibleSuffix}`;
+  if (stats) stats.textContent = `${filteredNodes}/${totalNodes} nodes / ${filteredEdges}/${totalEdges} edges${visibleSuffix}`;
+  const liveRows = document.getElementById("liveHudRows");
+  if (liveRows) {
+    liveRows.innerHTML = [
+      ["Systems", countVisibleSystems()],
+      ["Nodes", visibleNodes],
+      ["Connections", visibleEdges],
+      ["Inferred Links", filteredEdges],
+    ].map(([label, value]) => `
+      <div class="hud-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatCompactNumber(value))}</strong></div>
+    `).join("");
+  }
+  const perfNodes = document.getElementById("perfNodes");
+  const perfEdges = document.getElementById("perfEdges");
+  if (perfNodes) perfNodes.textContent = formatCompactNumber(visibleNodes);
+  if (perfEdges) perfEdges.textContent = formatCompactNumber(visibleEdges);
+}
+
+function initPerformancePanel() {
+  const sparkline = document.getElementById("perfSparkline");
+  if (sparkline && !perfState.bars.length) {
+    const fragment = document.createDocumentFragment();
+    for (let index = 0; index < PERF_SAMPLE_LIMIT; index += 1) {
+      const bar = document.createElement("span");
+      bar.style.setProperty("--h", "8%");
+      fragment.appendChild(bar);
+      perfState.bars.push(bar);
+    }
+    sparkline.appendChild(fragment);
+  }
+  perfState.gpuRenderer = readGpuRenderer();
+  const gpuRenderer = document.getElementById("perfGpuRenderer");
+  if (gpuRenderer) gpuRenderer.textContent = perfState.gpuRenderer;
+}
+
+function recordPerformanceFrame(deltaMS) {
+  const now = performance.now();
+  const frameTime = Number.isFinite(deltaMS) && deltaMS > 0 ? deltaMS : 16.67;
+  perfState.frames += 1;
+  perfState.frameTimeTotal += frameTime;
+  if (now - perfState.lastSampleAt < PERF_SAMPLE_INTERVAL_MS) return;
+
+  const elapsedSeconds = Math.max((now - perfState.lastSampleAt) / 1000, 0.001);
+  const avgFrameTime = perfState.frames ? perfState.frameTimeTotal / perfState.frames : frameTime;
+  const fps = Math.round(perfState.frames / elapsedSeconds);
+  const cpuLoad = Math.max(0, Math.min(100, (avgFrameTime / 16.67) * 100));
+  const gpuEstimate = estimateGpuMemoryMB();
+  refreshBackendPerformance();
+  const backendPerf = recentBackendPerformance();
+  perfState.lastStats = {
+    fps,
+    frameTime: avgFrameTime,
+    cpuLoad: backendPerf?.cpu_percent ?? cpuLoad,
+    memory: formatSystemMemory(backendPerf) || formatBrowserMemory(),
+    gpuEstimate: backendPerf?.gpu?.memory_used_mb ?? gpuEstimate,
+  };
+  perfState.samples[perfState.sampleIndex] = Math.max(0, Math.min(100, fps));
+  perfState.sampleIndex = (perfState.sampleIndex + 1) % PERF_SAMPLE_LIMIT;
+  perfState.sampleCount = Math.min(PERF_SAMPLE_LIMIT, perfState.sampleCount + 1);
+  renderPerformancePanel();
+  perfState.frames = 0;
+  perfState.frameTimeTotal = 0;
+  perfState.lastSampleAt = now;
+}
+
+function renderPerformancePanel() {
+  setText("perfFps", String(perfState.lastStats.fps));
+  setText("perfFrameTime", `${perfState.lastStats.frameTime.toFixed(1)} ms`);
+  setText("perfCpu", `${perfState.lastStats.cpuLoad.toFixed(1)}%`);
+  setText("perfMemory", perfState.lastStats.memory);
+  const backendGpu = recentBackendPerformance()?.gpu;
+  const gpuText = backendGpu?.memory_total_mb
+    ? `${Number(backendGpu.memory_used_mb || 0).toFixed(0)} / ${Number(backendGpu.memory_total_mb).toFixed(0)} MB`
+    : `~${perfState.lastStats.gpuEstimate.toFixed(1)} MB`;
+  setText("perfGpu", gpuText);
+  renderPerformanceSparkline();
+}
+
+function refreshBackendPerformance() {
+  if (perfState.backendUnavailable) return;
+  fetch("/api/system/performance", { cache: "no-store" })
+    .then(response => response.ok ? response.json() : null)
+    .then(payload => {
+      if (!payload?.source) {
+        perfState.backendUnavailable = true;
+        return;
+      }
+      perfState.backendPerformance = payload;
+      perfState.backendPerformanceAt = performance.now();
+    })
+    .catch(() => {
+      perfState.backendUnavailable = true;
+    });
+}
+
+function recentBackendPerformance() {
+  if (!perfState.backendPerformance) return null;
+  if (performance.now() - perfState.backendPerformanceAt > PERF_SAMPLE_INTERVAL_MS * 2.5) return null;
+  return perfState.backendPerformance;
+}
+
+function formatSystemMemory(backendPerf) {
+  const memory = backendPerf?.memory;
+  if (!memory?.used_mb || !memory?.total_mb) return "";
+  return `${Number(memory.used_mb).toFixed(0)} MB / ${Number(memory.total_mb).toFixed(0)} MB`;
+}
+
+function renderPerformanceSparkline() {
+  if (!perfState.bars.length) return;
+  const maxValue = Math.max(60, ...perfState.samples);
+  for (let index = 0; index < PERF_SAMPLE_LIMIT; index += 1) {
+    const sampleOffset = (perfState.sampleIndex + index) % PERF_SAMPLE_LIMIT;
+    const value = perfState.sampleCount < PERF_SAMPLE_LIMIT && index < PERF_SAMPLE_LIMIT - perfState.sampleCount
+      ? 0
+      : perfState.samples[sampleOffset];
+    const height = Math.max(8, Math.round((value / maxValue) * 100));
+    perfState.bars[index].style.setProperty("--h", `${height}%`);
+  }
+}
+
+function readGpuRenderer() {
+  const canvas = app?.canvas;
+  let gl = null;
+  try {
+    gl = canvas?.getContext("webgl2") || canvas?.getContext("webgl");
+  } catch {
+    return "WebGL";
+  }
+  if (!gl) return "WebGL";
+  const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+  const rendererName = debugInfo
+    ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+    : gl.getParameter(gl.RENDERER);
+  return String(rendererName || "WebGL").replace(/\s+/g, " ").trim();
+}
+
+function formatBrowserMemory() {
+  const memory = performance.memory;
+  if (!memory?.usedJSHeapSize) return "N/A";
+  const used = memory.usedJSHeapSize / 1048576;
+  if (!memory.jsHeapSizeLimit) return `${used.toFixed(1)} MB`;
+  const limit = memory.jsHeapSizeLimit / 1048576;
+  return `${used.toFixed(1)} MB / ${limit.toFixed(0)} MB`;
+}
+
+function estimateGpuMemoryMB() {
+  const nodes = Number(currentLayout?.nodes?.length || 0);
+  const links = Number(currentLayout?.links?.length || 0);
+  const canvas = app?.canvas;
+  const canvasPixels = Number(canvas?.width || 0) * Number(canvas?.height || 0);
+  const framebufferBytes = canvasPixels * 4;
+  const graphBytes = nodes * 384 + links * 128;
+  return Math.max(0.1, (framebufferBytes + graphBytes) / 1048576);
+}
+
+function setText(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value;
+}
+
+function formatCompactNumber(value) {
+  const number = Number(value || 0);
+  if (number >= 1000000) return `${(number / 1000000).toFixed(1)}M`;
+  if (number >= 1000) return `${(number / 1000).toFixed(number >= 10000 ? 0 : 1)}K`;
+  return String(number);
+}
+
+function formatPercent(value) {
+  return `${Math.max(0, Math.min(100, Number(value || 0))).toFixed(1)}%`;
+}
+
+function countVisibleSystems() {
+  return new Set(filteredGraph.nodes.map(node => visibleNodeSystem(node)).filter(Boolean)).size;
 }
 
 function capitalize(value) {

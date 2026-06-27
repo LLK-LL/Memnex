@@ -19,6 +19,47 @@ export function renderPromptText(prompt) {
   return prompt?.message || "";
 }
 
+export function copyableInline(label, value) {
+  return `
+    <div class="copyable-inline">
+      <span>${escapeHtml(label)}</span>
+      <code>${escapeHtml(value)}</code>
+    </div>
+  `;
+}
+
+export function renderMetricGrid(items) {
+  return `
+    <div class="metric-grid">
+      ${items.map(item => `
+        <div class="metric-cell">
+          <span class="metric-label">${escapeHtml(item.label)}</span>
+          <span class="metric-value">${escapeHtml(item.value)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+export function renderInspectorList(items) {
+  if (!items?.length) return '<div class="empty-state">No items in the current scope.</div>';
+  return `
+    <div class="summary-list">
+      ${items.map((item, index) => `
+        <div class="summary-row">
+          <span>${escapeHtml(index + 1)}</span>
+          <strong>${escapeHtml(item.label)}</strong>
+          <span>${escapeHtml(item.value)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+export function renderTag(label) {
+  return `<span class="pill">${escapeHtml(label)}</span>`;
+}
+
 export function formatNodeDetails(data) {
   const relationCounts = data.relation_counts || {};
   const relations = Object.entries(relationCounts)
