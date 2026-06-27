@@ -12,9 +12,17 @@ Memnex stores system logic and live knowledge separately:
 | Data | `memory-data/current/` | Latest memory exports, rules, skills, preferences, templates |
 | Metadata | `memory-data/manifest.json` | Machine-readable sync provenance |
 
-## Graph Viewer
+## Memory Galaxy Viewer
 
-Memnex includes a local static graph viewer exporter:
+Memnex includes a local static Memory Galaxy exporter. It reads a Total Agent
+Memory-style SQLite graph in read-only mode and writes a portable browser
+workspace with:
+
+- 2D Memory Galaxy overview;
+- system-level solar-system drill-down;
+- planet-satellite local context view;
+- companion 3D graph view;
+- search, filters, minimap, inspector tabs, and performance HUD.
 
 ```powershell
 python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
@@ -22,10 +30,10 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
   --output .\graph-viewer-output
 ```
 
-The exporter opens the SQLite memory database in read-only mode, writes
-`graph.json`, and copies static 2D/3D viewer assets to the output directory.
-Generated viewer output is ignored by Git because it can contain private memory
-summaries from the selected database.
+Open `graph-viewer-output\index.html` for Memory Galaxy or
+`graph-viewer-output\viewer-3d.html` for 3D. Generated viewer output is ignored
+by Git because it can contain private memory summaries from the selected
+database.
 
 ## Data Layers
 

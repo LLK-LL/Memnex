@@ -3,56 +3,211 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Total Agent Memory Graph</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://unpkg.com/cytoscape@3.29.2/dist/cytoscape.min.js"></script>
+  <title>Total Agent Memory Galaxy</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css?v=20260627-13">
+  <script src="https://unpkg.com/pixi.js@8.2.6/dist/pixi.min.js"></script>
 </head>
 <body>
-  <main class="app">
-    <aside class="sidebar">
-      <header>
-        <h1>Memory Graph</h1>
-        <p id="stats">Loading graph...</p>
-        <nav class="mode-links">
-          <a class="active" href="index.html">2D</a>
-          <a href="viewer-3d.html">3D</a>
-        </nav>
+  <main class="app galaxy-app">
+    <aside class="sidebar sidebar-left">
+      <header class="app-header">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="brand-copy">
+            <div class="brand-title-row">
+              <h1>MEMORY GALAXY</h1>
+              <span class="gpu-badge">GPU</span>
+            </div>
+            <p id="stats">Loading galaxy...</p>
+          </div>
+        </div>
       </header>
 
-      <label class="field">
-        Search
-        <input id="search" type="search" placeholder="node, project, concept">
-      </label>
-
-      <section>
-        <h2>Node Types</h2>
-        <div id="typeFilters" class="filters"></div>
-      </section>
-
-      <label class="field">
-        Minimum edge weight
-        <input id="weightFilter" type="range" min="0" max="10" step="0.1" value="0">
-        <span id="weightValue">0</span>
-      </label>
-
-      <section>
-        <h2>Layout</h2>
-        <div class="buttons">
-          <button id="layoutCose" type="button">Cose</button>
-          <button id="layoutCircle" type="button">Circle</button>
-          <button id="fit" type="button">Fit</button>
-          <button id="clearFocus" type="button">Clear</button>
+      <section class="panel-section view-controls">
+        <h2>VIEW CONTROLS</h2>
+        <label class="control-row">
+          <span>Camera Mode</span>
+          <select id="cameraMode">
+            <option selected>Orbit</option>
+            <option>Pan</option>
+          </select>
+        </label>
+        <label class="control-row range-control">
+          <span>Speed</span>
+          <strong id="animationSpeedValue">1.00x</strong>
+          <input id="animationSpeed" type="range" min="0" max="2.5" step="0.05" value="1">
+        </label>
+        <div class="toggle-row">
+          <label class="toggle-label" for="motionToggle">Auto Rotate</label>
+          <label class="switch">
+            <input id="motionToggle" type="checkbox" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle-label" for="orbitGuidesToggle">Motion Trails</label>
+          <label class="switch">
+            <input id="orbitGuidesToggle" type="checkbox" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <label class="toggle-label" for="cometsToggle">Comets</label>
+          <label class="switch">
+            <input id="cometsToggle" type="checkbox">
+            <span class="slider"></span>
+          </label>
         </div>
       </section>
+
+      <section class="panel-section filters-panel">
+        <h2>FILTERS</h2>
+        <label class="field search-field">
+          <span class="field-label">Search</span>
+          <input id="search" type="search" placeholder="Search nodes...">
+        </label>
+
+        <label class="control-row">
+          <span>Node Types</span>
+          <select id="nodeTypeMode">
+            <option selected>All</option>
+          </select>
+        </label>
+        <div id="typeFilters" class="filters filter-grid"></div>
+        <button id="selectAllTypes" type="button" class="text-action">Select All Node Types</button>
+
+        <label class="control-row">
+          <span>Edge Types</span>
+          <select id="edgeTypeMode">
+            <option selected>All</option>
+          </select>
+        </label>
+        <div id="layerFilters" class="filters filter-grid"></div>
+
+        <label class="control-row">
+          <span>Metrics</span>
+          <select id="relationshipMode" class="hidden-control">
+            <option value="all" selected>All</option>
+            <option value="direct">Direct</option>
+            <option value="inbound">Inbound</option>
+            <option value="outbound">Outbound</option>
+          </select>
+          <select id="metricsMode">
+            <option selected>All</option>
+          </select>
+        </label>
+        <div id="relationModeButtons" class="segmented-control hidden-control" aria-hidden="true">
+          <button type="button" data-value="all" class="is-active">All</button>
+          <button type="button" data-value="direct">Direct</button>
+          <button type="button" data-value="inbound">Inbound</button>
+          <button type="button" data-value="outbound">Outbound</button>
+        </div>
+        <div id="labelModeButtons" class="segmented-control hidden-control" aria-hidden="true">
+          <button type="button" data-value="none">None</button>
+          <button type="button" data-value="low">Low</button>
+          <button type="button" data-value="medium" class="is-active">Medium</button>
+          <button type="button" data-value="high">High</button>
+        </div>
+        <select id="labelMode" class="hidden-control" aria-hidden="true" tabindex="-1">
+          <option value="none">None</option>
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+
+        <label class="field compact-field">
+          <span>Relevance</span>
+          <div class="range-meta">
+            <span>0.00</span>
+            <input id="weightFilter" type="range" min="0" max="10" step="0.1" value="0.1">
+            <span id="weightValue">0.1</span>
+          </div>
+        </label>
+        <label class="field compact-field">
+          <span>Recency</span>
+          <div class="range-meta">
+            <span id="timelineValue">Any Time</span>
+            <input id="timelineFilter" type="range" min="0" max="100" step="1" value="100">
+          </div>
+        </label>
+        <label class="field compact-field">
+          <span>Strength</span>
+          <div class="range-meta">
+            <span>0.00</span>
+            <input id="nodeScale" type="range" min="0.50" max="2.00" step="0.05" value="1.00">
+            <span id="nodeScaleValue">1.00</span>
+          </div>
+        </label>
+      </section>
+
+      <section class="panel-section gpu-panel">
+        <div class="perf-row"><span>FPS</span><strong id="perfFps">--</strong></div>
+        <div class="perf-row"><span>Frame Time</span><strong id="perfFrameTime">-- ms</strong></div>
+        <div class="perf-row"><span>CPU Load</span><strong id="perfCpu">--</strong></div>
+        <div class="perf-row"><span>JS Memory</span><strong id="perfMemory">--</strong></div>
+        <div class="perf-row"><span>GPU Estimate</span><strong id="perfGpu">--</strong></div>
+        <div class="perf-row perf-row-tight"><span>GPU Renderer</span><strong id="perfGpuRenderer">WebGL</strong></div>
+        <div class="perf-row"><span>Nodes Visible</span><strong id="perfNodes">--</strong></div>
+        <div class="perf-row"><span>Edges Visible</span><strong id="perfEdges">--</strong></div>
+        <div id="perfSparkline" class="sparkline" aria-hidden="true"></div>
+      </section>
+
+      <footer class="panel-footer hidden-control">
+        <button id="resetView" type="button">Reset View</button>
+        <button id="crumbGalaxy" type="button" class="chip chip-active">Galaxy Overview</button>
+        <button id="crumbSystem" type="button" class="chip">No System</button>
+      </footer>
     </aside>
 
-    <section id="cy" class="graph"></section>
+    <section class="galaxy-stage">
+      <header class="stage-toolbar">
+        <button id="backView" type="button" class="icon-button" aria-label="Back">‹</button>
+        <button id="viewBadge" type="button" class="toolbar-pill">Galactic View</button>
+        <label class="stage-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="stageSearchMirror" type="search" placeholder="Search memory galaxy...">
+        </label>
+        <div class="stage-toolbar-spacer"></div>
+        <button id="fitTop" type="button" class="icon-button" aria-label="Fit view">⛶</button>
+      </header>
 
-    <aside class="details">
-      <h2>Selection</h2>
-      <div id="details">Select a node to inspect linked memories.</div>
+      <section id="galaxy2d" class="galaxy-canvas" aria-label="2D memory galaxy">
+        <aside class="live-hud" aria-label="Live graph statistics">
+          <div class="live-title"><span class="live-dot"></span><span>Live</span><strong>Graph Scope</strong></div>
+          <div id="liveHudRows" class="live-hud-rows"></div>
+        </aside>
+        <nav class="stage-bottom-toolbar" aria-label="View mode switch">
+          <span class="toolbar-mode is-active" aria-current="page">2D</span>
+          <a class="toolbar-mode" href="viewer-3d.html">3D</a>
+        </nav>
+        <aside class="galaxy-minimap" aria-label="Galaxy minimap">
+          <div id="minimapDots" class="minimap-dots"></div>
+          <div id="minimapWindow" class="minimap-window"></div>
+        </aside>
+      </section>
+
+      <footer class="stage-legend hidden-control">
+        <div id="orbitLegend" class="legend-inline"></div>
+      </footer>
+    </section>
+
+    <aside class="details inspector">
+      <section id="selectionCard" class="selection-card inspector-hero">Select a system or node to inspect it.</section>
+      <nav class="inspector-tabs" aria-label="Inspector sections">
+        <button type="button" class="is-active" data-tab="overview">OVERVIEW</button>
+        <button type="button" data-tab="nodes">NODES</button>
+        <button type="button" data-tab="connections">CONNECTIONS</button>
+      </nav>
+      <section id="systemSummary" class="system-summary inspector-block">System counts and top members appear here.</section>
+      <div class="inspector-scroll">
+        <section id="systemDetails" class="system-details inspector-block inspector-tab-panel" data-panel="overview">System details appear here when a system is selected.</section>
+        <section id="nodesPanel" class="nodes-panel inspector-block inspector-tab-panel" data-panel="nodes" hidden>Memory nodes appear here when a system or node is selected.</section>
+        <section id="relationsPanel" class="relations-panel inspector-block inspector-tab-panel" data-panel="connections" hidden>Relations appear here when a node is selected.</section>
+        <section id="agentPrompt" class="agent-prompt inspector-block">Select or drag a node to stage an agent prompt.</section>
+      </div>
     </aside>
   </main>
-  <script src="viewer.js"></script>
+  <script type="module" src="viewer.js?v=20260627-13"></script>
 </body>
 </html>

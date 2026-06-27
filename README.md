@@ -10,6 +10,8 @@ Memnex is a local-first memory vault for personal AI agents. It helps Codex, Cla
 
 Memnex turns that fragile local state into a reviewable, recoverable, portable, and self-iterating memory system.
 
+**Latest version:** `v0.3.0` - Memory Galaxy visualization workspace
+
 ![Memnex memory network overview](assets/memory-network-overview.png)
 
 ## What It Saves
@@ -108,12 +110,18 @@ task experience
 
 Memnex does not retrain the base model. It trains the local memory, rules, and skills around the model.
 
-## v0.2.0 - Memory graph visualization
+## v0.3.0 - Memory Galaxy visualization workspace
 
-Memnex now includes a local graph viewer exporter for memory systems that expose
-SQLite graph tables. It exports a read-only snapshot into a static browser
-workspace with 2D and 3D views, type filters, weighted edges, search, and linked
-memory summaries.
+Memnex now turns an opaque local memory graph into a galaxy you can fly through.
+The new Memory Galaxy viewer is a local browser workspace for Total Agent
+Memory-style SQLite graph tables: every memory system becomes a star system,
+high-priority memories become planets, supporting facts become moons, and
+source/evidence trails stay visible without dumping your whole database into a
+prompt.
+
+It is still local-first. The exporter opens the source SQLite database in
+read-only mode, writes a static viewer folder, and keeps generated graph output
+out of Git by default.
 
 ```powershell
 python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
@@ -121,12 +129,57 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
   --output .\graph-viewer-output
 ```
 
-Open `graph-viewer-output\index.html` for the 2D view or
-`graph-viewer-output\viewer-3d.html` for the 3D view.
+Open `graph-viewer-output\index.html` for Memory Galaxy or
+`graph-viewer-output\viewer-3d.html` for the 3D graph view.
 
-The exporter reads the source database in SQLite read-only mode. Generated
-viewer output can contain private memory summaries, so it is ignored by Git and
-should be reviewed before sharing.
+### Galaxy overview
+
+The overview maps the whole memory system as an orbiting control room. You can
+scan systems, search nodes, filter types/layers, inspect the live performance
+HUD, and use the minimap to jump through the graph.
+
+![Memory Galaxy overview](assets/memory-galaxy-overview.png)
+
+### Drill into a memory system
+
+Double-click a system to enter its solar-system view. The system center becomes
+the star; related memory clusters become orbiting planets; the inspector shows
+counts, density, recent activity, and top connections for that scope.
+
+![Memory Galaxy solar system view](assets/memory-galaxy-solar-system.png)
+
+### Inspect local context
+
+Double-click a planet to open the planet-satellite view. Direct neighbors,
+derived context, evidence, and external relations split into readable orbital
+rings so you can understand why a memory is connected before you reuse it.
+
+![Memory Galaxy planet satellite view](assets/memory-galaxy-planet-satellite.png)
+
+### Switch to 3D when shape matters
+
+The 3D view keeps the same exported graph data but gives you a spatial force
+layout for spotting dense clusters, bridges, and isolated regions.
+
+![Memory Galaxy 3D view](assets/memory-galaxy-3d.png)
+
+### What changed in v0.3.0
+
+- New PixiJS Memory Galaxy UI with galaxy, solar-system, and planet-satellite
+  navigation.
+- 3D graph view retained as a companion perspective.
+- Search, node type filters, edge/layer filtering, breadcrumbs, minimap, and
+  inspector tabs.
+- Performance HUD for FPS, frame time, memory estimate, GPU renderer, and
+  visible graph size.
+- Exporter now embeds graph data and inlines viewer modules for portable local
+  viewing.
+- Animation rendering was tuned to update existing objects instead of rebuilding
+  the scene on every tick.
+
+Generated viewer output can contain private memory summaries, so keep exported
+viewer folders private unless you intentionally review and publish a sanitized
+demo.
 
 ## Quick Start
 
