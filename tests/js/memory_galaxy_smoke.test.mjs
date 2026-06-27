@@ -1055,6 +1055,17 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   const labeledPlanet = solarLabelLayout.nodes.find(node => node.label === "dense planet 0");
   assert.ok(labeledPlanet);
   assert.ok(Math.hypot(move.args[0] - labeledPlanet.x, move.args[1] - labeledPlanet.y) >= Number(labeledPlanet.renderRadius || 0));
+  const nodeLayer = root.children[4];
+  const planetHit = nodeLayer.children.find(child => {
+    const circle = child.commands?.find(command => command.name === "circle");
+    return circle
+      && Math.abs(circle.args[0] - labeledPlanet.x) < 0.0001
+      && Math.abs(circle.args[1] - labeledPlanet.y) < 0.0001
+      && circle.args[2] > Number(labeledPlanet.renderRadius || 0);
+  });
+  assert.ok(planetHit);
+  const hitCircle = planetHit.commands.find(command => command.name === "circle");
+  assert.ok(hitCircle.args[2] <= Number(labeledPlanet.renderRadius || 0) + 18);
 }
 
 const denseOverviewFixture = {

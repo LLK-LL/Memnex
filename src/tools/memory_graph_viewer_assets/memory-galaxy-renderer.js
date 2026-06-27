@@ -300,11 +300,9 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
       nodeLayer.addChild(graphics);
     }
     if (layout.view === "solar") {
-      const satelliteSystemByParent = new Map((layout.satelliteSystems || []).map(system => [system.parentId, system]));
       for (const planet of layout.nodes || []) {
         if (planet.orbitalRole !== "planet") continue;
-        const system = satelliteSystemByParent.get(planet.id);
-        const radius = Math.max(18, (system?.radius || 0) + 12, (planet.renderRadius || 0) + 10);
+        const radius = Math.max(18, (planet.renderRadius || 0) + 12);
         const hit = new PIXI.Graphics();
         hit.eventMode = "static";
         hit.cursor = "pointer";
