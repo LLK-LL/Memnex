@@ -3,7 +3,7 @@ import { createInteractionLog, createMemoryGalaxyEvent, suggestAgentPrompt } fro
 import { buildCometOverlayLayout, buildGalaxyOverviewLayout, buildPlanetSatelliteLayout, buildSolarSystemLayout } from "./memory-galaxy-layouts.js";
 import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js";
 import { memorySystemForData, systemColors } from "./memory-galaxy-systems.js";
-import { createGalaxyViewState, enterGalaxyView, goBackView, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
+import { createGalaxyViewState, enterGalaxyView, goBackView, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
 import { copyableInline, escapeHtml, formatNodeDetails, renderInspectorList, renderMetricGrid, renderPromptText, renderTag, timelineCutoffFromPercent } from "./viewer-shared.js";
 
 const viewName = "2d-memory-galaxy";
@@ -383,6 +383,8 @@ function drawCurrentLayout(options = {}) {
       });
       lastSystemTap = result.lastSystemTap;
       state.selectedNodeId = result.entered ? null : `system:${system.key}`;
+      pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+      syncMotionControls();
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
       shouldAutoFit = clickCount(event) >= 2;
@@ -412,6 +414,8 @@ function drawCurrentLayout(options = {}) {
           });
           lastSystemTap = result.lastSystemTap;
           state.selectedNodeId = result.entered ? null : node.id;
+          pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+          syncMotionControls();
           if (result.entered) showSystemSelection(system.key);
           else showNodeSelection(node);
           emitEvent("system:selected", null, { system: system.key });
@@ -432,6 +436,8 @@ function drawCurrentLayout(options = {}) {
           lastPlanetTap = result.lastPlanetTap;
           showNodeSelection(planetNode);
           emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
+          pauseGalaxyMotionForSelection(state, result.entered ? null : planetNode.id);
+          syncMotionControls();
           if (clickCount(event) < 2) {
             state.selectedNodeId = planetNode.id;
             renderer.draw(currentLayout, state, activeRendererHandlers());
@@ -445,6 +451,8 @@ function drawCurrentLayout(options = {}) {
         }
       }
       state.selectedNodeId = node.id;
+      pauseGalaxyMotionForSelection(state, node.id);
+      syncMotionControls();
       showNodeSelection(node);
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
       drawCurrentLayout({ preserveView: true });
@@ -465,6 +473,11 @@ function drawCurrentLayout(options = {}) {
       state.selectedNodeId = node.id;
       emitEvent("node:drag-ended", node, { system: node.memorySystem });
       showNodeSelection(node);
+    },
+    onBlankTap: () => {
+      resumeGalaxyMotionFromBlank(state);
+      syncMotionControls();
+      drawCurrentLayout({ preserveView: true });
     },
   });
   if (pendingFitBounds) {
@@ -488,6 +501,8 @@ function activeRendererHandlers() {
       });
       lastSystemTap = result.lastSystemTap;
       state.selectedNodeId = result.entered ? null : `system:${system.key}`;
+      pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+      syncMotionControls();
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
       shouldAutoFit = clickCount(event) >= 2;
@@ -523,6 +538,11 @@ function activeRendererHandlers() {
       emitEvent("node:drag-ended", node, { system: node.memorySystem });
       showNodeSelection(node);
     },
+    onBlankTap: () => {
+      resumeGalaxyMotionFromBlank(state);
+      syncMotionControls();
+      drawCurrentLayout({ preserveView: true });
+    },
   };
 }
 
@@ -538,6 +558,8 @@ function handleNodeTap(node, event) {
       });
       lastSystemTap = result.lastSystemTap;
       state.selectedNodeId = result.entered ? null : node.id;
+      pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+      syncMotionControls();
       if (result.entered) showSystemSelection(system.key);
       else showNodeSelection(node);
       emitEvent("system:selected", null, { system: system.key });
@@ -558,6 +580,8 @@ function handleNodeTap(node, event) {
       lastPlanetTap = result.lastPlanetTap;
       showNodeSelection(planetNode);
       emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
+      pauseGalaxyMotionForSelection(state, result.entered ? null : planetNode.id);
+      syncMotionControls();
       if (clickCount(event) < 2) {
         state.selectedNodeId = planetNode.id;
         renderer.draw(currentLayout, state, activeRendererHandlers());
@@ -571,6 +595,8 @@ function handleNodeTap(node, event) {
     }
   }
   state.selectedNodeId = node.id;
+  pauseGalaxyMotionForSelection(state, node.id);
+  syncMotionControls();
   showNodeSelection(node);
   emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
   drawCurrentLayout({ preserveView: true });
@@ -580,7 +606,8 @@ function transformForBounds(bounds) {
   if (!bounds || !app?.screen?.width || !app?.screen?.height) return null;
   const width = Math.max(1, bounds.width || bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.height || bounds.maxY - bounds.minY);
-  const scale = Math.min(app.screen.width / (width + 120), app.screen.height / (height + 120), 1.8);
+  const padding = Number(bounds.fitPadding ?? 120);
+  const scale = Math.min(app.screen.width / (width + padding), app.screen.height / (height + padding), 1.8);
   return {
     scale,
     pan: {
@@ -1271,6 +1298,15 @@ function clickCount(event) {
     ?? event?.originalEvent?.detail
     ?? 0,
   );
+}
+
+function syncMotionControls() {
+  const speed = document.getElementById("animationSpeed");
+  const speedValue = document.getElementById("animationSpeedValue");
+  const toggle = document.getElementById("motionToggle");
+  if (speed) speed.value = String(state.animationSpeed);
+  if (speedValue) speedValue.textContent = `${Number(state.animationSpeed || 0).toFixed(2)}x`;
+  if (toggle) toggle.checked = Boolean(state.motionEnabled);
 }
 
 function handleCanvasDoubleClick(event) {

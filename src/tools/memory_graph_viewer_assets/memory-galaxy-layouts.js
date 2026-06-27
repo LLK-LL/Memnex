@@ -209,7 +209,8 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   }
   const visibleNodes = [...outputNodes, ...satelliteSystems.flatMap(system => system.nodes)];
   const visibleIds = new Set(visibleNodes.map(node => String(node.id)));
-
+  const bounds = boundsForSolarSystem(visibleNodes, orbits, satelliteSystems);
+  bounds.fitPadding = 280;
   return {
     view: "solar",
     systemKey,
@@ -222,7 +223,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
     systems: [],
     orbits,
     satelliteSystems,
-    bounds: boundsForSolarSystem(visibleNodes, orbits, satelliteSystems),
+    bounds,
   };
 }
 
@@ -278,6 +279,9 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
     }
   }
 
+  const planetBounds = boundsFor(outputNodes, [], orbits.map(orbit => ({ ...orbit, aspect: orbitAspect })));
+  planetBounds.fitPadding = 280;
+
   return {
     view: "planet",
     systemKey,
@@ -291,7 +295,7 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
     }),
     systems: [],
     orbits: orbits.map(orbit => ({ ...orbit, aspect: orbitAspect })),
-    bounds: boundsFor(outputNodes, [], orbits.map(orbit => ({ ...orbit, aspect: orbitAspect }))),
+    bounds: planetBounds,
   };
 }
 

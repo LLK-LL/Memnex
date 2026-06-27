@@ -8,6 +8,7 @@ export function createGalaxyViewState() {
     relationshipMode: "structure",
     nodeScale: 0.48,
     animationSpeed: 1,
+    motionResumeSpeed: 1,
     pathStartId: null,
     pathEndId: null,
     viewStack: [],
@@ -81,4 +82,24 @@ export function selectSolarPlanet(state, planetId, options = {}) {
   const nextTap = { id: planetId, time: now };
   if (doubleTap) enterPlanetView(state, planetId);
   return { enteredPlanet: doubleTap, lastPlanetTap: nextTap };
+}
+
+export function pauseGalaxyMotionForSelection(state, selectedNodeId = null) {
+  const speed = Number(state.animationSpeed || 0);
+  if (speed > 0) state.motionResumeSpeed = speed;
+  state.animationSpeed = 0;
+  state.motionEnabled = false;
+  if (selectedNodeId !== null) state.selectedNodeId = selectedNodeId;
+  return state;
+}
+
+export function resumeGalaxyMotionFromBlank(state) {
+  const resumeSpeed = Number(state.motionResumeSpeed || 0);
+  state.animationSpeed = resumeSpeed > 0 ? resumeSpeed : 1;
+  state.motionEnabled = true;
+  state.selectedNodeId = null;
+  state.selectedSystem = null;
+  state.selectedPlanet = null;
+  state.hoveredNodeId = null;
+  return state;
 }

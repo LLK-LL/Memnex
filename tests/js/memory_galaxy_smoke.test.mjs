@@ -136,11 +136,13 @@ vm.runInNewContext(
   `${viewStateHelperSource}
 exports.createGalaxyViewState = createGalaxyViewState;
 exports.selectGalaxySystem = selectGalaxySystem;
-exports.selectSolarPlanet = selectSolarPlanet;`,
+exports.selectSolarPlanet = selectSolarPlanet;
+exports.pauseGalaxyMotionForSelection = pauseGalaxyMotionForSelection;
+exports.resumeGalaxyMotionFromBlank = resumeGalaxyMotionFromBlank;`,
   viewStateContext,
   { filename: viewStateHelperPath },
 );
-const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet } = viewStateContext.exports;
+const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank } = viewStateContext.exports;
 
 const rendererHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-renderer.js");
 const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll("export function ", "function ");
@@ -455,6 +457,7 @@ for (let i = 0; i < finalOverview.nodes.length; i += 1) {
 const skillSolar = buildSolarSystemLayout(orbitalGalaxy, "skill", { nodeScale: 0.48, width: 1400, height: 900 });
 assert.equal(skillSolar.view, "solar");
 assert.equal(skillSolar.systemKey, "skill");
+assert.ok(skillSolar.bounds.fitPadding >= 260);
 assert.ok(skillSolar.orbits.some(orbit => orbit.kind === "planet"));
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "central-star"));
 assert.ok(skillSolar.satelliteSystems.length >= 1);
@@ -495,6 +498,7 @@ assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node =>
 const skillPlanet = buildPlanetSatelliteLayout(orbitalGalaxy, "skill", "skill", { nodeScale: 0.5, width: 1200, height: 800 });
 assert.equal(skillPlanet.view, "planet");
 assert.equal(skillPlanet.systemKey, "skill");
+assert.ok(skillPlanet.bounds.fitPadding >= 260);
 assert.equal(skillPlanet.planetId, "skill");
 assert.ok(skillPlanet.orbits.some(orbit => orbit.kind === "direct-moon"));
 assert.ok(skillPlanet.orbits.some(orbit => orbit.kind === "evidence"));
@@ -727,6 +731,31 @@ const forcedTap = selectGalaxySystem(forcedTapState, "skill", {
 });
 assert.equal(forcedTap.enteredSolar, true);
 assert.equal(forcedTapState.view, "solar");
+
+const pauseState = createGalaxyViewState();
+pauseState.animationSpeed = 1.35;
+pauseState.motionEnabled = true;
+pauseState.selectedNodeId = "old-node";
+pauseState.selectedSystem = "skill";
+pauseGalaxyMotionForSelection(pauseState, "node-1");
+assert.equal(pauseState.animationSpeed, 0);
+assert.equal(pauseState.motionEnabled, false);
+assert.equal(pauseState.motionResumeSpeed, 1.35);
+assert.equal(pauseState.selectedNodeId, "node-1");
+assert.equal(pauseState.selectedSystem, "skill");
+
+resumeGalaxyMotionFromBlank(pauseState);
+assert.equal(pauseState.animationSpeed, 1.35);
+assert.equal(pauseState.motionEnabled, true);
+assert.equal(pauseState.selectedNodeId, null);
+assert.equal(pauseState.selectedSystem, null);
+assert.equal(pauseState.hoveredNodeId, null);
+
+const defaultResumeState = createGalaxyViewState();
+defaultResumeState.animationSpeed = 0;
+resumeGalaxyMotionFromBlank(defaultResumeState);
+assert.equal(defaultResumeState.animationSpeed, 1);
+assert.equal(defaultResumeState.motionEnabled, true);
 
 const solarClickState = createGalaxyViewState();
 solarClickState.view = "solar";
