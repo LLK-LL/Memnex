@@ -30,6 +30,7 @@ let lastPlanetTap = { id: null, time: 0 };
 let shouldAutoFit = true;
 let activeInspectorTab = "overview";
 let minimapDragActive = false;
+let minimapRefreshPending = false;
 let pendingFitBounds = null;
 
 const PERF_SAMPLE_LIMIT = 36;
@@ -124,7 +125,12 @@ async function createPixi() {
     resolution: Math.min(window.devicePixelRatio || 1, 2),
   });
   container.appendChild(app.canvas);
-  renderer = createMemoryGalaxyRenderer({ PIXI: window.PIXI, app, stage: app.stage });
+  renderer = createMemoryGalaxyRenderer({
+    PIXI: window.PIXI,
+    app,
+    stage: app.stage,
+    onAnimationFrame: scheduleMinimapRefresh,
+  });
   initPerformancePanel();
   app.ticker.add(ticker => recordPerformanceFrame(Number(ticker.deltaMS || 16.67)));
   app.canvas.addEventListener("dblclick", handleCanvasDoubleClick);
@@ -668,6 +674,15 @@ function renderMinimap(layout) {
     windowEl.style.width = `${viewport.width.toFixed(2)}%`;
     windowEl.style.height = `${viewport.height.toFixed(2)}%`;
   }
+}
+
+function scheduleMinimapRefresh() {
+  if (minimapRefreshPending || !currentLayout) return;
+  minimapRefreshPending = true;
+  requestAnimationFrame(() => {
+    minimapRefreshPending = false;
+    renderMinimap(currentLayout);
+  });
 }
 
 function bindMinimapControls() {

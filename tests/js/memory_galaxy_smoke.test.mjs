@@ -149,11 +149,29 @@ vm.runInNewContext(
   `${rendererHelperSource}
 exports.createMemoryGalaxyRenderer = createMemoryGalaxyRenderer;
 exports.advanceGalaxyAnimationNodes = advanceGalaxyAnimationNodes;
-exports.dynamicLabelAnchor = dynamicLabelAnchor;`,
+exports.dynamicLabelAnchor = dynamicLabelAnchor;
+exports.buildDeterministicStarfield = buildDeterministicStarfield;
+exports.systemLabelLines = systemLabelLines;`,
   rendererContext,
   { filename: rendererHelperPath },
 );
-const { createMemoryGalaxyRenderer, advanceGalaxyAnimationNodes, dynamicLabelAnchor } = rendererContext.exports;
+const {
+  createMemoryGalaxyRenderer,
+  advanceGalaxyAnimationNodes,
+  dynamicLabelAnchor,
+  buildDeterministicStarfield,
+  systemLabelLines,
+} = rendererContext.exports;
+
+const starsA = buildDeterministicStarfield("fixture", 4, { minX: 0, maxX: 10, minY: 0, maxY: 10 });
+const starsB = buildDeterministicStarfield("fixture", 4, { minX: 0, maxX: 10, minY: 0, maxY: 10 });
+assert.deepEqual(starsA, starsB);
+assert.equal(starsA.length, 4);
+assert.ok(starsA.every(star => star.x >= 0 && star.x <= 10 && star.y >= 0 && star.y <= 10));
+assert.deepEqual(
+  Array.from(systemLabelLines({ label: "Router Core", memorySystem: "router", raw: { memberCount: 12847 } })),
+  ["ROUTER CORE", "Route System", "12,847 memories"],
+);
 
 const fixture = {
   metadata: {
@@ -410,6 +428,18 @@ assert.ok(finalOverview.systems.some(system => system.key === "skill"));
 assert.ok(finalOverview.systems.every(system => system.key === "router" || system.miniOrbits.length >= 2));
 assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => system.animation && Number(system.animation.orbitRadiusX) > 0));
 assert.ok(finalOverview.nodes.some(node => node.id === "system:skill" && node.isSystemNode === true && node.systemKey === "skill"));
+assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => Number(system.orbitAspect || 1) < 1));
+assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => {
+  const aspect = Number(system.orbitAspect || 1);
+  return system.miniOrbits.every(orbit => Math.abs(Number(orbit.aspect || 1) - aspect) < 0.0001);
+}));
+assert.ok(finalOverview.nodes.filter(node => node.animation?.parentSystemKey).every(node => {
+  const system = finalOverview.systems.find(item => item.key === node.animation.parentSystemKey);
+  const aspect = Number(system?.orbitAspect || 1);
+  return Math.abs(Number(node.animation.orbitRadiusY || 0) - Number(node.animation.orbitRadiusX || 0) * aspect) < 0.0001;
+}));
+assert.ok(finalOverview.nodes.filter(node => node.animation?.parentSystemKey).every(node => Math.abs(Number(node.animation.orbitSpeed || 0)) >= 0.16));
+assert.ok(finalOverview.nodes.filter(node => ["galactic-core", "star", "central-star"].includes(node.orbitalRole)).every(node => Number(node.animation?.spinSpeed || 0) === 0));
 assert.ok(finalOverview.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
 assert.ok(finalOverview.nodes.every(node => node.renderRadius <= 28));
 assert.ok(finalOverview.bounds.width > 0);
@@ -440,6 +470,21 @@ assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(n
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "planet" && node.childCount > 0));
 assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").length >= 2);
 assert.ok(skillSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
+assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet" && Number(node.childCount || 0) > 0).every(node => node.isPlanetSystemNode === true));
+assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => systemLabelLines(node)[1] === "Planet System"));
+assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => Number(node.animation?.spinSpeed || 0) === 0));
+assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => {
+  const orbitAspectForNode = Number(node.animation.orbitRadiusY || 0) / Number(node.animation.orbitRadiusX || 1);
+  return Math.abs(Number(node.visualOrbitAspect || 0) - orbitAspectForNode) < 0.0001;
+}));
+assert.ok(skillSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => {
+  return skillSolar.orbits.some(orbit => {
+    const rx = Number(orbit.radius || 0);
+    const ry = rx * Number(orbit.aspect || 1);
+    const normalized = (node.x * node.x) / (rx * rx) + (node.y * node.y) / (ry * ry);
+    return Math.abs(normalized - 1) < 0.0001;
+  });
+}));
 {
   const visibleIds = new Set(skillSolar.nodes.map(node => String(node.id)));
   assert.ok(skillSolar.links.length < orbitalGalaxy.links.length);
@@ -490,14 +535,109 @@ const crowdedSolarFixture = {
   },
 };
 const crowdedSolar = buildSolarSystemLayout(convertGraphToGalaxy(crowdedSolarFixture), "skill", { nodeScale: 0.48, width: 1200, height: 800 });
-assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.length <= 3));
+assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.length <= 6));
+assert.ok(crowdedSolar.satelliteSystems.some(system => system.nodes.length > 3));
 assert.ok(crowdedSolar.nodes.filter(node => node.orbitalRole === "planet").length >= 3);
-assert.ok(crowdedSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => Number(node.childCount || 0) <= 3));
+assert.ok(crowdedSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => Number(node.childCount || 0) <= 6));
+assert.ok(crowdedSolar.orbits.length >= Math.ceil(crowdedSolar.nodes.filter(node => node.orbitalRole === "planet").length / 4));
+assert.ok(crowdedSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => {
+  return crowdedSolar.orbits.some(orbit => {
+    const rx = Number(orbit.radius || 0);
+    const ry = rx * Number(orbit.aspect || 1);
+    const normalized = (node.x * node.x) / (rx * rx) + (node.y * node.y) / (ry * ry);
+    return Math.abs(normalized - 1) < 0.0001;
+  });
+}));
+assert.ok(crowdedSolar.satelliteSystems.every(system => Number(system.footprintRadius || 0) >= Number(system.radius || 0) + 34));
+for (let i = 0; i < crowdedSolar.satelliteSystems.length; i += 1) {
+  for (let j = i + 1; j < crowdedSolar.satelliteSystems.length; j += 1) {
+    const a = crowdedSolar.satelliteSystems[i];
+    const b = crowdedSolar.satelliteSystems[j];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    assert.ok(distance >= Number(a.footprintRadius || 0) + Number(b.footprintRadius || 0));
+  }
+}
+{
+  const minX = Math.min(...crowdedSolar.satelliteSystems.map(system => system.x - Number(system.footprintRadius || 0)));
+  const maxX = Math.max(...crowdedSolar.satelliteSystems.map(system => system.x + Number(system.footprintRadius || 0)));
+  const minY = Math.min(...crowdedSolar.satelliteSystems.map(system => system.y - Number(system.footprintRadius || 0) * Number(system.aspect || 1)));
+  const maxY = Math.max(...crowdedSolar.satelliteSystems.map(system => system.y + Number(system.footprintRadius || 0) * Number(system.aspect || 1)));
+  assert.ok(crowdedSolar.bounds.height <= (maxY - minY) * 1.75);
+}
+assert.ok(new Set(crowdedSolar.satelliteSystems.map(system => Math.round(Number(system.aspect || 0) * 1000))).size > 1);
+assert.ok(new Set(crowdedSolar.satelliteSystems.map(system => Math.round(Number(system.radius || 0) * 1000))).size > 1);
+assert.ok(new Set(crowdedSolar.satelliteSystems.flatMap(system => system.nodes.map(node => Math.round(Math.abs(Number(node.animation.orbitSpeed || 0)) * 1000)))).size > 1);
+assert.ok(crowdedSolar.satelliteSystems.every(system => system.orbits.every(orbit => Math.abs(Number(orbit.aspect || 0) - Number(system.aspect || 0)) < 0.0001)));
+assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.every(node => Math.abs(Number(node.animation.orbitRadiusY || 0) - Number(node.animation.orbitRadiusX || 0) * Number(system.aspect || 0)) < 0.0001)));
+assert.ok(crowdedSolar.satelliteSystems.every(system => /^#[0-9a-f]{6}$/i.test(String(system.color || ""))));
 assert.ok(crowdedSolar.satelliteSystems.every(system => system.nodes.every(node => {
   const distance = Math.hypot(node.x - system.x, node.y - system.y);
   return distance > 0;
 })));
 assert.ok(crowdedSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
+
+const denseSolarOrbitFixture = {
+  metadata: { type_counts: {}, timeline: {} },
+  elements: {
+    nodes: [
+      { data: { id: "router-dense-solar", label: "Router Dense Solar", type: "pattern", content: "routing dispatch", mention_count: 80, importance: 2, galaxy_layer: "core", knowledge: [] } },
+      ...Array.from({ length: 10 }, (_, index) => ({
+        data: {
+          id: `dense-planet-${index}`,
+          label: `dense planet ${index}`,
+          type: index % 3 === 0 ? "capability" : "concept",
+          content: "skill dense planet workflow",
+          mention_count: 30 - index,
+          importance: 1.1 - index * 0.04,
+          galaxy_layer: "active",
+          knowledge: [],
+        },
+      })),
+      ...Array.from({ length: 42 }, (_, index) => ({
+        data: {
+          id: `dense-moon-${index}`,
+          label: `dense moon ${index}`,
+          type: index % 4 === 0 ? "event" : "concept",
+          content: "skill dense satellite context",
+          mention_count: 10 - (index % 5),
+          importance: 0.45,
+          galaxy_layer: "knowledge",
+          knowledge: [],
+        },
+      })),
+    ],
+    edges: [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        data: { id: `dense-route-${index}`, source: "router-dense-solar", target: `dense-planet-${index}`, relation: "routes", weight: 10 - index * 0.2 },
+      })),
+      ...Array.from({ length: 42 }, (_, index) => ({
+        data: { id: `dense-moon-edge-${index}`, source: `dense-planet-${index % 10}`, target: `dense-moon-${index}`, relation: "related", weight: 8 - (index % 6) * 0.3 },
+      })),
+    ],
+  },
+};
+const denseSolar = buildSolarSystemLayout(convertGraphToGalaxy(denseSolarOrbitFixture), "skill", { nodeScale: 0.48, width: 1400, height: 900 });
+assert.ok(denseSolar.satelliteSystems.length >= 8);
+assert.ok(denseSolar.satelliteSystems.every(system => system.orbits.length <= 4));
+assert.ok(denseSolar.satelliteSystems.every(system => Number(system.scaleFactor || 1) === 2));
+assert.ok(denseSolar.nodes.filter(node => node.isPlanetSystemNode).every(node => Number(node.renderRadius || 0) >= 22));
+{
+  const centralStar = denseSolar.nodes.find(node => node.orbitalRole === "central-star");
+  const planetSystems = denseSolar.nodes.filter(node => node.isPlanetSystemNode);
+  assert.ok(centralStar);
+  assert.ok(planetSystems.length > 0);
+  assert.ok(Number(centralStar.renderRadius || 0) >= Math.max(...planetSystems.map(node => Number(node.renderRadius || 0))) * 1.42);
+  assert.ok(Math.max(...denseSolar.orbits.map(orbit => Number(orbit.radius || 0))) <= 850);
+  assert.ok(denseSolar.satelliteSystems.every(system => Number(system.radius || 0) >= 58 && Number(system.radius || 0) <= 116));
+}
+for (let i = 0; i < denseSolar.satelliteSystems.length; i += 1) {
+  for (let j = i + 1; j < denseSolar.satelliteSystems.length; j += 1) {
+    const a = denseSolar.satelliteSystems[i];
+    const b = denseSolar.satelliteSystems[j];
+    const distance = Math.hypot(a.x - b.x, a.y - b.y);
+    assert.ok(distance >= Number(a.footprintRadius || 0) + Number(b.footprintRadius || 0) + 16);
+  }
+}
 
 const influenceSolarFixture = {
   metadata: { type_counts: {}, timeline: {} },
@@ -523,7 +663,16 @@ const highPlanet = influencePlanets.find(node => node.id === "skill-high");
 const lowPlanet = influenceSolar.nodes.find(node => node.id === "skill-low" || node.id === "skill-low-2");
 assert.ok(highPlanet);
 assert.ok(lowPlanet);
-assert.ok(highPlanet.renderRadius >= lowPlanet.renderRadius);
+assert.ok(highPlanet.renderRadius > lowPlanet.renderRadius);
+{
+  const byParent = new Map(influenceSolar.satelliteSystems.map(system => [system.parentId, system]));
+  const highSystem = byParent.get("skill-high");
+  const lowSystem = byParent.get(lowPlanet.id);
+  if (highSystem && lowSystem) {
+    assert.ok(Number(highSystem.radius || 0) >= Number(lowSystem.radius || 0));
+    assert.ok(highSystem.nodes.length >= lowSystem.nodes.length);
+  }
+}
 
 const cometOverlay = buildCometOverlayLayout(finalOverview, [{
   id: "comet:test",
@@ -687,6 +836,23 @@ assert.equal(stationaryLayout.systems[0].x, animatedLayout.systems[0].x);
 assert.equal(stationaryLayout.systems[0].y, animatedLayout.systems[0].y);
 assert.equal(stationaryLayout.nodes[1].x, animatedLayout.nodes[1].x);
 assert.equal(stationaryLayout.nodes[1].y, animatedLayout.nodes[1].y);
+
+{
+  const overviewMotion = buildGalaxyOverviewLayout(orbitalGalaxy, { nodeScale: 0.48 });
+  const planet = overviewMotion.nodes.find(node => ["planet", "moon", "evidence"].includes(node.orbitalRole) && node.animation?.parentSystemKey);
+  assert.ok(planet);
+  const parentBefore = overviewMotion.systems.find(system => system.key === planet.animation.parentSystemKey);
+  assert.ok(parentBefore);
+  const parentBeforePosition = { x: parentBefore.x, y: parentBefore.y };
+  const beforeOffset = { x: planet.x - parentBefore.x, y: planet.y - parentBefore.y };
+  advanceGalaxyAnimationNodes(overviewMotion, 1, new Map(), 1);
+  const parentAfter = overviewMotion.systems.find(system => system.key === planet.animation.parentSystemKey);
+  const planetAfter = overviewMotion.nodes.find(node => node.id === planet.id);
+  assert.ok(parentAfter);
+  assert.ok(planetAfter);
+  assert.notEqual(Math.round(parentAfter.x * 1000) / 1000, Math.round(parentBeforePosition.x * 1000) / 1000);
+  assert.notEqual(Math.round((planetAfter.x - parentAfter.x) * 1000) / 1000, Math.round(beforeOffset.x * 1000) / 1000);
+}
 const animatedSystemNode = {
   ...animatedLayout.nodes[0],
   labelAnchor: { x: 40, y: 0, align: "left" },
@@ -697,6 +863,7 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   const tickerCallbacks = [];
   let removeChildrenCalls = 0;
   let destroyedChildren = 0;
+  let animationFrameCallbacks = 0;
   class FakeContainer {
     constructor() {
       this.children = [];
@@ -731,9 +898,10 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
     destroy() { destroyedChildren += 1; }
   }
   class FakeText extends FakeContainer {
-    constructor({ text }) {
+    constructor({ text, style }) {
       super();
       this.text = text;
+      this.style = style || {};
       this.width = String(text).length * 8;
       this.height = 16;
       this.anchor = { set: () => {} };
@@ -749,6 +917,7 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
     PIXI: { Container: FakeContainer, Graphics: FakeGraphics, Text: FakeText },
     app: fakeApp,
     stage,
+    onAnimationFrame: () => { animationFrameCallbacks += 1; },
   });
   const perfLayout = JSON.parse(JSON.stringify(animatedLayout));
   perfLayout.view = "galaxy";
@@ -758,15 +927,24 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   const afterInitialDrawRemoveCalls = removeChildrenCalls;
   const afterInitialDestroyedChildren = destroyedChildren;
   const root = stage.children[0];
-  const orbitLayer = root.children[0];
-  const labelLayer = root.children[4];
+  const orbitLayer = root.children.find(layer => layer.children.some(child => child.commands?.some(command => {
+    return command.name === "ellipse"
+      && Math.abs(command.args[0] - perfLayout.systems[0].x) < 0.0001
+      && Math.abs(command.args[1] - perfLayout.systems[0].y) < 0.0001;
+  })));
+  const labelLayer = root.children.find(layer => layer.children.some(child => child.text === "Animated planet"));
   const animatedLabel = labelLayer.children.find(child => child.text === "Animated planet");
-  const animatedSystemGuide = orbitLayer.children.find(child => child.commands?.some(command => command.name === "ellipse"));
+  const animatedSystemGuide = orbitLayer.children.find(child => child.commands?.some(command => {
+    return command.name === "ellipse"
+      && Math.abs(command.args[0] - perfLayout.systems[0].x) < 0.0001
+      && Math.abs(command.args[1] - perfLayout.systems[0].y) < 0.0001;
+  }));
   assert.ok(animatedLabel);
   assert.ok(animatedSystemGuide);
   for (let frame = 0; frame < 12; frame += 1) {
     tickerCallbacks.forEach(callback => callback({ deltaMS: 16.67 }));
   }
+  assert.ok(animationFrameCallbacks > 0);
   assert.equal(removeChildrenCalls, afterInitialDrawRemoveCalls);
   assert.equal(destroyedChildren, afterInitialDestroyedChildren);
   assert.ok(Math.abs(animatedLabel.x - dynamicLabelAnchor(perfLayout.nodes[1]).x) < 0.0001);
@@ -774,6 +952,76 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   const guideEllipse = animatedSystemGuide.commands.find(command => command.name === "ellipse");
   assert.ok(Math.abs(guideEllipse.args[0] - perfLayout.systems[0].x) < 0.0001);
   assert.ok(Math.abs(guideEllipse.args[1] - perfLayout.systems[0].y) < 0.0001);
+  const removeChildrenAfterShortRun = removeChildrenCalls;
+  const destroyedAfterShortRun = destroyedChildren;
+  for (let frame = 0; frame < 600; frame += 1) {
+    tickerCallbacks.forEach(callback => callback({ deltaMS: 16.67 }));
+  }
+  assert.equal(removeChildrenCalls, removeChildrenAfterShortRun);
+  assert.equal(destroyedChildren, destroyedAfterShortRun);
+}
+
+{
+  const tickerCallbacks = [];
+  class FakeContainer {
+    constructor() {
+      this.children = [];
+      this.scale = { set: value => { this.scaleValue = value; } };
+      this.position = { set: (x, y) => { this.positionValue = { x, y }; } };
+    }
+    addChild(...children) { this.children.push(...children); return children.at(-1); }
+    removeChildren() { const children = this.children; this.children = []; return children; }
+    on() {}
+  }
+  class FakeGraphics extends FakeContainer {
+    constructor() { super(); this.commands = []; }
+    clear() { this.commands = []; return this; }
+    circle(...args) { this.commands.push({ name: "circle", args }); return this; }
+    ellipse(...args) { this.commands.push({ name: "ellipse", args }); return this; }
+    fill() { return this; }
+    stroke(...args) { this.commands.push({ name: "stroke", args }); return this; }
+    moveTo(...args) { this.commands.push({ name: "moveTo", args }); return this; }
+    lineTo(...args) { this.commands.push({ name: "lineTo", args }); return this; }
+    quadraticCurveTo(...args) { this.commands.push({ name: "quadraticCurveTo", args }); return this; }
+    destroy() {}
+  }
+  class FakeText extends FakeContainer {
+    constructor({ text, style }) {
+      super();
+      this.text = text;
+      this.style = style || {};
+      this.width = String(text).length * 8;
+      this.height = 16;
+      this.anchor = { set: () => {} };
+    }
+    destroy() {}
+  }
+  const stage = new FakeContainer();
+  const renderer = createMemoryGalaxyRenderer({
+    PIXI: { Container: FakeContainer, Graphics: FakeGraphics, Text: FakeText },
+    app: { screen: { width: 1200, height: 800 }, ticker: { add: callback => tickerCallbacks.push(callback) } },
+    stage,
+  });
+  const solarLabelLayout = JSON.parse(JSON.stringify(denseSolar));
+  renderer.draw(solarLabelLayout, { selectedNodeId: null, hoveredNodeId: null, labelMode: "medium", animationSpeed: 1 }, {});
+  const root = stage.children[0];
+  const labelLayer = root.children.find(layer => layer.children.some(child => child.text === "DENSE PLANET 0"));
+  assert.ok(labelLayer);
+  const planetLabel = labelLayer.children.find(child => child.text === "DENSE PLANET 0");
+  assert.ok(planetLabel);
+  assert.ok(Number(planetLabel.style.fontSize || 0) >= 17);
+  const leaderLayer = root.children.find(layer => layer.children.some(child => child.commands?.some(command => command.name === "moveTo")));
+  const leader = leaderLayer.children.find(child => child.commands?.some(command => command.name === "moveTo") && child.commands?.filter(command => command.name === "lineTo").length >= 2);
+  assert.ok(leader);
+  const move = leader.commands.find(command => command.name === "moveTo");
+  const lines = leader.commands.filter(command => command.name === "lineTo");
+  const firstLength = Math.hypot(lines[0].args[0] - move.args[0], lines[0].args[1] - move.args[1]);
+  const secondLength = Math.hypot(lines[1].args[0] - lines[0].args[0], lines[1].args[1] - lines[0].args[1]);
+  assert.ok(firstLength >= 16 && firstLength <= 76);
+  assert.ok(secondLength >= 24 && secondLength <= 58);
+  const labeledPlanet = solarLabelLayout.nodes.find(node => node.label === "dense planet 0");
+  assert.ok(labeledPlanet);
+  assert.ok(Math.hypot(move.args[0] - labeledPlanet.x, move.args[1] - labeledPlanet.y) >= Number(labeledPlanet.renderRadius || 0));
 }
 
 const denseOverviewFixture = {

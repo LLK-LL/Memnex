@@ -476,10 +476,12 @@ button:hover,
   min-height: 0;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 42% 48%, rgba(32, 127, 255, 0.18), transparent 19%),
-    radial-gradient(ellipse at 78% 58%, rgba(247, 198, 90, 0.11), transparent 18%),
-    radial-gradient(ellipse at 26% 72%, rgba(179, 108, 255, 0.12), transparent 17%),
-    linear-gradient(130deg, transparent 0 18%, rgba(45, 116, 214, 0.08) 38%, transparent 60%),
+    radial-gradient(ellipse at 50% 50%, rgba(32, 127, 255, 0.24), transparent 18%),
+    radial-gradient(ellipse at 78% 17%, rgba(50, 127, 255, 0.22), transparent 23%),
+    radial-gradient(ellipse at 20% 72%, rgba(14, 165, 233, 0.16), transparent 20%),
+    radial-gradient(ellipse at 76% 60%, rgba(179, 108, 255, 0.14), transparent 21%),
+    radial-gradient(ellipse at 34% 30%, rgba(247, 198, 90, 0.11), transparent 16%),
+    linear-gradient(118deg, transparent 0 18%, rgba(37, 99, 235, 0.12) 36%, rgba(14, 165, 233, 0.06) 46%, transparent 66%),
     #020712;
 }
 
@@ -490,13 +492,14 @@ button:hover,
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(circle, rgba(255,255,255,0.9) 0 1px, transparent 1.4px),
-    radial-gradient(circle, rgba(147,197,253,0.62) 0 1px, transparent 1.8px),
-    radial-gradient(circle, rgba(247,198,90,0.52) 0 1px, transparent 1.5px),
-    radial-gradient(circle, rgba(255,255,255,0.28) 0 0.8px, transparent 1.2px);
-  background-size: 190px 190px, 270px 270px, 390px 390px, 510px 510px;
-  background-position: 24px 30px, 96px 62px, 130px 214px, 280px 120px;
-  opacity: 0.34;
+    radial-gradient(circle, rgba(255,255,255,0.96) 0 1px, transparent 1.35px),
+    radial-gradient(circle, rgba(147,197,253,0.72) 0 1px, transparent 1.7px),
+    radial-gradient(circle, rgba(247,198,90,0.56) 0 1px, transparent 1.5px),
+    radial-gradient(circle, rgba(255,255,255,0.34) 0 0.8px, transparent 1.2px),
+    linear-gradient(118deg, transparent 0 28%, rgba(59,130,246,0.18) 43%, transparent 60%);
+  background-size: 146px 146px, 232px 232px, 360px 360px, 520px 520px, 100% 100%;
+  background-position: 24px 30px, 96px 62px, 130px 214px, 280px 120px, 0 0;
+  opacity: 0.52;
 }
 
 .galaxy-canvas::after,
