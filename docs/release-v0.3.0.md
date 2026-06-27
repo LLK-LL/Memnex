@@ -29,18 +29,13 @@ density, recent activity, and high-weight connections.
 Double-click a planet to inspect direct neighbors, derived context, evidence,
 and external relations as readable orbital rings.
 
-### 3D companion view
-
-![Memory Galaxy 3D view](https://raw.githubusercontent.com/LLK-LL/Memnex/main/assets/memory-galaxy-3d.png)
-
-The 3D view keeps the same exported data and helps spot dense clusters, bridges,
-and isolated graph regions.
 
 ## What is included
 
 - PixiJS-powered Memory Galaxy UI.
 - Galaxy overview, system drill-down, and planet-satellite navigation.
-- Companion 3D graph viewer.
+- Full graph export by default. Node/edge limits are used only when explicitly
+  requested with `--max-nodes` or `--max-edges`.
 - Search, node type filters, layer/edge filters, breadcrumbs, minimap, and
   inspector tabs.
 - Performance HUD for FPS, frame time, memory estimate, GPU renderer, and
@@ -77,10 +72,8 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
   --output .\graph-viewer-output
 ```
 
-Open:
-
-- `graph-viewer-output\index.html` for Memory Galaxy.
-- `graph-viewer-output\viewer-3d.html` for 3D.
+Open `graph-viewer-output\index.html` for the full 2D Memory Galaxy workspace.
+Do not pass `--max-nodes` or `--max-edges` when you want the full graph.
 
 ## Current limitations
 

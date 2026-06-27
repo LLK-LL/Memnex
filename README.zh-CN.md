@@ -42,7 +42,7 @@ Memnex 不是简单的聊天记录备份。它保存的是你使用 AI 时形成
 
 Memnex 现在可以把抽象的本地记忆图谱变成一张可以飞进去看的星系图。新版 Memory Galaxy viewer 是一个本地浏览器工作台：每个记忆系统是一组星系，高优先级记忆像行星一样环绕，支撑事实和证据像卫星一样展开，关系链路可以被搜索、筛选、钻取和审查。
 
-它仍然是本地优先的。导出器以 SQLite 只读模式打开源数据库，生成一个静态 viewer 目录；生成的 graph 数据默认不进入 Git。
+它仍然是本地优先的。导出器以 SQLite 只读模式打开源数据库，生成一个静态 viewer 目录；生成的 graph 数据默认不进入 Git。默认导出为全量图，不传 `--max-nodes` 或 `--max-edges` 时不会裁剪节点和边。
 
 ```powershell
 python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
@@ -50,7 +50,7 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
   --output .\graph-viewer-output
 ```
 
-打开 `graph-viewer-output\index.html` 查看 Memory Galaxy；打开 `graph-viewer-output\viewer-3d.html` 查看 3D 图视图。
+打开 `graph-viewer-output\index.html` 查看全量 2D Memory Galaxy 工作台。
 
 ### 星系总览
 
@@ -70,22 +70,16 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
 
 ![Memory Galaxy 行星卫星视图](assets/memory-galaxy-planet-satellite.png)
 
-### 需要看空间结构时切到 3D
-
-3D 视图使用同一份导出数据，用空间力导向布局呈现密集簇、桥接节点和孤立区域。
-
-![Memory Galaxy 3D 视图](assets/memory-galaxy-3d.png)
-
 ### v0.3.0 更新重点
 
 - 新增 PixiJS Memory Galaxy UI，支持星系总览、太阳系钻取、行星-卫星局部图。
-- 保留 3D 图视图作为空间结构辅助视角。
+- 默认导出全量图；只有用户显式传入 `--max-nodes` 或 `--max-edges` 时才会限制规模。
 - 支持搜索、节点类型过滤、边/层级过滤、面包屑、minimap 和 inspector tabs。
 - 新增性能 HUD：FPS、帧耗时、内存估算、GPU renderer、可见节点/边数量。
 - 导出器会嵌入 graph 数据并内联 viewer 模块，方便离线本地查看。
 - 动画渲染已优化：动画 tick 更新现有对象，不再每帧重建场景。
 
-生成的 viewer 目录可能包含私有记忆摘要。除非你已经专门审查并脱敏，否则不要公开真实导出结果；仓库中的截图使用的是演示数据。
+生成的 viewer 目录可能包含私有记忆摘要。除非你已经专门审查并脱敏，否则不要公开真实导出结果；仓库中的截图只上传静态截图，不上传 `graph.json` 或数据库。
 
 ## Quick Start
 

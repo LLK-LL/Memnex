@@ -21,8 +21,10 @@ workspace with:
 - 2D Memory Galaxy overview;
 - system-level solar-system drill-down;
 - planet-satellite local context view;
-- companion 3D graph view;
 - search, filters, minimap, inspector tabs, and performance HUD.
+
+By default, the exporter writes the full graph. Use `--max-nodes` or
+`--max-edges` only when you intentionally want a reduced rendering workload.
 
 ```powershell
 python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
@@ -30,10 +32,7 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
   --output .\graph-viewer-output
 ```
 
-Open `graph-viewer-output\index.html` for Memory Galaxy or
-`graph-viewer-output\viewer-3d.html` for 3D. Generated viewer output is ignored
-by Git because it can contain private memory summaries from the selected
-database.
+Open `graph-viewer-output\index.html` for the full 2D Memory Galaxy workspace. Generated viewer output is ignored by Git because it can contain private memory summaries from the selected database.
 
 ## Data Layers
 

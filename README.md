@@ -121,7 +121,8 @@ prompt.
 
 It is still local-first. The exporter opens the source SQLite database in
 read-only mode, writes a static viewer folder, and keeps generated graph output
-out of Git by default.
+out of Git by default. The default export is full graph mode: omit
+`--max-nodes` and `--max-edges` to export all available nodes and edges.
 
 ```powershell
 python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
@@ -129,8 +130,7 @@ python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
   --output .\graph-viewer-output
 ```
 
-Open `graph-viewer-output\index.html` for Memory Galaxy or
-`graph-viewer-output\viewer-3d.html` for the 3D graph view.
+Open `graph-viewer-output\index.html` for the full 2D Memory Galaxy workspace.
 
 ### Galaxy overview
 
@@ -156,18 +156,13 @@ rings so you can understand why a memory is connected before you reuse it.
 
 ![Memory Galaxy planet satellite view](assets/memory-galaxy-planet-satellite.png)
 
-### Switch to 3D when shape matters
-
-The 3D view keeps the same exported graph data but gives you a spatial force
-layout for spotting dense clusters, bridges, and isolated regions.
-
-![Memory Galaxy 3D view](assets/memory-galaxy-3d.png)
 
 ### What changed in v0.3.0
 
 - New PixiJS Memory Galaxy UI with galaxy, solar-system, and planet-satellite
   navigation.
-- 3D graph view retained as a companion perspective.
+- Full graph export is the default; limits are applied only when you explicitly
+  pass `--max-nodes` or `--max-edges`.
 - Search, node type filters, edge/layer filtering, breadcrumbs, minimap, and
   inspector tabs.
 - Performance HUD for FPS, frame time, memory estimate, GPU renderer, and
@@ -244,7 +239,7 @@ memory-system/
     sync-memory-library.ps1        # collect, sanitize, commit, and push the latest state
     install-weekly-task.ps1        # install a local Windows weekly scheduled task
   tools/
-    graph-viewer/                  # local 2D/3D memory graph viewer exporter
+    graph-viewer/                  # local full 2D Memory Galaxy exporter
 
 memory-data/
   current/
