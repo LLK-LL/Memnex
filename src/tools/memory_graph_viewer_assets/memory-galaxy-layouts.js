@@ -21,11 +21,11 @@ const systemLabels = {
 };
 
 const layerRadii = {
-  control: 115,
-  execution: 180,
-  context: 250,
-  evidence: 320,
-  archive: 380,
+  control: 230,
+  execution: 360,
+  context: 500,
+  evidence: 640,
+  archive: 760,
 };
 
 const layerOrder = ["control", "execution", "context", "evidence", "archive"];
@@ -111,7 +111,8 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
   const scaleRatio = Math.max(0.58, Math.min(2.15, nodeScale / 0.48));
   const solarElementScale = 2;
-  const solarOrbitScale = 0.5;
+  const solarPlanetOrbitScale = 1.5;
+  const solarSatelliteOrbitScale = 2;
   const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
   const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], systemKey);
@@ -129,7 +130,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const planetNodes = [];
   const satelliteSystems = [];
   const orbits = [];
-  const planetTracks = buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRenderRadius, solarElementScale, solarOrbitScale);
+  const planetTracks = buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRenderRadius, solarElementScale, solarPlanetOrbitScale, solarSatelliteOrbitScale);
   for (const [trackIndex, track] of planetTracks.entries()) {
     const trackSystems = track.systems;
     orbits.push({ kind: "planet", radius: track.radius, aspect: orbitAspect });
@@ -166,7 +167,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
     const parent = placedPlanetById.get(system.anchor.id);
     if (!parent || system.children.length === 0) continue;
     const visibleChildren = system.children.slice(0, visibleSolarSatelliteCount(system));
-    const satelliteProfile = solarSatelliteProfileFor(system, systemIndex, scaleRatio, solarOrbitScale);
+    const satelliteProfile = solarSatelliteProfileFor(system, systemIndex, scaleRatio, solarSatelliteOrbitScale);
     const childTracks = splitTracks(visibleChildren, satelliteProfile.radius, satelliteProfile.step, nodeScale, 4);
     const childOrbits = [];
     const childNodes = [];
@@ -618,10 +619,10 @@ function solarSatelliteProfileFor(system, index, scaleRatio, solarElementScale =
   };
 }
 
-function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRenderRadius, solarElementScale = 1, solarOrbitScale = 1) {
-  const orbitScale = Math.max(0.1, Number(solarOrbitScale || 1));
+function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRenderRadius, solarElementScale = 1, solarPlanetOrbitScale = 1, solarSatelliteOrbitScale = 1) {
+  const orbitScale = Math.max(0.1, Number(solarPlanetOrbitScale || 1));
   const planned = planetSystems.map((system, index) => {
-    const profile = solarSatelliteProfileFor(system, index, scaleRatio, solarOrbitScale);
+    const profile = solarSatelliteProfileFor(system, index, scaleRatio, solarSatelliteOrbitScale);
     const parentRadius = solarPlanetSystemRadius(system, nodeScale, centralRenderRadius, solarElementScale);
     const visibleChildren = system.children.slice(0, visibleSolarSatelliteCount(system));
     const plannedChildTracks = splitTracks(visibleChildren, profile.radius, profile.step, nodeScale, 4);
