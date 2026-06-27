@@ -887,15 +887,18 @@ function createSystemLabel(PIXI, node, anchor) {
   const color = parseColor(node.color || "#7dd3fc");
   const lines = systemLabelLines(node);
   const isPlanetSystem = Boolean(node.isPlanetSystemNode);
+  const titleSize = node.orbitalRole === "galactic-core" ? 17 : isPlanetSystem ? 24 : 16;
+  const subtitleSize = isPlanetSystem ? 16 : 12;
+  const countSize = isPlanetSystem ? 15 : 12;
   const title = new PIXI.Text({
     text: lines[0],
     resolution: 2,
     style: {
       fill: 0xf8fbff,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: node.orbitalRole === "galactic-core" ? 16 : isPlanetSystem ? 18 : 14,
+      fontSize: titleSize,
       fontWeight: "800",
-      stroke: { color: 0x020617, width: 4, alpha: 0.9 },
+      stroke: { color: 0x020617, width: isPlanetSystem ? 5 : 4, alpha: 0.92 },
     },
   });
   const subtitle = new PIXI.Text({
@@ -904,9 +907,9 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: color,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: isPlanetSystem ? 13 : 11,
+      fontSize: subtitleSize,
       fontWeight: "700",
-      stroke: { color: 0x020617, width: 3, alpha: 0.86 },
+      stroke: { color: 0x020617, width: isPlanetSystem ? 4 : 3, alpha: 0.88 },
     },
   });
   const count = new PIXI.Text({
@@ -915,9 +918,9 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: 0xd8e4f7,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: isPlanetSystem ? 12 : 11,
+      fontSize: countSize,
       fontWeight: "500",
-      stroke: { color: 0x020617, width: 3, alpha: 0.82 },
+      stroke: { color: 0x020617, width: isPlanetSystem ? 4 : 3, alpha: 0.84 },
     },
   });
   const label = { kind: "system", texts: [title, subtitle, count].filter(text => text.text) };
@@ -929,10 +932,12 @@ function createSystemLabel(PIXI, node, anchor) {
 function positionLabel(label, anchor) {
   const alignAnchor = anchor.align === "right" ? 1 : 0;
   if (label.kind === "system") {
+    const lineGap = label.texts.some(text => Number(text.style?.fontSize || 0) >= 20) ? 23 : 17;
+    const yStart = label.texts.length > 2 ? -lineGap * 1.14 : -lineGap * 0.82;
     label.texts.forEach((text, index) => {
       text.anchor?.set?.(alignAnchor, 0);
       text.x = anchor.x;
-      text.y = anchor.y - (label.texts.length > 2 ? 20 : 14) + index * 17;
+      text.y = anchor.y + yStart + index * lineGap;
     });
     label.bounds = groupLabelBounds(label.texts, anchor.align);
     return;
@@ -967,8 +972,8 @@ function dynamicLabelAnchor(node) {
   const angle = Math.atan2(node.y - centerY || 0.0001, node.x - centerX || 0.0001);
   const align = Math.cos(angle) < 0 ? "right" : "left";
   if (node.isPlanetSystemNode) {
-    const offset = Math.min(76, Math.max(48, Number(node.renderRadius || 12) + 22));
-    const elbow = 34;
+    const offset = Math.min(104, Math.max(68, Number(node.renderRadius || 12) + 38));
+    const elbow = 52;
     const sign = align === "right" ? -1 : 1;
     return {
       x: node.x + Math.cos(angle) * offset + sign * elbow,
@@ -995,7 +1000,7 @@ function drawLabelLeader(leader, node, anchor) {
     const startX = node.x + Math.cos(angle) * startRadius;
     const startY = node.y + Math.sin(angle) * startRadius;
     leader.moveTo(startX, startY).lineTo(anchor.elbowX, anchor.elbowY).lineTo(anchor.x, anchor.elbowY);
-    leader.stroke({ width: 1.8, color, alpha: 0.88 });
+    leader.stroke({ width: 2.8, color, alpha: 0.95 });
     return;
   }
   leader.moveTo(node.x, node.y).lineTo(anchor.x, anchor.y);

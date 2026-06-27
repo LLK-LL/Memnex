@@ -466,7 +466,7 @@ assert.ok(skillSolar.orbits.every(orbit => Number(orbit.aspect || 1) > 0 && Numb
 assert.ok(skillSolar.satelliteSystems.every(system => Number(system.aspect || 1) > 0 && Number(system.aspect || 1) <= 1));
 assert.ok(skillSolar.satelliteSystems.every(system => system.orbits.every(orbit => Number(orbit.aspect || 1) > 0 && Number(orbit.aspect || 1) <= 1)));
 assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => Math.abs(node.animation.orbitRadiusX - Math.hypot(node.animation.orbitRadiusX, 0)) < 0.0001));
-assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => node.animation.orbitRadiusX >= 200 && node.animation.orbitRadiusY < node.animation.orbitRadiusX));
+assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").every(node => node.animation.orbitRadiusX >= 100 && node.animation.orbitRadiusY < node.animation.orbitRadiusX));
 assert.ok(skillSolar.nodes.some(node => node.orbitalRole === "planet" && node.childCount > 0));
 assert.ok(skillSolar.nodes.filter(node => node.orbitalRole === "planet").length >= 2);
 assert.ok(skillSolar.nodes.find(node => node.orbitalRole === "central-star")?.renderRadius >= 28);
@@ -628,7 +628,7 @@ assert.ok(denseSolar.nodes.filter(node => node.isPlanetSystemNode).every(node =>
   assert.ok(planetSystems.length > 0);
   assert.ok(Number(centralStar.renderRadius || 0) >= Math.max(...planetSystems.map(node => Number(node.renderRadius || 0))) * 1.42);
   assert.ok(Math.max(...denseSolar.orbits.map(orbit => Number(orbit.radius || 0))) <= 850);
-  assert.ok(denseSolar.satelliteSystems.every(system => Number(system.radius || 0) >= 58 && Number(system.radius || 0) <= 116));
+  assert.ok(denseSolar.satelliteSystems.every(system => Number(system.radius || 0) >= 29 && Number(system.radius || 0) <= 58));
 }
 for (let i = 0; i < denseSolar.satelliteSystems.length; i += 1) {
   for (let j = i + 1; j < denseSolar.satelliteSystems.length; j += 1) {
@@ -1009,7 +1009,7 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   assert.ok(labelLayer);
   const planetLabel = labelLayer.children.find(child => child.text === "DENSE PLANET 0");
   assert.ok(planetLabel);
-  assert.ok(Number(planetLabel.style.fontSize || 0) >= 17);
+  assert.ok(Number(planetLabel.style.fontSize || 0) >= 24);
   const leaderLayer = root.children.find(layer => layer.children.some(child => child.commands?.some(command => command.name === "moveTo")));
   const leader = leaderLayer.children.find(child => child.commands?.some(command => command.name === "moveTo") && child.commands?.filter(command => command.name === "lineTo").length >= 2);
   assert.ok(leader);
@@ -1017,8 +1017,8 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   const lines = leader.commands.filter(command => command.name === "lineTo");
   const firstLength = Math.hypot(lines[0].args[0] - move.args[0], lines[0].args[1] - move.args[1]);
   const secondLength = Math.hypot(lines[1].args[0] - lines[0].args[0], lines[1].args[1] - lines[0].args[1]);
-  assert.ok(firstLength >= 16 && firstLength <= 76);
-  assert.ok(secondLength >= 24 && secondLength <= 58);
+  assert.ok(firstLength >= 34 && firstLength <= 104);
+  assert.ok(secondLength >= 42 && secondLength <= 72);
   const labeledPlanet = solarLabelLayout.nodes.find(node => node.label === "dense planet 0");
   assert.ok(labeledPlanet);
   assert.ok(Math.hypot(move.args[0] - labeledPlanet.x, move.args[1] - labeledPlanet.y) >= Number(labeledPlanet.renderRadius || 0));

@@ -21,11 +21,11 @@ const systemLabels = {
 };
 
 const layerRadii = {
-  control: 230,
-  execution: 360,
-  context: 500,
-  evidence: 640,
-  archive: 760,
+  control: 115,
+  execution: 180,
+  context: 250,
+  evidence: 320,
+  archive: 380,
 };
 
 const layerOrder = ["control", "execution", "context", "evidence", "archive"];
@@ -111,7 +111,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
   const scaleRatio = Math.max(0.58, Math.min(2.15, nodeScale / 0.48));
   const solarElementScale = 2;
-  const solarOrbitScale = 1;
+  const solarOrbitScale = 0.5;
   const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
   const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], systemKey);
@@ -619,6 +619,7 @@ function solarSatelliteProfileFor(system, index, scaleRatio, solarElementScale =
 }
 
 function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRenderRadius, solarElementScale = 1, solarOrbitScale = 1) {
+  const orbitScale = Math.max(0.1, Number(solarOrbitScale || 1));
   const planned = planetSystems.map((system, index) => {
     const profile = solarSatelliteProfileFor(system, index, scaleRatio, solarOrbitScale);
     const parentRadius = solarPlanetSystemRadius(system, nodeScale, centralRenderRadius, solarElementScale);
@@ -632,9 +633,9 @@ function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRen
   });
   const tracks = [];
   let cursor = 0;
-  let radius = 220 * scaleRatio;
+  let radius = 220 * scaleRatio * orbitScale;
   let previousMaxFootprint = 0;
-  const trackGap = 92 * scaleRatio;
+  const trackGap = 92 * scaleRatio * orbitScale;
   while (cursor < planned.length) {
     let systemsForTrack = [];
     let footprintsForTrack = new Map();
@@ -642,7 +643,7 @@ function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRen
     for (let capacity = Math.min(5, planned.length - cursor); capacity >= 1; capacity -= 1) {
       const slice = planned.slice(cursor, cursor + capacity);
       maxFootprint = Math.max(...slice.map(item => item.footprint));
-      const candidateRadius = minimumSolarTrackRadius(slice, Math.max(radius, centralRenderRadius + maxFootprint + 48 * scaleRatio), 0.58);
+      const candidateRadius = minimumSolarTrackRadius(slice, Math.max(radius, centralRenderRadius + maxFootprint + 48 * scaleRatio * orbitScale), 0.58, orbitScale);
       const angleStep = Math.PI * 2 / capacity;
       if (Number.isFinite(candidateRadius)) {
         radius = candidateRadius;
@@ -656,7 +657,7 @@ function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRen
       systemsForTrack = [item.system];
       footprintsForTrack = new Map([[item.system.anchor.id, item.footprint]]);
       maxFootprint = item.footprint;
-      radius = Math.max(radius, centralRenderRadius + maxFootprint + 48 * scaleRatio);
+      radius = Math.max(radius, centralRenderRadius + maxFootprint + 48 * scaleRatio * orbitScale);
     }
     tracks.push({
       radius,
@@ -665,14 +666,18 @@ function buildSolarPlanetTracks(planetSystems, nodeScale, scaleRatio, centralRen
       angleStep: Math.PI * 2 / Math.max(1, systemsForTrack.length),
     });
     cursor += systemsForTrack.length;
+    const nextTrackGap = previousMaxFootprint > 0
+      ? (previousMaxFootprint + maxFootprint) * 0.92 + trackGap * 0.56
+      : maxFootprint * 2 + trackGap * 0.56 + 48;
+    radius += Math.max(170 * scaleRatio * orbitScale, nextTrackGap);
     previousMaxFootprint = maxFootprint;
-    radius += Math.max(170 * scaleRatio, (previousMaxFootprint + maxFootprint) * 0.92 + trackGap * 0.56);
   }
   return tracks;
 }
 
-function minimumSolarTrackRadius(items, startRadius, aspect) {
-  const limit = Math.max(startRadius, 260) + 420;
+function minimumSolarTrackRadius(items, startRadius, aspect, orbitScale = 1) {
+  const minRadius = 260 * Math.max(0.1, Number(orbitScale || 1));
+  const limit = Math.max(startRadius, minRadius) + 420 * Math.max(0.1, Number(orbitScale || 1));
   const angleStep = Math.PI * 2 / Math.max(1, items.length);
   for (let radius = startRadius; radius <= limit; radius += 8) {
     if (solarTrackFits(items, radius, angleStep, aspect)) return radius;
