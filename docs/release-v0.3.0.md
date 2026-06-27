@@ -8,7 +8,7 @@ personal AI memory systems.
 
 ### Galaxy overview
 
-![Memory Galaxy overview](../assets/memory-galaxy-overview.png)
+![Memory Galaxy overview](https://raw.githubusercontent.com/LLK-LL/Memnex/main/assets/memory-galaxy-overview.png)
 
 The overview turns the whole memory graph into an orbiting map of memory
 systems. Use it to scan system density, search nodes, filter types/layers, and
@@ -16,7 +16,7 @@ watch the live performance HUD while navigating large graphs.
 
 ### System solar-system view
 
-![Memory Galaxy solar system view](../assets/memory-galaxy-solar-system.png)
+![Memory Galaxy solar system view](https://raw.githubusercontent.com/LLK-LL/Memnex/main/assets/memory-galaxy-solar-system.png)
 
 Double-click a system to enter its local solar system. The system center becomes
 the star; important memories become planets; the inspector shows counts,
@@ -24,14 +24,14 @@ density, recent activity, and high-weight connections.
 
 ### Planet-satellite context
 
-![Memory Galaxy planet satellite view](../assets/memory-galaxy-planet-satellite.png)
+![Memory Galaxy planet satellite view](https://raw.githubusercontent.com/LLK-LL/Memnex/main/assets/memory-galaxy-planet-satellite.png)
 
 Double-click a planet to inspect direct neighbors, derived context, evidence,
 and external relations as readable orbital rings.
 
 ### 3D companion view
 
-![Memory Galaxy 3D view](../assets/memory-galaxy-3d.png)
+![Memory Galaxy 3D view](https://raw.githubusercontent.com/LLK-LL/Memnex/main/assets/memory-galaxy-3d.png)
 
 The 3D view keeps the same exported data and helps spot dense clusters, bridges,
 and isolated graph regions.
