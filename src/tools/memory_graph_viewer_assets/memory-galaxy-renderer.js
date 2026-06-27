@@ -17,6 +17,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   let panState = null;
   let dragState = null;
   let pressState = null;
+  let blankPressState = null;
   let lastTap = { kind: null, key: null, time: 0 };
   const nodeGraphicsById = new Map();
   const systemHitByKey = new Map();
@@ -28,10 +29,17 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   stage.eventMode = "static";
   stage.hitArea = app.screen;
   stage.on("pointerdown", event => {
-    if (!hasCtrlModifier(event) || !isPrimaryButton(event)) return;
-    panState = {
+    if (!isPrimaryButton(event)) return;
+    if (hasCtrlModifier(event)) {
+      panState = {
+        start: event.global.clone(),
+        origin: { ...pan },
+      };
+      return;
+    }
+    blankPressState = {
       start: event.global.clone(),
-      origin: { ...pan },
+      moved: false,
     };
   });
   stage.on("pointermove", event => {
@@ -47,6 +55,11 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
       const dxRaw = event.global.x - pressState.start.x;
       const dyRaw = event.global.y - pressState.start.y;
       if (!pressState.moved && Math.hypot(dxRaw, dyRaw) >= dragThreshold) pressState.moved = true;
+    }
+    if (blankPressState) {
+      const dxRaw = event.global.x - blankPressState.start.x;
+      const dyRaw = event.global.y - blankPressState.start.y;
+      if (!blankPressState.moved && Math.hypot(dxRaw, dyRaw) >= dragThreshold) blankPressState.moved = true;
     }
     if (!dragState || !pressState?.moved) return;
     const dx = (event.global.x - dragState.start.x) / scale;
@@ -361,10 +374,12 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   function endDrag() {
     if (panState) {
       panState = null;
+      blankPressState = null;
       return;
     }
     const activePress = pressState;
     const activeDrag = dragState;
+    const activeBlankPress = blankPressState;
     if (activeDrag) {
       activeDrag.graphic.cursor = "grab";
       if (activePress?.moved) currentHandlers.onNodeDragEnd?.(activeDrag.node);
@@ -382,6 +397,10 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     }
     dragState = null;
     pressState = null;
+    blankPressState = null;
+    if (!activePress && !activeDrag && activeBlankPress && !activeBlankPress.moved) {
+      currentHandlers.onBlankTap?.();
+    }
     if (currentLayout && currentState) draw(currentLayout, currentState, currentHandlers);
   }
 
@@ -893,9 +912,9 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: 0xf8fbff,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: node.orbitalRole === "galactic-core" ? 16 : prominentSolarLabel ? 24 : 14,
+      fontSize: node.orbitalRole === "galactic-core" ? 16 : prominentSolarLabel ? 36 : 14,
       fontWeight: "800",
-      stroke: { color: 0x020617, width: prominentSolarLabel ? 5 : 4, alpha: 0.9 },
+      stroke: { color: 0x020617, width: prominentSolarLabel ? 7 : 4, alpha: 0.94 },
     },
   });
   const subtitle = new PIXI.Text({
@@ -904,9 +923,9 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: color,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: prominentSolarLabel ? 16 : 11,
+      fontSize: prominentSolarLabel ? 20 : 11,
       fontWeight: "700",
-      stroke: { color: 0x020617, width: prominentSolarLabel ? 4 : 3, alpha: 0.86 },
+      stroke: { color: 0x020617, width: prominentSolarLabel ? 5 : 3, alpha: 0.9 },
     },
   });
   const count = new PIXI.Text({
@@ -915,7 +934,7 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: 0xd8e4f7,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: prominentSolarLabel ? 15 : 11,
+      fontSize: prominentSolarLabel ? 18 : 11,
       fontWeight: "500",
       stroke: { color: 0x020617, width: 3, alpha: 0.82 },
     },
@@ -968,9 +987,11 @@ function dynamicLabelAnchor(node) {
   const centerY = Number(node.animation?.orbitCenterY ?? 0);
   const angle = Math.atan2(node.y - centerY || 0.0001, node.x - centerX || 0.0001);
   const align = Math.cos(angle) < 0 ? "right" : "left";
-  if (node.isPlanetSystemNode) {
-    const offset = Math.min(76, Math.max(48, Number(node.renderRadius || 12) + 22));
-    const elbow = 34;
+  if (node.isPlanetSystemNode || node.isSolarCenterStar) {
+    const offset = node.isSolarCenterStar
+      ? Math.min(190, Math.max(120, Number(node.renderRadius || 24) + 56))
+      : Math.min(92, Math.max(58, Number(node.renderRadius || 12) + 30));
+    const elbow = node.isSolarCenterStar ? 76 : 46;
     const sign = align === "right" ? -1 : 1;
     return {
       x: node.x + Math.cos(angle) * offset + sign * elbow,
@@ -991,13 +1012,13 @@ function dynamicLabelAnchor(node) {
 
 function drawLabelLeader(leader, node, anchor) {
   const color = parseColor(node.color || "#c8d8ff");
-  if (node.isPlanetSystemNode && Number.isFinite(anchor.elbowX) && Number.isFinite(anchor.elbowY)) {
+  if ((node.isPlanetSystemNode || node.isSolarCenterStar) && Number.isFinite(anchor.elbowX) && Number.isFinite(anchor.elbowY)) {
     const angle = Math.atan2(anchor.elbowY - node.y || 0.0001, anchor.elbowX - node.x || 0.0001);
     const startRadius = Math.max(0, Number(node.renderRadius || 0) + 3);
     const startX = node.x + Math.cos(angle) * startRadius;
     const startY = node.y + Math.sin(angle) * startRadius;
     leader.moveTo(startX, startY).lineTo(anchor.elbowX, anchor.elbowY).lineTo(anchor.x, anchor.elbowY);
-    leader.stroke({ width: 1.8, color, alpha: 0.88 });
+    leader.stroke({ width: node.isSolarCenterStar ? 3.2 : 2.4, color, alpha: 0.96 });
     return;
   }
   leader.moveTo(node.x, node.y).lineTo(anchor.x, anchor.y);
