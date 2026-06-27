@@ -5,9 +5,15 @@ $HostName = "127.0.0.1"
 $Port = 8765
 $BaseUrl = "http://${HostName}:${Port}"
 $GraphUrl = "${BaseUrl}/api/graph"
+$IndexUrl = "${BaseUrl}/"
+$PixiUrl = "${BaseUrl}/pixi.min.js"
 
 function Test-ViewerHealthy {
     try {
+        $index = Invoke-WebRequest -Uri $IndexUrl -UseBasicParsing -TimeoutSec 4
+        if ($index.StatusCode -ne 200 -or $index.Content -notmatch "pixi\.min\.js") { return $false }
+        $pixi = Invoke-WebRequest -Uri $PixiUrl -UseBasicParsing -TimeoutSec 4 -Method Head
+        if ($pixi.StatusCode -ne 200) { return $false }
         $response = Invoke-WebRequest -Uri $GraphUrl -UseBasicParsing -TimeoutSec 8
         if ($response.StatusCode -ne 200) { return $false }
         $payload = $response.Content | ConvertFrom-Json
@@ -53,4 +59,5 @@ if (-not (Wait-ViewerHealthy)) {
     throw "Memory Galaxy Viewer did not become healthy at $GraphUrl"
 }
 
-Start-Process "${BaseUrl}/"
+$fresh = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+Start-Process "${BaseUrl}/?fresh=${fresh}"
