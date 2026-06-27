@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import urllib.request
+from unittest.mock import patch
 
 from src.tools.memory_graph_viewer_server import (
     MemoryGraphViewerHandler,
     ThreadedMemoryGraphViewerServer,
     collect_system_performance,
+    get_cached_system_performance,
 )
 
 
@@ -126,3 +128,27 @@ def test_collect_system_performance_has_bounded_shape():
     assert isinstance(perf["timestamp"], float)
     assert set(perf["memory"]) >= {"used_mb", "total_mb", "percent"}
     assert "gpu" in perf
+
+
+def test_system_performance_cache_reuses_recent_snapshot():
+    calls = []
+
+    def fake_collect():
+        calls.append(len(calls))
+        return {
+            "source": "backend",
+            "timestamp": 1000.0 + len(calls),
+            "cpu_percent": 7.0,
+            "memory": {"used_mb": 1, "total_mb": 2, "percent": 50},
+            "gpu": None,
+        }
+
+    cache = {}
+    with patch("src.tools.memory_graph_viewer_server.collect_system_performance", fake_collect):
+        first = get_cached_system_performance(cache, now=1.0)
+        second = get_cached_system_performance(cache, now=2.5)
+        third = get_cached_system_performance(cache, now=4.2)
+
+    assert first is second
+    assert third is not first
+    assert len(calls) == 2

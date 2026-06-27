@@ -6,7 +6,7 @@ const playwrightIndex = process.env.PLAYWRIGHT_INDEX
   || "C:/Users/Administrator/AppData/Local/OpenAI/Codex/runtimes/cua_node/1b23c930bdf84ed6/bin/node_modules/playwright/index.mjs";
 const edgePath = process.env.EDGE_PATH
   || "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
-const viewerUrl = process.env.MEMORY_GALAXY_URL || "http://127.0.0.1:8766/";
+const viewerUrl = process.env.MEMORY_GALAXY_URL || "http://127.0.0.1:8765/";
 
 const { chromium } = await import(pathToFileURL(path.normalize(playwrightIndex)).href);
 
@@ -370,6 +370,7 @@ try {
     };
   });
   assert.equal(afterDoubleClick.state.view, "planet");
+  assert.equal(afterDoubleClick.state.selectedNodeId, null);
   assert.equal(afterDoubleClick.layoutView, "planet");
   assert.ok(afterDoubleClick.minimapDots >= 1);
   assert.match(afterDoubleClick.minimapWindowWidth, /%$/);

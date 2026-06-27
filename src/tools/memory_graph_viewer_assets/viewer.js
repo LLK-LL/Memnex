@@ -30,6 +30,7 @@ let lastPlanetTap = { id: null, time: 0 };
 let shouldAutoFit = true;
 let activeInspectorTab = "overview";
 let minimapDragActive = false;
+let pendingFitBounds = null;
 
 const PERF_SAMPLE_LIMIT = 36;
 const PERF_SAMPLE_INTERVAL_MS = 1000;
@@ -358,6 +359,15 @@ function scoreVisibleNode(node) {
 function drawCurrentLayout(options = {}) {
   if (!renderer || !app) return;
   currentLayout = buildActiveLayout();
+  if (shouldAutoFit && !options.preserveView && currentLayout.bounds) {
+    const nextTransform = transformForBounds(currentLayout.bounds);
+    if (nextTransform && renderer.setTransform) {
+      renderer.setTransform(nextTransform);
+      shouldAutoFit = false;
+    } else {
+      pendingFitBounds = currentLayout.bounds;
+    }
+  }
   renderer.draw(currentLayout, state, {
     onSystemClick: (system, event) => {
       const result = selectGalaxySystem(state, system.key, {
@@ -366,7 +376,7 @@ function drawCurrentLayout(options = {}) {
         forceEnter: clickCount(event) >= 2,
       });
       lastSystemTap = result.lastSystemTap;
-      state.selectedNodeId = `system:${system.key}`;
+      state.selectedNodeId = result.entered ? null : `system:${system.key}`;
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
       shouldAutoFit = clickCount(event) >= 2;
@@ -379,6 +389,7 @@ function drawCurrentLayout(options = {}) {
       document.getElementById("agentPrompt").textContent = `Comet ${comet.label} influences ${comet.influences.map(item => item.system).join(", ")}`;
     },
     onNodePointerDown: node => {
+      if (state.view === "solar" || state.view === "planet") return;
       state.selectedNodeId = node.id;
       showNodeSelection(node);
       emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
@@ -394,8 +405,9 @@ function drawCurrentLayout(options = {}) {
             forceEnter: clickCount(event) >= 2,
           });
           lastSystemTap = result.lastSystemTap;
-          state.selectedNodeId = node.id;
-          showNodeSelection(node);
+          state.selectedNodeId = result.entered ? null : node.id;
+          if (result.entered) showSystemSelection(system.key);
+          else showNodeSelection(node);
           emitEvent("system:selected", null, { system: system.key });
           shouldAutoFit = clickCount(event) >= 2;
           drawCurrentLayout({ preserveView: clickCount(event) < 2 });
@@ -412,12 +424,17 @@ function drawCurrentLayout(options = {}) {
             forceEnter: clickCount(event) >= 2,
           });
           lastPlanetTap = result.lastPlanetTap;
-          state.selectedNodeId = planetNode.id;
           showNodeSelection(planetNode);
           emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
-          shouldAutoFit = clickCount(event) >= 2;
-          drawCurrentLayout({ preserveView: clickCount(event) < 2 });
-          if (clickCount(event) < 2) renderer.focusOn(planetNode.x, planetNode.y, 1.06);
+          if (clickCount(event) < 2) {
+            state.selectedNodeId = planetNode.id;
+            renderer.draw(currentLayout, state, activeRendererHandlers());
+            renderer.focusOn(planetNode.x, planetNode.y, 1.06);
+          } else {
+            state.selectedNodeId = null;
+            shouldAutoFit = true;
+            drawCurrentLayout();
+          }
           return;
         }
       }
@@ -428,11 +445,11 @@ function drawCurrentLayout(options = {}) {
     },
     onNodePointerOver: node => {
       state.hoveredNodeId = node.id;
-      drawCurrentLayout({ preserveView: true });
+      renderer.draw(currentLayout, state, activeRendererHandlers());
     },
     onNodePointerOut: () => {
       state.hoveredNodeId = null;
-      drawCurrentLayout({ preserveView: true });
+      renderer.draw(currentLayout, state, activeRendererHandlers());
     },
     onNodeDrag: node => {
       state.selectedNodeId = node.id;
@@ -444,14 +461,127 @@ function drawCurrentLayout(options = {}) {
       showNodeSelection(node);
     },
   });
-  if (shouldAutoFit && !options.preserveView) {
-    renderer.fitToBounds(currentLayout.bounds);
+  if (pendingFitBounds) {
+    renderer.fitToBounds(pendingFitBounds);
+    pendingFitBounds = null;
     shouldAutoFit = false;
   }
   syncToolbarState();
   renderBreadcrumbs();
   renderMinimap(currentLayout);
   renderSelectionFromState();
+}
+
+function activeRendererHandlers() {
+  return {
+    onSystemClick: (system, event) => {
+      const result = selectGalaxySystem(state, system.key, {
+        lastSystemTap,
+        now: Date.now(),
+        forceEnter: clickCount(event) >= 2,
+      });
+      lastSystemTap = result.lastSystemTap;
+      state.selectedNodeId = result.entered ? null : `system:${system.key}`;
+      showSystemSelection(system.key);
+      emitEvent("system:selected", null, { system: system.key });
+      shouldAutoFit = clickCount(event) >= 2;
+      drawCurrentLayout({ preserveView: clickCount(event) < 2 });
+      if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+    },
+    onSystemHover: () => {},
+    onCometTap: comet => {
+      showCometSelection(comet);
+      document.getElementById("agentPrompt").textContent = `Comet ${comet.label} influences ${comet.influences.map(item => item.system).join(", ")}`;
+    },
+    onNodePointerDown: node => {
+      if (state.view === "solar" || state.view === "planet") return;
+      state.selectedNodeId = node.id;
+      showNodeSelection(node);
+      emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
+    },
+    onNodeTap: (node, event) => handleNodeTap(node, event),
+    onNodePointerOver: node => {
+      state.hoveredNodeId = node.id;
+      renderer.draw(currentLayout, state, activeRendererHandlers());
+    },
+    onNodePointerOut: () => {
+      state.hoveredNodeId = null;
+      renderer.draw(currentLayout, state, activeRendererHandlers());
+    },
+    onNodeDrag: node => {
+      state.selectedNodeId = node.id;
+      emitEvent("node:dragged", node, { system: node.memorySystem });
+    },
+    onNodeDragEnd: node => {
+      state.selectedNodeId = node.id;
+      emitEvent("node:drag-ended", node, { system: node.memorySystem });
+      showNodeSelection(node);
+    },
+  };
+}
+
+function handleNodeTap(node, event) {
+  if (state.view === "galaxy") {
+    const systemKey = node.systemKey || (node.memorySystem && node.memorySystem !== "router" ? node.memorySystem : null);
+    const system = systemKey ? currentLayout?.systems?.find(item => item.key === systemKey) : null;
+    if (system) {
+      const result = selectGalaxySystem(state, system.key, {
+        lastSystemTap,
+        now: Date.now(),
+        forceEnter: clickCount(event) >= 2,
+      });
+      lastSystemTap = result.lastSystemTap;
+      state.selectedNodeId = result.entered ? null : node.id;
+      if (result.entered) showSystemSelection(system.key);
+      else showNodeSelection(node);
+      emitEvent("system:selected", null, { system: system.key });
+      shouldAutoFit = clickCount(event) >= 2;
+      drawCurrentLayout({ preserveView: clickCount(event) < 2 });
+      if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+      return;
+    }
+  }
+  if (state.view === "solar") {
+    const planetNode = resolveSolarPlanetNode(currentLayout, node);
+    if (planetNode) {
+      const result = selectSolarPlanet(state, planetNode.id, {
+        lastPlanetTap,
+        now: Date.now(),
+        forceEnter: clickCount(event) >= 2,
+      });
+      lastPlanetTap = result.lastPlanetTap;
+      showNodeSelection(planetNode);
+      emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
+      if (clickCount(event) < 2) {
+        state.selectedNodeId = planetNode.id;
+        renderer.draw(currentLayout, state, activeRendererHandlers());
+        renderer.focusOn(planetNode.x, planetNode.y, 1.06);
+      } else {
+        state.selectedNodeId = null;
+        shouldAutoFit = true;
+        drawCurrentLayout();
+      }
+      return;
+    }
+  }
+  state.selectedNodeId = node.id;
+  showNodeSelection(node);
+  emitEvent("node:selected", node, { layer: node.raw?.galaxy_layer, system: node.memorySystem });
+  drawCurrentLayout({ preserveView: true });
+}
+
+function transformForBounds(bounds) {
+  if (!bounds || !app?.screen?.width || !app?.screen?.height) return null;
+  const width = Math.max(1, bounds.width || bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.height || bounds.maxY - bounds.minY);
+  const scale = Math.min(app.screen.width / (width + 120), app.screen.height / (height + 120), 1.8);
+  return {
+    scale,
+    pan: {
+      x: app.screen.width / 2 - ((bounds.minX + bounds.maxX) / 2) * scale,
+      y: app.screen.height / 2 - ((bounds.minY + bounds.maxY) / 2) * scale,
+    },
+  };
 }
 
 function buildActiveLayout() {
@@ -1144,7 +1274,7 @@ function handleCanvasDoubleClick(event) {
       forceEnter: true,
     });
     lastSystemTap = result.lastSystemTap;
-    state.selectedNodeId = `system:${system.key}`;
+    state.selectedNodeId = null;
     shouldAutoFit = true;
     drawCurrentLayout();
     return;
@@ -1162,8 +1292,8 @@ function handleCanvasDoubleClick(event) {
       forceEnter: true,
     });
     lastPlanetTap = result.lastPlanetTap;
-    state.selectedNodeId = planetNode.id;
     showNodeSelection(planetNode);
+    state.selectedNodeId = null;
     shouldAutoFit = true;
     drawCurrentLayout();
   }

@@ -105,6 +105,7 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
 
 export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
+  const scaleRatio = Math.max(0.58, Math.min(2.15, nodeScale / 0.48));
   const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
   const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], systemKey);
@@ -121,7 +122,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const planetNodes = [];
   const satelliteSystems = [];
   const orbits = [];
-  const planetTracks = splitTracks(planetSystems.map(system => system.anchor), 210, 92, nodeScale, 4);
+  const planetTracks = splitTracks(planetSystems.map(system => system.anchor), 210 * scaleRatio, 92 * scaleRatio, nodeScale, 4);
   let offset = 0;
   for (const [trackIndex, track] of planetTracks.entries()) {
     const trackSystems = planetSystems.slice(offset, offset + track.nodes.length);
@@ -157,7 +158,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
     const parent = placedPlanetById.get(system.anchor.id);
     if (!parent || system.children.length === 0) continue;
     const visibleChildren = system.children.slice(0, 3);
-    const childTracks = splitTracks(visibleChildren, 34, 24, nodeScale, 4);
+    const childTracks = splitTracks(visibleChildren, 34 * scaleRatio, 24 * scaleRatio, nodeScale, 4);
     const childOrbits = [];
     const childNodes = [];
     for (const [trackIndex, track] of childTracks.entries()) {
@@ -224,6 +225,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
 
 export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.5);
+  const scaleRatio = Math.max(0.58, Math.min(2.15, nodeScale / 0.48));
   const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
   const source = nodes.find(node => node.id === planetId) || nodes.find(node => node.memorySystem === systemKey) || syntheticNode(planetId || `planet:${systemKey}`, planetId || systemKey, systemKey, nodeScale);
@@ -246,10 +248,10 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
     }),
   ];
   const orbitGroups = [
-    ["direct-moon", direct, 120],
-    ["derived-moon", derived, 230],
-    ["evidence", evidence, 340],
-    ["external", external, 450],
+    ["direct-moon", direct, 120 * scaleRatio],
+    ["derived-moon", derived, 230 * scaleRatio],
+    ["evidence", evidence, 340 * scaleRatio],
+    ["external", external, 450 * scaleRatio],
   ];
   const orbits = [];
   for (const [kind, groupNodes, radius] of orbitGroups) {

@@ -17,7 +17,6 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
   let dragState = null;
   let pressState = null;
   let lastTap = { kind: null, key: null, time: 0 };
-  let lastAnimatedRedrawAt = 0;
   const nodeGraphicsById = new Map();
   const systemHitByKey = new Map();
   const dragThreshold = 5;
@@ -72,11 +71,23 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     clearLayer(nodeLayer);
     clearLayer(labelLayer);
     nodeGraphicsById.clear();
+    systemHitByKey.clear();
     drawOrbits(layout, state);
     drawLinks(layout, state);
     drawNodes(layout, state, handlers);
     drawComets(layout, state);
     drawLabels(layout, state);
+    applyTransform();
+  }
+
+  function setTransform(nextTransform = {}) {
+    if (Number.isFinite(nextTransform.scale)) scale = Math.max(0.25, Math.min(3.5, Number(nextTransform.scale)));
+    if (nextTransform.pan) {
+      pan = {
+        x: Number(nextTransform.pan.x || 0),
+        y: Number(nextTransform.pan.y || 0),
+      };
+    }
     applyTransform();
   }
 
@@ -348,11 +359,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     if (!currentLayout || dragState) return;
     const changed = advanceGalaxyAnimationNodes(currentLayout, deltaSeconds, nodeGraphicsById, currentState?.animationSpeed ?? 1);
     if (!changed || !currentState) return;
-    const now = Date.now();
-    if (now - lastAnimatedRedrawAt >= 90) {
-      lastAnimatedRedrawAt = now;
-      draw(currentLayout, currentState, currentHandlers);
-    }
+    updateSystemHitTargets(currentLayout);
   }
 
   return {
@@ -360,8 +367,19 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage }) {
     fitToBounds,
     focusOn,
     centerOn,
+    setTransform,
     getTransform: () => ({ scale, pan: { ...pan } }),
   };
+
+  function updateSystemHitTargets(layout) {
+    for (const system of layout.systems || []) {
+      const hit = systemHitByKey.get(system.key);
+      if (!hit?.clear) continue;
+      hit.clear();
+      hit.circle(system.x, system.y, Math.max(26, (system.radius || 60) * 0.72));
+      hit.fill({ color: 0xffffff, alpha: 0.001 });
+    }
+  }
 }
 
 export function advanceGalaxyAnimationNodes(layout, deltaSeconds, nodeGraphicsById = new Map(), speedMultiplier = 1) {

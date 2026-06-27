@@ -147,11 +147,12 @@ const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll
 const rendererContext = { exports: {} };
 vm.runInNewContext(
   `${rendererHelperSource}
+exports.createMemoryGalaxyRenderer = createMemoryGalaxyRenderer;
 exports.advanceGalaxyAnimationNodes = advanceGalaxyAnimationNodes;`,
   rendererContext,
   { filename: rendererHelperPath },
 );
-const { advanceGalaxyAnimationNodes } = rendererContext.exports;
+const { createMemoryGalaxyRenderer, advanceGalaxyAnimationNodes } = rendererContext.exports;
 
 const fixture = {
   metadata: {
@@ -690,6 +691,73 @@ const animatedSystemNode = {
   labelAnchor: { x: 40, y: 0, align: "left" },
 };
 assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
+
+{
+  const tickerCallbacks = [];
+  let removeChildrenCalls = 0;
+  let destroyedChildren = 0;
+  class FakeContainer {
+    constructor() {
+      this.children = [];
+      this.scale = { set: value => { this.scaleValue = value; } };
+      this.position = { set: (x, y) => { this.positionValue = { x, y }; } };
+    }
+    addChild(...children) {
+      this.children.push(...children);
+      return children.at(-1);
+    }
+    removeChildren() {
+      removeChildrenCalls += 1;
+      const children = this.children;
+      this.children = [];
+      return children;
+    }
+    on() {}
+  }
+  class FakeGraphics extends FakeContainer {
+    clear() { return this; }
+    circle() { return this; }
+    ellipse() { return this; }
+    fill() { return this; }
+    stroke() { return this; }
+    moveTo() { return this; }
+    lineTo() { return this; }
+    quadraticCurveTo() { return this; }
+    destroy() { destroyedChildren += 1; }
+  }
+  class FakeText extends FakeContainer {
+    constructor({ text }) {
+      super();
+      this.text = text;
+      this.width = String(text).length * 8;
+      this.height = 16;
+      this.anchor = { set: () => {} };
+    }
+    destroy() { destroyedChildren += 1; }
+  }
+  const stage = new FakeContainer();
+  const fakeApp = {
+    screen: { width: 800, height: 600 },
+    ticker: { add: callback => tickerCallbacks.push(callback) },
+  };
+  const fakeRenderer = createMemoryGalaxyRenderer({
+    PIXI: { Container: FakeContainer, Graphics: FakeGraphics, Text: FakeText },
+    app: fakeApp,
+    stage,
+  });
+  const perfLayout = JSON.parse(JSON.stringify(animatedLayout));
+  perfLayout.view = "galaxy";
+  perfLayout.nodes[1].label = "Animated planet";
+  perfLayout.nodes[1].renderRadius = 8;
+  fakeRenderer.draw(perfLayout, { selectedNodeId: null, hoveredNodeId: null, labelMode: "medium", animationSpeed: 1 }, {});
+  const afterInitialDrawRemoveCalls = removeChildrenCalls;
+  const afterInitialDestroyedChildren = destroyedChildren;
+  for (let frame = 0; frame < 12; frame += 1) {
+    tickerCallbacks.forEach(callback => callback({ deltaMS: 16.67 }));
+  }
+  assert.equal(removeChildrenCalls, afterInitialDrawRemoveCalls);
+  assert.equal(destroyedChildren, afterInitialDestroyedChildren);
+}
 
 const denseOverviewFixture = {
   metadata: { type_counts: {}, timeline: {} },

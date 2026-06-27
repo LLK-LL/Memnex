@@ -21,6 +21,8 @@ if str(ROOT) not in sys.path:
 
 from src.tools.memory_graph_viewer_export import ASSET_DIR, DEFAULT_DB, connect_readonly, load_graph
 
+PERFORMANCE_CACHE_TTL_SECONDS = 3.0
+
 
 def collect_system_performance() -> dict[str, Any]:
     """Collect a small, bounded snapshot of host performance."""
@@ -46,6 +48,24 @@ def collect_system_performance() -> dict[str, Any]:
         "memory": memory,
         "gpu": _collect_nvidia_gpu(),
     }
+
+
+def get_cached_system_performance(
+    cache: dict[str, Any],
+    *,
+    now: float | None = None,
+    ttl_seconds: float = PERFORMANCE_CACHE_TTL_SECONDS,
+) -> dict[str, Any]:
+    """Return a bounded performance snapshot without repeatedly spawning probes."""
+    timestamp = time.time() if now is None else now
+    cached_at = float(cache.get("timestamp", 0) or 0)
+    payload = cache.get("payload")
+    if payload is not None and timestamp - cached_at < ttl_seconds:
+        return payload
+    payload = collect_system_performance()
+    cache["timestamp"] = timestamp
+    cache["payload"] = payload
+    return payload
 
 
 def _collect_nvidia_gpu() -> dict[str, Any] | None:
@@ -82,7 +102,7 @@ class ThreadedMemoryGraphViewerServer(ThreadingMixIn, HTTPServer):
         super().__init__(server_address, request_handler_class)
         self.db_path = Path(db_path)
         self.asset_dir = Path(asset_dir)
-        self._perf_cache: tuple[float, dict[str, Any]] | None = None
+        self._perf_cache: dict[str, Any] = {}
         self._thread: threading.Thread | None = None
 
     def start_in_thread(self) -> threading.Thread:
@@ -127,13 +147,7 @@ class MemoryGraphViewerHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": str(exc)}, status=500)
 
     def _send_performance(self) -> None:
-        now = time.time()
-        cached = self.server._perf_cache
-        if cached and now - cached[0] < 1.0:
-            self._send_json(cached[1])
-            return
-        payload = collect_system_performance()
-        self.server._perf_cache = (now, payload)
+        payload = get_cached_system_performance(self.server._perf_cache)
         self._send_json(payload)
 
     def _send_json(self, payload: dict[str, Any], *, status: int = 200) -> None:
