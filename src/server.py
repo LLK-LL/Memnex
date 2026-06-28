@@ -40,7 +40,7 @@ except Exception as _v11_exc:  # pragma: no cover — never block startup
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+from mcp.types import CallToolResult, Tool, TextContent
 
 try:
     import chromadb
@@ -5083,7 +5083,10 @@ async def call_tool(name, args):
         return [TextContent(type="text", text=r)]
     except Exception as e:
         LOG(f"Error in {name}: {e}")
-        return [TextContent(type="text", text=f"Error: {e}")]
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Error: {e}")],
+            isError=True,
+        )
 
 
 # ──────────────────────────────────────────────

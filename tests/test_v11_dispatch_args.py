@@ -95,3 +95,23 @@ def test_v11_w3_dispatch_passes_call_args(monkeypatch):
         "entity": {"mention": "px"},
         "status": {"project": "Dev"},
     }
+
+
+def test_call_tool_marks_exceptions_as_mcp_errors(monkeypatch):
+    import server
+
+    class DummyStore:
+        def raw_append(self, *args, **kwargs):
+            return None
+
+    async def boom(name, args):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(server, "SID", "test-session", raising=False)
+    monkeypatch.setattr(server, "store", DummyStore(), raising=False)
+    monkeypatch.setattr(server, "_do", boom)
+
+    result = asyncio.run(server.call_tool("memory_save", {"content": "x"}))
+
+    assert result.isError is True
+    assert result.content[0].text == "Error: boom"
