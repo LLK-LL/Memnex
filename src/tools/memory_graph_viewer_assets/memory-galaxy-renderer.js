@@ -975,9 +975,9 @@ function createSystemLabel(PIXI, node, anchor) {
   const color = parseColor(node.color || "#7dd3fc");
   const lines = systemLabelLines(node);
   const prominentSolarLabel = Boolean(node.isPlanetSystemNode || node.isSolarCenterStar);
-  const titleFontSize = prominentSolarLabel ? 17 : node.orbitalRole === "galactic-core" ? 16 : 14;
-  const subtitleFontSize = prominentSolarLabel ? 11 : 11;
-  const countFontSize = prominentSolarLabel ? 10.5 : 11;
+  const titleFontSize = prominentSolarLabel ? 44 : node.orbitalRole === "galactic-core" ? 16 : 14;
+  const subtitleFontSize = prominentSolarLabel ? 24 : 11;
+  const countFontSize = prominentSolarLabel ? 21 : 11;
   const title = new PIXI.Text({
     text: lines[0],
     resolution: 2,
@@ -986,7 +986,7 @@ function createSystemLabel(PIXI, node, anchor) {
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
       fontSize: titleFontSize,
       fontWeight: "800",
-      stroke: { color: 0x020617, width: prominentSolarLabel ? 4 : 4, alpha: 0.94 },
+      stroke: { color: 0x020617, width: prominentSolarLabel ? 7 : 4, alpha: 0.94 },
     },
   });
   const subtitle = new PIXI.Text({
@@ -997,7 +997,7 @@ function createSystemLabel(PIXI, node, anchor) {
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
       fontSize: subtitleFontSize,
       fontWeight: "700",
-      stroke: { color: 0x020617, width: 3, alpha: 0.9 },
+      stroke: { color: 0x020617, width: prominentSolarLabel ? 5 : 3, alpha: 0.9 },
     },
   });
   const count = new PIXI.Text({
