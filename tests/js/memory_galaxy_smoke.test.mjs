@@ -745,7 +745,7 @@ for (const comet of cometOverlay.comets) {
     app: { screen: { width: 1200, height: 800 }, ticker: { add: callback => tickerCallbacks.push(callback) } },
     stage,
   });
-  renderer.draw(cometOverlay, { showComets: true, animationSpeed: 0 }, {});
+  renderer.draw(cometOverlay, { showComets: true, animationSpeed: 1 }, {});
   const root = stage.children[0];
   const cometLayer = root.children[2];
   const cometGraphics = cometLayer.children.filter(child => child.commands?.length);
@@ -753,6 +753,7 @@ for (const comet of cometOverlay.comets) {
   assert.ok(visibleComet);
   const circles = visibleComet.commands.filter(command => command.name === "circle");
   assert.ok(circles.length >= 3);
+  assert.ok(visibleComet.commands.some(command => command.name === "quadraticCurveTo"));
   const strokeColors = visibleComet.commands
     .filter(command => command.name === "stroke")
     .map(command => command.args[0]?.color)
@@ -763,6 +764,17 @@ for (const comet of cometOverlay.comets) {
     ?.commands.find(command => command.name === "circle");
   assert.ok(hitCircle);
   assert.ok(hitCircle.args[2] >= 32);
+  const initialCore = circles.find(command => command.args[2] === 34);
+  assert.ok(initialCore);
+  tickerCallbacks.forEach(callback => callback({ deltaMS: 240 }));
+  const updatedVisibleComet = cometLayer.children
+    .filter(child => child.commands?.length)
+    .find(child => child.commands.some(command => command.name === "stroke"));
+  const updatedCore = updatedVisibleComet?.commands
+    .filter(command => command.name === "circle")
+    .find(command => command.args[2] === 34);
+  assert.ok(updatedCore);
+  assert.notEqual(Math.round(updatedCore.args[0] * 1000), Math.round(initialCore.args[0] * 1000));
 }
 
 const galaxyClickState = createGalaxyViewState();
