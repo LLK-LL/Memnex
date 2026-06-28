@@ -14,6 +14,18 @@ def default_lock_path(memory_dir: Path) -> Path:
     return Path(memory_dir) / "memory-mcp.lock"
 
 
+def should_claim_single_instance_lock(value: str | None) -> bool:
+    """Return whether destructive stdio single-instance cleanup is enabled.
+
+    Stdio MCP clients own the server process they spawn. Killing older
+    ``server.py`` processes by default can close another active client's pipe
+    during initialize, so this legacy cleanup must be explicit opt-in.
+    """
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "kill-old", "force"}
+
+
 def claim_single_instance_lock(
     lock_path: Path,
     *,
@@ -61,6 +73,11 @@ def _coerce_pid(value: Any) -> int | None:
 
 def _pid_is_running(pid: int) -> bool:
     if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
         return False
 
 
@@ -139,11 +156,6 @@ def _older_matching_instance_owner_pids(script_path: Path, owner_pid: int) -> li
             continue
         owners.add(candidate_owner)
     return sorted(owners)
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
 
 
 def _terminate_process_tree(pid: int) -> None:

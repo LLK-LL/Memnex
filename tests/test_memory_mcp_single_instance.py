@@ -3,6 +3,15 @@ from pathlib import Path
 from src import memory_mcp_single_instance as single_instance
 
 
+def test_single_instance_lock_is_opt_in_for_stdio_mcp():
+    assert single_instance.should_claim_single_instance_lock(None) is False
+    assert single_instance.should_claim_single_instance_lock("") is False
+    assert single_instance.should_claim_single_instance_lock("0") is False
+    assert single_instance.should_claim_single_instance_lock("false") is False
+    assert single_instance.should_claim_single_instance_lock("1") is True
+    assert single_instance.should_claim_single_instance_lock("kill-old") is True
+
+
 def test_single_instance_lock_terminates_previous_live_owner(tmp_path, monkeypatch):
     lock_path = tmp_path / "memory-mcp.lock"
     lock_path.write_text('{"pid": 111, "script": "old"}', encoding="utf-8")

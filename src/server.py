@@ -39,10 +39,14 @@ except Exception as _v11_exc:  # pragma: no cover — never block startup
     sys.stderr.write(f"[memory-mcp] v11 mode resolver skipped: {_v11_exc}\n")
 
 from paths import memory_dir as _resolve_memory_dir  # noqa: E402
-from memory_mcp_single_instance import claim_single_instance_lock, default_lock_path  # noqa: E402
+from memory_mcp_single_instance import (  # noqa: E402
+    claim_single_instance_lock,
+    default_lock_path,
+    should_claim_single_instance_lock,
+)
 
 MEMORY_DIR = _resolve_memory_dir()
-if __name__ == "__main__" and os.environ.get("MEMORY_MCP_SINGLE_INSTANCE", "1").lower() not in {"0", "false", "no"}:
+if __name__ == "__main__" and should_claim_single_instance_lock(os.environ.get("MEMORY_MCP_SINGLE_INSTANCE")):
     claim_single_instance_lock(default_lock_path(MEMORY_DIR), script_path=Path(__file__))
 
 from mcp.server import Server
@@ -52,8 +56,9 @@ from mcp.types import CallToolResult, Tool, TextContent
 try:
     import chromadb
     HAS_CHROMA = True
-except ImportError:
+except Exception as _chroma_exc:
     HAS_CHROMA = False
+    sys.stderr.write(f"[memory-mcp] ChromaDB import skipped: {_chroma_exc}\n")
 
 try:
     from sentence_transformers import SentenceTransformer
