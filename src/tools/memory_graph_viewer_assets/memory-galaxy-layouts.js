@@ -312,6 +312,7 @@ export function buildCometOverlayLayout(galaxyLayout, comets = []) {
           x: system.x,
           y: system.y,
           radius: system.radius,
+          color: system.color || systemColor(item.system),
         };
       })
       .filter(Boolean);
@@ -342,7 +343,7 @@ export function buildCometOverlayLayout(galaxyLayout, comets = []) {
       label: comet.label || "Active Context",
       cometType: comet.comet_type || "active_task",
       head,
-      hitRadius: 24,
+      hitRadius: 34,
       tail,
       path: buildCometPath(head, trajectory, influences, index),
       trailHistory: tail.map(point => ({ x: point.x, y: point.y, alpha: point.alpha })),

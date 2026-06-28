@@ -245,15 +245,25 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
       let previous = comet.head;
       for (const point of trailPoints) {
         graphic.moveTo(previous.x, previous.y).lineTo(point.x, point.y);
-        graphic.stroke({ width: 5, color: 0xf97316, alpha: point.alpha || 0.3 });
+        graphic.stroke({ width: 14, color: 0x22d3ee, alpha: Math.max(0.03, Number(point.alpha || 0.3) * 0.16) });
+        graphic.moveTo(previous.x, previous.y).lineTo(point.x, point.y);
+        graphic.stroke({ width: 6, color: 0xf97316, alpha: Math.max(0.12, Number(point.alpha || 0.3) * 0.72) });
         previous = point;
       }
       for (const influence of comet.influences || []) {
+        const influenceColor = parseColor(influence.color || "#f97316");
+        const weight = Math.max(0, Math.min(1, Number(influence.weight || 0)));
         graphic.moveTo(comet.head.x, comet.head.y).lineTo(influence.x, influence.y);
-        graphic.stroke({ width: Math.max(1, influence.weight * 3), color: 0xf97316, alpha: Math.max(0.18, influence.weight * 0.46) });
+        graphic.stroke({ width: Math.max(1.5, weight * 5.4), color: influenceColor, alpha: Math.max(0.18, weight * 0.52) });
       }
-      graphic.circle(comet.head.x, comet.head.y, 12);
+      graphic.circle(comet.head.x, comet.head.y, 34);
+      graphic.fill({ color: 0xf97316, alpha: 0.08 });
+      graphic.circle(comet.head.x, comet.head.y, 22);
+      graphic.fill({ color: 0xfacc15, alpha: 0.16 });
+      graphic.circle(comet.head.x, comet.head.y, 13);
       graphic.fill({ color: 0xf97316, alpha: 0.95 });
+      graphic.circle(comet.head.x - 5, comet.head.y - 5, 4);
+      graphic.fill({ color: 0xfff7ed, alpha: 0.88 });
       cometLayer.addChild(graphic);
 
       const hit = new PIXI.Graphics();

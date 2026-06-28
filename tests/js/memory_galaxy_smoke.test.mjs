@@ -148,6 +148,9 @@ const viewerSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/
 assert.match(viewerSource, /enteredSolar/);
 assert.match(viewerSource, /enteredPlanet/);
 assert.doesNotMatch(viewerSource, /result\.entered(?!Solar|Planet)/);
+assert.match(viewerSource, /influence-stack/);
+assert.match(viewerSource, /influence-bar-fill/);
+assert.match(viewerSource, /Trajectory/);
 
 const rendererHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-renderer.js");
 const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll("export function ", "function ");
@@ -701,13 +704,65 @@ assert.equal(cometOverlay.comets.length, 2);
 assert.ok(cometOverlay.comets[0].influences.some(item => item.system === "skill" && item.weight > 0.9));
 assert.ok(cometOverlay.comets[0].tail.length >= 2);
 assert.ok(Array.isArray(cometOverlay.comets[0].trailHistory));
+assert.equal(cometOverlay.comets[0].influences.find(item => item.system === "skill")?.color, systemColor("skill"));
 for (const comet of cometOverlay.comets) {
   assert.ok(Number.isFinite(comet.head.x));
   assert.ok(Number.isFinite(comet.head.y));
-  assert.ok(comet.hitRadius >= 18);
+  assert.ok(comet.hitRadius >= 32);
   for (const influence of comet.influences) {
     assert.ok(Math.hypot(comet.head.x - influence.x, comet.head.y - influence.y) > influence.radius + comet.hitRadius);
   }
+}
+
+{
+  const tickerCallbacks = [];
+  class FakeContainer {
+    constructor() {
+      this.children = [];
+      this.scale = { set: value => { this.scaleValue = value; } };
+      this.position = { set: (x, y) => { this.positionValue = { x, y }; } };
+    }
+    addChild(...children) { this.children.push(...children); return children.at(-1); }
+    removeChildren() { const children = this.children; this.children = []; return children; }
+    on() {}
+  }
+  class FakeGraphics extends FakeContainer {
+    constructor() { super(); this.commands = []; }
+    clear() { this.commands = []; return this; }
+    circle(...args) { this.commands.push({ name: "circle", args }); return this; }
+    ellipse(...args) { this.commands.push({ name: "ellipse", args }); return this; }
+    fill(...args) { this.commands.push({ name: "fill", args }); return this; }
+    stroke(...args) { this.commands.push({ name: "stroke", args }); return this; }
+    moveTo(...args) { this.commands.push({ name: "moveTo", args }); return this; }
+    lineTo(...args) { this.commands.push({ name: "lineTo", args }); return this; }
+    quadraticCurveTo(...args) { this.commands.push({ name: "quadraticCurveTo", args }); return this; }
+    destroy() {}
+  }
+  class FakeText extends FakeContainer { destroy() {} }
+  const stage = new FakeContainer();
+  const renderer = createMemoryGalaxyRenderer({
+    PIXI: { Container: FakeContainer, Graphics: FakeGraphics, Text: FakeText },
+    app: { screen: { width: 1200, height: 800 }, ticker: { add: callback => tickerCallbacks.push(callback) } },
+    stage,
+  });
+  renderer.draw(cometOverlay, { showComets: true, animationSpeed: 0 }, {});
+  const root = stage.children[0];
+  const cometLayer = root.children[2];
+  const cometGraphics = cometLayer.children.filter(child => child.commands?.length);
+  const visibleComet = cometGraphics.find(child => child.commands.some(command => command.name === "stroke"));
+  assert.ok(visibleComet);
+  const circles = visibleComet.commands.filter(command => command.name === "circle");
+  assert.ok(circles.length >= 3);
+  const strokeColors = visibleComet.commands
+    .filter(command => command.name === "stroke")
+    .map(command => command.args[0]?.color)
+    .filter(color => Number.isFinite(color));
+  assert.ok(strokeColors.includes(0x22d3ee));
+  assert.ok(strokeColors.includes(0x34d399));
+  const hitCircle = cometGraphics.find(child => child.commands.some(command => command.name === "fill" && command.args[0]?.alpha === 0.001))
+    ?.commands.find(command => command.name === "circle");
+  assert.ok(hitCircle);
+  assert.ok(hitCircle.args[2] >= 32);
 }
 
 const galaxyClickState = createGalaxyViewState();

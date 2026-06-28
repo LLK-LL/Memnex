@@ -936,6 +936,21 @@ function showSystemSelection(systemKey) {
 }
 
 function showCometSelection(comet) {
+  const influences = (comet.influences || [])
+    .slice()
+    .sort((a, b) => Number(b.weight || 0) - Number(a.weight || 0));
+  const trajectory = (comet.trajectory || []).map(item => item.system).filter(Boolean);
+  const influenceRows = influences.map(item => {
+    const weight = Math.max(0, Math.min(1, Number(item.weight || 0)));
+    const color = item.color || viewerSystemColor(item.system);
+    return `
+      <div class="influence-row">
+        <span class="breakdown-dot" style="background:${escapeHtml(color)}"></span>
+        <span>${escapeHtml(systemLabel(item.system))}</span>
+        <div class="influence-bar"><span class="influence-bar-fill" style="--bar:${(weight * 100).toFixed(0)}%;background:${escapeHtml(color)}"></span></div>
+        <strong>${Math.round(weight * 100)}%</strong>
+      </div>`;
+  }).join("");
   document.getElementById("selectionCard").innerHTML = `
     <div class="selection-title-row">
       <div class="selection-title">
@@ -949,7 +964,15 @@ function showCometSelection(comet) {
     </div>
     <div class="meta-stack">
       <div>${escapeHtml(comet.cometType || "active_task")}</div>
-      <div>${escapeHtml(comet.influences.map(item => `${item.system} ${Math.round(item.weight * 100)}%`).join(", "))}</div>
+      <div>${escapeHtml(influences.map(item => `${item.system} ${Math.round(Number(item.weight || 0) * 100)}%`).join(", "))}</div>
+    </div>
+    <div class="influence-stack">
+      <div class="breakdown-head"><span>Influence Stack</span><span>${influences.length} systems</span></div>
+      ${influenceRows || '<div class="empty-state">No influenced systems are visible in this layout.</div>'}
+    </div>
+    <div class="comet-trajectory">
+      <div class="breakdown-head"><span>Trajectory</span></div>
+      <div>${escapeHtml(trajectory.length ? trajectory.map(systemLabel).join(" -> ") : "No trajectory path")}</div>
     </div>
   `;
   document.getElementById("relationsPanel").innerHTML = '<div class="empty-state">Comet overlays summarize active context rather than graph edges.</div>';

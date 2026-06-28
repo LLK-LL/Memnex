@@ -932,6 +932,40 @@ button:hover,
   background: var(--accent-blue);
 }
 
+.influence-stack,
+.comet-trajectory {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.influence-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 78px 38px;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-2);
+}
+
+.influence-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(111, 139, 180, 0.16);
+}
+
+.influence-bar-fill {
+  display: block;
+  width: var(--bar, 0%);
+  height: 100%;
+  box-shadow: 0 0 14px currentColor;
+}
+
+.comet-trajectory div:last-child {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
 .activity-list {
   display: grid;
   gap: 12px;
