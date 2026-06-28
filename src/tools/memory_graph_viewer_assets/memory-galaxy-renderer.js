@@ -26,6 +26,8 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   const satelliteOrbitGuidesByParent = new Map();
   const labelsByNodeId = new Map();
   const dragThreshold = 5;
+  const minScale = 0.08;
+  const maxScale = 3.5;
 
   stage.eventMode = "static";
   stage.hitArea = app.screen;
@@ -74,7 +76,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   stage.on("pointerupoutside", endDrag);
   stage.on("wheel", event => {
     event.preventDefault();
-    scale = Math.max(0.25, Math.min(3.5, scale * (event.deltaY > 0 ? 0.9 : 1.1)));
+    scale = Math.max(minScale, Math.min(maxScale, scale * (event.deltaY > 0 ? 0.9 : 1.1)));
     applyTransform();
   });
   app.ticker.add(ticker => animateScene(Number(ticker.deltaMS || 16.67) / 1000));
@@ -105,7 +107,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   }
 
   function setTransform(nextTransform = {}) {
-    if (Number.isFinite(nextTransform.scale)) scale = Math.max(0.25, Math.min(3.5, Number(nextTransform.scale)));
+    if (Number.isFinite(nextTransform.scale)) scale = Math.max(minScale, Math.min(maxScale, Number(nextTransform.scale)));
     if (nextTransform.pan) {
       pan = {
         x: Number(nextTransform.pan.x || 0),
@@ -128,7 +130,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   }
 
   function focusOn(x, y, zoomMultiplier = 1.15) {
-    scale = Math.max(0.25, Math.min(3.5, scale * zoomMultiplier));
+    scale = Math.max(minScale, Math.min(maxScale, scale * zoomMultiplier));
     pan = {
       x: app.screen.width / 2 - x * scale,
       y: app.screen.height / 2 - y * scale,

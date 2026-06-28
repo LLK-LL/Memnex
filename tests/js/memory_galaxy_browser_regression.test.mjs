@@ -204,12 +204,24 @@ try {
     const dbg = window.__memoryGalaxyDebug;
     const snap = () => {
       const layout = dbg.getLayout();
+      const transform = dbg.getTransform();
+      const canvas = document.querySelector("#galaxy2d canvas");
+      const canvasRect = canvas.getBoundingClientRect();
       const planet = layout.nodes.find(node => node.orbitalRole === "planet");
       const satellite = layout.nodes.find(node => node.orbitalRole === "satellite");
       const satelliteSystem = layout.satelliteSystems?.[0];
+      const fitNodes = layout.nodes.filter(node => node.orbitalRole === "planet" || node.orbitalRole === "satellite" || node.isPlanetSystemNode);
+      const outsideFitNodes = fitNodes.filter(node => {
+        const radius = Number(node.renderRadius || 0) * transform.scale;
+        const x = node.x * transform.scale + transform.pan.x;
+        const y = node.y * transform.scale + transform.pan.y;
+        return x - radius < 0 || y - radius < 0 || x + radius > canvasRect.width || y + radius > canvasRect.height;
+      });
       return {
         state: dbg.getState(),
         layoutView: layout?.view,
+        fitNodeCount: fitNodes.length,
+        outsideFitNodeCount: outsideFitNodes.length,
         orbits: (layout?.orbits || []).map(orbit => ({ kind: orbit.kind, aspect: Number(orbit.aspect || 1) })),
         planet: planet ? { x: planet.x, y: planet.y, id: planet.id } : null,
         satellite: satellite ? { x: satellite.x, y: satellite.y, parentNodeId: satellite.animation?.parentNodeId } : null,
@@ -226,6 +238,8 @@ try {
   assert.equal(solarSnapshot.first.state.selectedNodeId, null);
   assert.equal(solarSnapshot.first.state.animationSpeed > 0, true);
   assert.equal(solarSnapshot.first.layoutView, "solar");
+  assert.ok(solarSnapshot.first.fitNodeCount > 0);
+  assert.equal(solarSnapshot.first.outsideFitNodeCount, 0);
   assert.ok(solarSnapshot.first.orbits.every(orbit => orbit.aspect > 0 && orbit.aspect < 1));
   assert.ok(solarSnapshot.first.planet);
   assert.ok(solarSnapshot.first.satellite);

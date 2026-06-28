@@ -210,7 +210,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const visibleNodes = [...outputNodes, ...satelliteSystems.flatMap(system => system.nodes)];
   const visibleIds = new Set(visibleNodes.map(node => String(node.id)));
   const bounds = boundsForSolarSystem(visibleNodes, orbits, satelliteSystems);
-  bounds.fitPadding = 280;
+  bounds.fitPadding = 420;
   return {
     view: "solar",
     systemKey,
