@@ -182,27 +182,22 @@ try {
   assert.equal(Math.round(galaxyMotion.first.system.x * 1000) / 1000, Math.round(galaxyMotion.first.star.x * 1000) / 1000);
   assert.equal(Math.round(galaxyMotion.second.system.y * 1000) / 1000, Math.round(galaxyMotion.second.star.y * 1000) / 1000);
 
-  const afterMinimapGalaxySnapshot = await page.evaluate(() => {
+  await page.evaluate(() => {
     const dbg = window.__memoryGalaxyDebug;
     const layout = dbg.getLayout();
     const transform = dbg.getTransform();
-    const skillSystem = layout.systems.find(system => system.key === "skill") || layout.systems.find(system => system.key !== "router");
+    const system = layout.systems.find(item => item.key === "skill") || layout.systems.find(item => item.key !== "router");
     const canvas = document.querySelector("#galaxy2d canvas");
     const rect = canvas.getBoundingClientRect();
-    return {
-      skillSystem: { x: skillSystem.x, y: skillSystem.y },
-      transform,
-      canvasRect: { left: rect.left, top: rect.top },
-    };
+    const clickX = rect.left + system.x * transform.scale + transform.pan.x;
+    const clickY = rect.top + system.y * transform.scale + transform.pan.y;
+    canvas.dispatchEvent(new MouseEvent("dblclick", {
+      bubbles: true,
+      cancelable: true,
+      clientX: clickX,
+      clientY: clickY,
+    }));
   });
-  const clickX = afterMinimapGalaxySnapshot.canvasRect.left
-    + afterMinimapGalaxySnapshot.skillSystem.x * afterMinimapGalaxySnapshot.transform.scale
-    + afterMinimapGalaxySnapshot.transform.pan.x;
-  const clickY = afterMinimapGalaxySnapshot.canvasRect.top
-    + afterMinimapGalaxySnapshot.skillSystem.y * afterMinimapGalaxySnapshot.transform.scale
-    + afterMinimapGalaxySnapshot.transform.pan.y;
-
-  await page.mouse.click(clickX, clickY, { clickCount: 2, delay: 120 });
   await page.waitForTimeout(800);
 
   const solarSnapshot = await page.evaluate(async () => {
@@ -228,6 +223,8 @@ try {
   });
 
   assert.equal(solarSnapshot.first.state.view, "solar");
+  assert.equal(solarSnapshot.first.state.selectedNodeId, null);
+  assert.equal(solarSnapshot.first.state.animationSpeed > 0, true);
   assert.equal(solarSnapshot.first.layoutView, "solar");
   assert.ok(solarSnapshot.first.orbits.every(orbit => orbit.aspect > 0 && orbit.aspect < 1));
   assert.ok(solarSnapshot.first.planet);
@@ -322,6 +319,12 @@ try {
 
   await page.locator('.inspector-tabs button[data-tab="overview"]').click();
   assert.equal(await page.locator("#systemDetails[hidden]").count(), 0);
+
+  await page.evaluate(() => {
+    const speed = document.getElementById("animationSpeed");
+    speed.value = "0";
+    speed.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 
   const solarTransform = await page.evaluate(() => {
     const dbg = window.__memoryGalaxyDebug;

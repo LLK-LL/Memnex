@@ -382,8 +382,9 @@ function drawCurrentLayout(options = {}) {
         forceEnter: clickCount(event) >= 2,
       });
       lastSystemTap = result.lastSystemTap;
-      state.selectedNodeId = result.entered ? null : `system:${system.key}`;
-      pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+      state.selectedNodeId = result.enteredSolar ? null : `system:${system.key}`;
+      if (result.enteredSolar) resumeGalaxyMotionFromBlank(state);
+      else pauseGalaxyMotionForSelection(state, state.selectedNodeId);
       syncMotionControls();
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
@@ -413,10 +414,11 @@ function drawCurrentLayout(options = {}) {
             forceEnter: clickCount(event) >= 2,
           });
           lastSystemTap = result.lastSystemTap;
-          state.selectedNodeId = result.entered ? null : node.id;
-          pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+          state.selectedNodeId = result.enteredSolar ? null : node.id;
+          if (result.enteredSolar) resumeGalaxyMotionFromBlank(state);
+          else pauseGalaxyMotionForSelection(state, state.selectedNodeId);
           syncMotionControls();
-          if (result.entered) showSystemSelection(system.key);
+          if (result.enteredSolar) showSystemSelection(system.key);
           else showNodeSelection(node);
           emitEvent("system:selected", null, { system: system.key });
           shouldAutoFit = clickCount(event) >= 2;
@@ -436,7 +438,8 @@ function drawCurrentLayout(options = {}) {
           lastPlanetTap = result.lastPlanetTap;
           showNodeSelection(planetNode);
           emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
-          pauseGalaxyMotionForSelection(state, result.entered ? null : planetNode.id);
+          if (result.enteredPlanet) resumeGalaxyMotionFromBlank(state);
+          else pauseGalaxyMotionForSelection(state, planetNode.id);
           syncMotionControls();
           if (clickCount(event) < 2) {
             state.selectedNodeId = planetNode.id;
@@ -500,8 +503,9 @@ function activeRendererHandlers() {
         forceEnter: clickCount(event) >= 2,
       });
       lastSystemTap = result.lastSystemTap;
-      state.selectedNodeId = result.entered ? null : `system:${system.key}`;
-      pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+      state.selectedNodeId = result.enteredSolar ? null : `system:${system.key}`;
+      if (result.enteredSolar) resumeGalaxyMotionFromBlank(state);
+      else pauseGalaxyMotionForSelection(state, state.selectedNodeId);
       syncMotionControls();
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
@@ -557,10 +561,11 @@ function handleNodeTap(node, event) {
         forceEnter: clickCount(event) >= 2,
       });
       lastSystemTap = result.lastSystemTap;
-      state.selectedNodeId = result.entered ? null : node.id;
-      pauseGalaxyMotionForSelection(state, state.selectedNodeId);
+      state.selectedNodeId = result.enteredSolar ? null : node.id;
+      if (result.enteredSolar) resumeGalaxyMotionFromBlank(state);
+      else pauseGalaxyMotionForSelection(state, state.selectedNodeId);
       syncMotionControls();
-      if (result.entered) showSystemSelection(system.key);
+      if (result.enteredSolar) showSystemSelection(system.key);
       else showNodeSelection(node);
       emitEvent("system:selected", null, { system: system.key });
       shouldAutoFit = clickCount(event) >= 2;
@@ -580,7 +585,8 @@ function handleNodeTap(node, event) {
       lastPlanetTap = result.lastPlanetTap;
       showNodeSelection(planetNode);
       emitEvent("node:selected", planetNode, { layer: planetNode.raw?.galaxy_layer, system: planetNode.memorySystem });
-      pauseGalaxyMotionForSelection(state, result.entered ? null : planetNode.id);
+      if (result.enteredPlanet) resumeGalaxyMotionFromBlank(state);
+      else pauseGalaxyMotionForSelection(state, planetNode.id);
       syncMotionControls();
       if (clickCount(event) < 2) {
         state.selectedNodeId = planetNode.id;

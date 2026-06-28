@@ -144,6 +144,11 @@ exports.resumeGalaxyMotionFromBlank = resumeGalaxyMotionFromBlank;`,
 );
 const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank } = viewStateContext.exports;
 
+const viewerSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/viewer.js"), "utf8");
+assert.match(viewerSource, /enteredSolar/);
+assert.match(viewerSource, /enteredPlanet/);
+assert.doesNotMatch(viewerSource, /result\.entered(?!Solar|Planet)/);
+
 const rendererHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-renderer.js");
 const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll("export function ", "function ");
 const rendererContext = { exports: {} };
@@ -756,6 +761,21 @@ defaultResumeState.animationSpeed = 0;
 resumeGalaxyMotionFromBlank(defaultResumeState);
 assert.equal(defaultResumeState.animationSpeed, 1);
 assert.equal(defaultResumeState.motionEnabled, true);
+
+const solarResumeState = createGalaxyViewState();
+solarResumeState.view = "solar";
+solarResumeState.selectedSystem = "skill";
+solarResumeState.selectedNodeId = "planet-1";
+solarResumeState.selectedPlanet = "planet-1";
+solarResumeState.animationSpeed = 0;
+solarResumeState.motionResumeSpeed = 1.25;
+resumeGalaxyMotionFromBlank(solarResumeState);
+assert.equal(solarResumeState.view, "solar");
+assert.equal(solarResumeState.selectedSystem, "skill");
+assert.equal(solarResumeState.selectedPlanet, null);
+assert.equal(solarResumeState.selectedNodeId, null);
+assert.equal(solarResumeState.animationSpeed, 1.25);
+assert.equal(solarResumeState.motionEnabled, true);
 
 const solarClickState = createGalaxyViewState();
 solarClickState.view = "solar";

@@ -21,6 +21,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   let lastTap = { kind: null, key: null, time: 0 };
   const nodeGraphicsById = new Map();
   const systemHitByKey = new Map();
+  const solarPlanetHitById = new Map();
   const systemOrbitGuidesByKey = new Map();
   const satelliteOrbitGuidesByParent = new Map();
   const labelsByNodeId = new Map();
@@ -90,6 +91,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     clearLayer(labelLayer);
     nodeGraphicsById.clear();
     systemHitByKey.clear();
+    solarPlanetHitById.clear();
     systemOrbitGuidesByKey.clear();
     satelliteOrbitGuidesByParent.clear();
     labelsByNodeId.clear();
@@ -312,6 +314,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
           event.stopPropagation();
           handlers.onNodeTap?.(planet, { detail: pointerDetail(event) || 1 });
         });
+        solarPlanetHitById.set(planet.id, hit);
         nodeLayer.addChild(hit);
       }
     }
@@ -434,8 +437,22 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     }
   }
 
+  function updateSolarPlanetHitTargets(layout) {
+    if (layout?.view !== "solar") return;
+    for (const planet of layout.nodes || []) {
+      if (planet.orbitalRole !== "planet") continue;
+      const hit = solarPlanetHitById.get(planet.id);
+      if (!hit?.clear) continue;
+      const radius = Math.max(18, (planet.renderRadius || 0) + 12);
+      hit.clear();
+      hit.circle(planet.x, planet.y, radius);
+      hit.fill({ color: 0xffffff, alpha: 0.001 });
+    }
+  }
+
   function updateAnimatedSceneVisuals(layout, state) {
     updateSystemHitTargets(layout);
+    updateSolarPlanetHitTargets(layout);
     updateLinkGraphics(layout);
     for (const system of layout.systems || []) {
       const guide = systemOrbitGuidesByKey.get(system.key);

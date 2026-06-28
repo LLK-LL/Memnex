@@ -98,8 +98,12 @@ export function resumeGalaxyMotionFromBlank(state) {
   state.animationSpeed = resumeSpeed > 0 ? resumeSpeed : 1;
   state.motionEnabled = true;
   state.selectedNodeId = null;
-  state.selectedSystem = null;
-  state.selectedPlanet = null;
+  if (state.view === "galaxy") {
+    state.selectedSystem = null;
+    state.selectedPlanet = null;
+  } else if (state.view === "solar") {
+    state.selectedPlanet = null;
+  }
   state.hoveredNodeId = null;
   return state;
 }
