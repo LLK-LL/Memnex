@@ -34,7 +34,7 @@ def dashboard_server():
     root = Path(__file__).parent.parent
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
-    conn.executescript((root / "migrations" / "001_v5_schema.sql").read_text())
+    conn.executescript((root / "migrations" / "001_v5_schema.sql").read_text(encoding="utf-8"))
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS knowledge (
@@ -58,7 +58,7 @@ def dashboard_server():
     for m in ("002_multi_representation", "003_triple_extraction_queue",
               "004_deep_enrichment", "005_representations_queue",
               "006_filter_savings"):
-        conn.executescript((root / "migrations" / f"{m}.sql").read_text())
+        conn.executescript((root / "migrations" / f"{m}.sql").read_text(encoding="utf-8"))
 
     # Seed a filter saving row so savings endpoint has something to return
     conn.execute(
@@ -158,3 +158,57 @@ def test_live_graph_page_loads(dashboard_server):
     # Back button + filter slider present
     assert "btnBack" in body
     assert "minMentions" in body
+
+
+def test_api_stats_reuses_storage_size_cache(tmp_path, monkeypatch):
+    root = Path(__file__).parent.parent
+    sys.path.insert(0, str(root / "src"))
+    import dashboard
+
+    db_path = tmp_path / "memory.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.executescript(
+        """
+        CREATE TABLE knowledge (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT,
+            project TEXT,
+            status TEXT DEFAULT 'active',
+            last_confirmed TEXT,
+            recall_count INTEGER
+        );
+        CREATE TABLE sessions (id TEXT PRIMARY KEY);
+        """
+    )
+    conn.commit()
+    (tmp_path / "chroma").mkdir()
+    (tmp_path / "chroma" / "vector.bin").write_bytes(b"1234")
+
+    scan_count = 0
+    original_rglob = Path.rglob
+
+    def counting_rglob(self, pattern):
+        nonlocal scan_count
+        if self == tmp_path / "chroma":
+            scan_count += 1
+        return original_rglob(self, pattern)
+
+    monkeypatch.setattr(dashboard, "DB_PATH", db_path)
+    monkeypatch.setattr(dashboard, "MEMORY_DIR", tmp_path)
+    dashboard._STORAGE_SIZE_CACHE.clear()
+    monkeypatch.setattr(Path, "rglob", counting_rglob)
+
+    dashboard.api_stats(conn)
+    dashboard.api_stats(conn)
+
+    assert scan_count == 1
+
+
+def test_dashboard_graph_simulation_cancels_previous_animation():
+    source = (Path(__file__).parent.parent / "src" / "dashboard.py").read_text(encoding="utf-8")
+
+    assert "G.stopSimulation = function()" in source
+    assert "cancelAnimationFrame(G.simulationFrame)" in source
+    assert "G.simulationFrame = requestAnimationFrame(tick)" in source
+    assert "const quadTreeClusterThreshold = 120" in source
+    assert "ns.length > quadTreeClusterThreshold" in source

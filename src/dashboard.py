@@ -32,6 +32,8 @@ from paths import memory_dir
 DASHBOARD_PORT = int(os.environ.get("DASHBOARD_PORT", "37737"))
 MEMORY_DIR = memory_dir()
 DB_PATH = MEMORY_DIR / "memory.db"
+_STORAGE_SIZE_CACHE_TTL = 10.0
+_STORAGE_SIZE_CACHE: dict[str, tuple[float, float]] = {}
 
 
 def get_db() -> sqlite3.Connection | None:
@@ -61,6 +63,20 @@ def q1(db: sqlite3.Connection, sql: str, params: tuple = ()) -> dict | None:
         return dict(r) if r else None
     except Exception:
         return None
+
+
+def _cached_dir_size_mb(path: Path, *, recursive: bool) -> float:
+    if not path.exists():
+        return 0.0
+    key = f"{path}:{'r' if recursive else 'f'}"
+    now = time.monotonic()
+    cached = _STORAGE_SIZE_CACHE.get(key)
+    if cached and now - cached[0] < _STORAGE_SIZE_CACHE_TTL:
+        return cached[1]
+    files = path.rglob("*") if recursive else path.iterdir()
+    size_mb = sum(f.stat().st_size for f in files if f.is_file()) / 1048576
+    _STORAGE_SIZE_CACHE[key] = (now, size_mb)
+    return size_mb
 
 
 def api_stats(db: sqlite3.Connection) -> dict:
@@ -98,17 +114,9 @@ def api_stats(db: sqlite3.Connection) -> dict:
 
     db_mb = DB_PATH.stat().st_size / 1048576 if DB_PATH.exists() else 0
     chroma_dir = MEMORY_DIR / "chroma"
-    chroma_mb = 0.0
-    if chroma_dir.exists():
-        chroma_mb = sum(
-            f.stat().st_size for f in chroma_dir.rglob("*") if f.is_file()
-        ) / 1048576
+    chroma_mb = _cached_dir_size_mb(chroma_dir, recursive=True)
     raw_dir = MEMORY_DIR / "raw"
-    raw_mb = 0.0
-    if raw_dir.exists():
-        raw_mb = sum(
-            f.stat().st_size for f in raw_dir.iterdir() if f.is_file()
-        ) / 1048576
+    raw_mb = _cached_dir_size_mb(raw_dir, recursive=False)
 
     storage_mb = round(db_mb + chroma_mb + raw_mb, 2)
 
@@ -2707,7 +2715,15 @@ function initGraph() {
         return {fx, fy};
     }
 
+    G.stopSimulation = function() {
+        if (G.simulationFrame) {
+            cancelAnimationFrame(G.simulationFrame);
+            G.simulationFrame = null;
+        }
+    };
+
     G.runSimulation = function() {
+        G.stopSimulation();
         const nodes = G.nodes;
         const edges = G.edges;
         let iterations = 0;
@@ -2768,17 +2784,19 @@ function initGraph() {
             }
 
             if (iterations % 4 === 0) G.drawGraph();
-            requestAnimationFrame(tick);
+            G.simulationFrame = requestAnimationFrame(tick);
         }
         tick();
     };
 
     // Clustered simulation: keeps nodes near their cluster center
     G.runClusteredSimulation = function(groups, colorMap) {
+        G.stopSimulation();
         const nodes = G.nodes;
         const edges = G.edges;
         let iterations = 0;
         const maxIter = 250;
+        const quadTreeClusterThreshold = 120;
 
         // Compute cluster centers
         const centers = {};
@@ -2802,7 +2820,7 @@ function initGraph() {
             // Intra-cluster repulsion (only between nodes in same cluster)
             for (const key of Object.keys(groups)) {
                 const ns = groups[key];
-                if (ns.length > 500) {
+                if (ns.length > quadTreeClusterThreshold) {
                     // Use quad-tree for large clusters
                     const tree = buildQuadTree(ns);
                     for (const n of ns) {
@@ -2867,7 +2885,7 @@ function initGraph() {
             }
 
             if (iterations % 4 === 0) G.drawGraph();
-            requestAnimationFrame(tick);
+            G.simulationFrame = requestAnimationFrame(tick);
         }
         tick();
     };

@@ -156,6 +156,29 @@ assert.match(viewerSource, /function redrawCurrentLayoutState\(\)/);
 assert.match(viewerSource, /onBlankTap:[\s\S]*resumeGalaxyMotionFromBlank\(state\);[\s\S]*redrawCurrentLayoutState\(\);/);
 assert.match(viewerSource, /pauseGalaxyMotionForSelection\(state, state\.selectedNodeId\);[\s\S]*redrawCurrentLayoutState\(\);/);
 assert.doesNotMatch(viewerSource, /pauseGalaxyMotionForSelection\(state, state\.selectedNodeId\);[\s\S]{0,500}drawCurrentLayout\(\{ preserveView:/);
+assert.match(viewerSource, /renderer\.draw\(currentLayout, state, activeRendererHandlers\(\)\);/);
+assert.match(viewerSource, /function filteredNodeById\(id\)/);
+assert.match(viewerSource, /const BACKEND_PERF_SAMPLE_INTERVAL_MS = 3000;/);
+assert.match(viewerSource, /if \(document\.hidden\) return;/);
+assert.match(viewerSource, /now - perfState\.backendPerformanceAt < BACKEND_PERF_SAMPLE_INTERVAL_MS/);
+const handleNodeTapSource = viewerSource.slice(
+  viewerSource.indexOf("function handleNodeTap"),
+  viewerSource.indexOf("function flyIntoEnteredView"),
+);
+assert.match(handleNodeTapSource, /pauseGalaxyMotionForSelection\(state, node\.id\);[\s\S]*redrawCurrentLayoutState\(\);/);
+assert.doesNotMatch(handleNodeTapSource, /drawCurrentLayout\(\{ preserveView:/);
+const cometRelationsSource = viewerSource.slice(
+  viewerSource.indexOf("function renderRelationsForComet"),
+  viewerSource.indexOf("function updateInspectorTabs"),
+);
+assert.match(cometRelationsSource, /filteredNodeById\(link\.source\?\.id \|\| link\.source\)/);
+assert.doesNotMatch(cometRelationsSource, /filteredGraph\.nodes\.find/);
+const systemRelationsSource = viewerSource.slice(
+  viewerSource.indexOf("function groupSystemRelations"),
+  viewerSource.indexOf("function dedupeById"),
+);
+assert.match(systemRelationsSource, /filteredNodeById\(neighborId\)/);
+assert.doesNotMatch(systemRelationsSource, /filteredGraph\.nodes\.find/);
 
 const rendererHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-renderer.js");
 const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll("export function ", "function ");
