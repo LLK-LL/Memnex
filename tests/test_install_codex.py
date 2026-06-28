@@ -12,6 +12,8 @@ def test_install_codex_declares_cpu_friendly_llm_overrides():
     # Codex env overrides now live inside install.sh -> register_mcp_codex()
     script = SCRIPT.read_text(encoding="utf-8")
 
+    assert 'type = "stdio"' in script
+    assert 'TAM_MEMORY_DIR = "{memory_dir}"' in script
     assert 'MEMORY_TRIPLE_TIMEOUT_SEC = "120"' in script
     assert 'MEMORY_ENRICH_TIMEOUT_SEC = "90"' in script
     assert 'MEMORY_REPR_TIMEOUT_SEC = "120"' in script

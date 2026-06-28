@@ -929,7 +929,7 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: 0xf8fbff,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: node.orbitalRole === "galactic-core" ? 16 : prominentSolarLabel ? 36 : 14,
+      fontSize: node.orbitalRole === "galactic-core" ? 16 : prominentSolarLabel ? 44 : 14,
       fontWeight: "800",
       stroke: { color: 0x020617, width: prominentSolarLabel ? 7 : 4, alpha: 0.94 },
     },
@@ -940,7 +940,7 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: color,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: prominentSolarLabel ? 20 : 11,
+      fontSize: prominentSolarLabel ? 24 : 11,
       fontWeight: "700",
       stroke: { color: 0x020617, width: prominentSolarLabel ? 5 : 3, alpha: 0.9 },
     },
@@ -951,7 +951,7 @@ function createSystemLabel(PIXI, node, anchor) {
     style: {
       fill: 0xd8e4f7,
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
-      fontSize: prominentSolarLabel ? 18 : 11,
+      fontSize: prominentSolarLabel ? 21 : 11,
       fontWeight: "500",
       stroke: { color: 0x020617, width: 3, alpha: 0.82 },
     },
@@ -965,12 +965,13 @@ function createSystemLabel(PIXI, node, anchor) {
 function positionLabel(label, anchor) {
   const alignAnchor = anchor.align === "right" ? 1 : 0;
   if (label.kind === "system") {
-    const lineGap = label.texts.some(text => Number(text.style?.fontSize || 0) >= 20) ? 23 : 17;
-    const yStart = label.texts.length > 2 ? -lineGap * 1.14 : -lineGap * 0.82;
+    const maxFontSize = Math.max(...label.texts.map(text => Number(text.style?.fontSize || 0)));
+    const lineGap = maxFontSize >= 40 ? 42 : maxFontSize >= 20 ? 26 : 17;
+    const centerOffset = (label.texts.length - 1) / 2;
     label.texts.forEach((text, index) => {
-      text.anchor?.set?.(alignAnchor, 0);
+      text.anchor?.set?.(alignAnchor, 0.5);
       text.x = anchor.x;
-      text.y = anchor.y + yStart + index * lineGap;
+      text.y = anchor.y + (index - centerOffset) * lineGap;
     });
     label.bounds = groupLabelBounds(label.texts, anchor.align);
     return;
@@ -1006,9 +1007,9 @@ function dynamicLabelAnchor(node) {
   const align = Math.cos(angle) < 0 ? "right" : "left";
   if (node.isPlanetSystemNode || node.isSolarCenterStar) {
     const offset = node.isSolarCenterStar
-      ? Math.min(190, Math.max(120, Number(node.renderRadius || 24) + 56))
-      : Math.min(92, Math.max(58, Number(node.renderRadius || 12) + 30));
-    const elbow = node.isSolarCenterStar ? 76 : 46;
+      ? Math.min(240, Math.max(160, Number(node.renderRadius || 24) + 86))
+      : Math.min(132, Math.max(82, Number(node.renderRadius || 12) + 48));
+    const elbow = node.isSolarCenterStar ? 100 : 68;
     const sign = align === "right" ? -1 : 1;
     return {
       x: node.x + Math.cos(angle) * offset + sign * elbow,

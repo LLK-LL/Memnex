@@ -743,6 +743,7 @@ memory_dir = toml_escape(os.environ['MEMORY_DIR'])
 toml_block = f'''
 # --- total-agent-memory MCP Server ---
 [mcp_servers.memory]
+type = "stdio"
 command = "{py_path}"
 args = ["{srv_path}"]
 required = true

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "total-agent-memory": {
+      "type": "http",
+      "url": "http://127.0.0.1:3747/mcp"
+    }
+  }
+}

@@ -64,6 +64,16 @@ def test_load_custom_vocabulary_parses_aliases(custom_vocab):
     assert vocab.by_form["optimization"] == "performance"
 
 
+def test_load_vocabulary_reads_utf8_explicitly(tmp_path, monkeypatch):
+    path = tmp_path / "topics.txt"
+    path.write_bytes("mcp, 模型上下文协议\n".encode("utf-8"))
+    monkeypatch.setenv("MEMORY_TAG_VOCAB_PATH", str(path))
+
+    vocab = ct.load_vocabulary()
+
+    assert vocab.by_form["模型上下文协议"] == "mcp"
+
+
 def test_load_rejects_duplicate_canonicals(tmp_path, monkeypatch):
     path = tmp_path / "dup.txt"
     path.write_text("database\ndatabase\n")

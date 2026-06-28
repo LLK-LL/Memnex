@@ -159,6 +159,7 @@ def test_ide_codex_writes_codex_toml_with_env_overrides(sandbox_home: Path):
     content = cfg.read_text()
     assert "[mcp_servers.memory]" in content
     assert "[mcp_servers.memory.env]" in content
+    assert 'type = "stdio"' in content
     # PR #5 env overrides must be present
     assert f'TAM_MEMORY_DIR = "{sandbox_home / ".claude-memory"}"' in content
     assert f'CLAUDE_MEMORY_DIR = "{sandbox_home / ".claude-memory"}"' in content

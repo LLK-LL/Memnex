@@ -108,6 +108,8 @@ def test_codex_register_uses_toml_fence(install_text: str):
     """Codex branch must use the same fence markers as install.sh."""
     assert "# --- Claude Total Memory MCP Server ---" in install_text
     assert "# --- End Claude Total Memory ---" in install_text
+    assert 'type = "stdio"' in install_text
+    assert 'TAM_MEMORY_DIR = "$memEsc"' in install_text
     # v7.1 env overrides
     assert 'MEMORY_TRIPLE_TIMEOUT_SEC' in install_text
     assert 'MEMORY_ENRICH_TIMEOUT_SEC' in install_text

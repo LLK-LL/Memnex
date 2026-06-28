@@ -407,6 +407,7 @@ function Register-Mcp-Codex {
     $tomlBlock = @"
 # --- Claude Total Memory MCP Server ---
 [mcp_servers.memory]
+type = "stdio"
 command = "$pyEsc"
 args = ["$srvEsc"]
 required = true
@@ -415,6 +416,7 @@ tool_timeout_sec = 120.0
 
 [mcp_servers.memory.env]
 CLAUDE_MEMORY_DIR = "$memEsc"
+TAM_MEMORY_DIR = "$memEsc"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 MEMORY_TRIPLE_TIMEOUT_SEC = "120"
 MEMORY_ENRICH_TIMEOUT_SEC = "90"

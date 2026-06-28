@@ -126,6 +126,7 @@ memory_dir = toml_escape(os.environ['_CTM_MEM'])
 toml_block = f'''
 # --- Claude Total Memory MCP Server ---
 [mcp_servers.memory]
+type = "stdio"
 command = "{py_path}"
 args = ["{srv_path}"]
 required = true
@@ -134,6 +135,7 @@ tool_timeout_sec = 120.0
 
 [mcp_servers.memory.env]
 CLAUDE_MEMORY_DIR = "{memory_dir}"
+TAM_MEMORY_DIR = "{memory_dir}"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 # --- End Claude Total Memory ---
 '''
