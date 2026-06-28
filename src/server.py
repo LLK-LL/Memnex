@@ -38,6 +38,13 @@ try:
 except Exception as _v11_exc:  # pragma: no cover — never block startup
     sys.stderr.write(f"[memory-mcp] v11 mode resolver skipped: {_v11_exc}\n")
 
+from paths import memory_dir as _resolve_memory_dir  # noqa: E402
+from memory_mcp_single_instance import claim_single_instance_lock, default_lock_path  # noqa: E402
+
+MEMORY_DIR = _resolve_memory_dir()
+if __name__ == "__main__" and os.environ.get("MEMORY_MCP_SINGLE_INSTANCE", "1").lower() not in {"0", "false", "no"}:
+    claim_single_instance_lock(default_lock_path(MEMORY_DIR), script_path=Path(__file__))
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, Tool, TextContent
@@ -109,8 +116,6 @@ try:
 except ImportError:
     HAS_CACHE = False
 
-from paths import memory_dir as _resolve_memory_dir  # noqa: E402
-MEMORY_DIR = _resolve_memory_dir()
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 FASTEMBED_MODEL = os.environ.get("FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
