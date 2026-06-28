@@ -18,6 +18,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   let dragState = null;
   let pressState = null;
   let blankPressState = null;
+  let cameraTransition = null;
   let lastTap = { kind: null, key: null, time: 0 };
   const nodeGraphicsById = new Map();
   const systemHitByKey = new Map();
@@ -47,6 +48,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   });
   stage.on("pointermove", event => {
     if (panState) {
+      stopCameraTransition();
       pan = {
         x: panState.origin.x + (event.global.x - panState.start.x),
         y: panState.origin.y + (event.global.y - panState.start.y),
@@ -76,6 +78,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   stage.on("pointerupoutside", endDrag);
   stage.on("wheel", event => {
     event.preventDefault();
+    stopCameraTransition();
     scale = Math.max(minScale, Math.min(maxScale, scale * (event.deltaY > 0 ? 0.9 : 1.1)));
     applyTransform();
   });
@@ -107,6 +110,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   }
 
   function setTransform(nextTransform = {}) {
+    stopCameraTransition();
     if (Number.isFinite(nextTransform.scale)) scale = Math.max(minScale, Math.min(maxScale, Number(nextTransform.scale)));
     if (nextTransform.pan) {
       pan = {
@@ -119,31 +123,162 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
 
   function fitToBounds(bounds) {
     if (!bounds) return;
-    const width = Math.max(1, bounds.width || bounds.maxX - bounds.minX);
-    const height = Math.max(1, bounds.height || bounds.maxY - bounds.minY);
-    scale = Math.min(app.screen.width / (width + 120), app.screen.height / (height + 120), 1.8);
-    pan = {
-      x: app.screen.width / 2 - ((bounds.minX + bounds.maxX) / 2) * scale,
-      y: app.screen.height / 2 - ((bounds.minY + bounds.maxY) / 2) * scale,
-    };
-    applyTransform();
+    setTransform(transformForBounds(bounds));
   }
 
-  function focusOn(x, y, zoomMultiplier = 1.15) {
-    scale = Math.max(minScale, Math.min(maxScale, scale * zoomMultiplier));
-    pan = {
-      x: app.screen.width / 2 - x * scale,
-      y: app.screen.height / 2 - y * scale,
-    };
-    applyTransform();
+  function focusOn(x, y, zoomMultiplier = 1.15, options = {}) {
+    const targetScale = Math.max(minScale, Math.min(maxScale, scale * zoomMultiplier));
+    return animateToTransform({
+      scale: targetScale,
+      pan: {
+        x: app.screen.width / 2 - x * targetScale,
+        y: app.screen.height / 2 - y * targetScale,
+      },
+    }, options);
   }
 
   function centerOn(x, y) {
+    stopCameraTransition();
     pan = {
       x: app.screen.width / 2 - x * scale,
       y: app.screen.height / 2 - y * scale,
     };
     applyTransform();
+  }
+
+  function flyToBounds(bounds, options = {}) {
+    if (!bounds) return false;
+    return animateToTransform(transformForBounds(bounds), options);
+  }
+
+  function transformForBounds(bounds) {
+    const width = Math.max(1, bounds.width || bounds.maxX - bounds.minX);
+    const height = Math.max(1, bounds.height || bounds.maxY - bounds.minY);
+    const padding = Number(bounds.fitPadding ?? 120);
+    const nextScale = Math.min(app.screen.width / (width + padding), app.screen.height / (height + padding), 1.8);
+    const safeScale = Math.max(minScale, Math.min(maxScale, nextScale));
+    return {
+      scale: safeScale,
+      pan: {
+        x: app.screen.width / 2 - ((bounds.minX + bounds.maxX) / 2) * safeScale,
+        y: app.screen.height / 2 - ((bounds.minY + bounds.maxY) / 2) * safeScale,
+      },
+    };
+  }
+
+  function animateToTransform(nextTransform = {}, options = {}) {
+    const toScale = Math.max(minScale, Math.min(maxScale, Number(nextTransform.scale || scale)));
+    const toPan = {
+      x: Number(nextTransform.pan?.x ?? pan.x),
+      y: Number(nextTransform.pan?.y ?? pan.y),
+    };
+    const fromScale = scale;
+    const fromPan = { ...pan };
+    const distance = Math.hypot(toPan.x - fromPan.x, toPan.y - fromPan.y);
+    const scaleTravel = Math.abs(Math.log(Math.max(0.001, toScale) / Math.max(0.001, fromScale)));
+    const reducedMotion = prefersReducedMotion();
+    const duration = Number(options.durationMs ?? (reducedMotion ? 160 : Math.max(520, Math.min(1200, 480 + distance * 0.18 + scaleTravel * 180))));
+    if (duration <= 0 || options.immediate) {
+      scale = toScale;
+      pan = toPan;
+      applyTransform();
+      options.onRest?.();
+      return false;
+    }
+    const launchScale = Math.max(minScale, Math.min(maxScale, Math.min(fromScale * 0.97, toScale * 0.96)));
+    const dx = toPan.x - fromPan.x;
+    const dy = toPan.y - fromPan.y;
+    const drift = Math.min(120, Math.max(18, distance * 0.08));
+    const controlPan = {
+      x: (fromPan.x + toPan.x) / 2 + (dy === 0 && dx === 0 ? drift : -dy / Math.max(1, distance) * drift),
+      y: (fromPan.y + toPan.y) / 2 + (dy === 0 && dx === 0 ? -drift : dx / Math.max(1, distance) * drift),
+    };
+    cameraTransition = {
+      startedAt: nowMs(),
+      duration,
+      fromScale,
+      launchScale,
+      toScale,
+      fromPan,
+      controlPan,
+      toPan,
+      onRest: options.onRest,
+    };
+    return true;
+  }
+
+  function updateCameraTransition(now = nowMs()) {
+    if (!cameraTransition) return false;
+    const elapsed = Math.max(0, now - cameraTransition.startedAt);
+    const t = Math.min(1, elapsed / cameraTransition.duration);
+    const eased = smootherstep(t);
+    pan = quadraticPoint(cameraTransition.fromPan, cameraTransition.controlPan, cameraTransition.toPan, eased);
+    scale = cinematicScale(cameraTransition, t);
+    applyTransform();
+    if (t < 1) return true;
+    const onRest = cameraTransition.onRest;
+    cameraTransition = null;
+    onRest?.();
+    return true;
+  }
+
+  function stopCameraTransition() {
+    cameraTransition = null;
+  }
+
+  function isCameraTransitionActive() {
+    return Boolean(cameraTransition);
+  }
+
+  function advanceCameraTransitionForTest(deltaMs) {
+    if (!cameraTransition) return false;
+    updateCameraTransition(cameraTransition.startedAt + Number(deltaMs || 0));
+    return Boolean(cameraTransition);
+  }
+
+  function quadraticPoint(start, control, end, t) {
+    const inverse = 1 - t;
+    return {
+      x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+      y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y,
+    };
+  }
+
+  function smoothTrailControl(head, previous, point) {
+    const bend = Math.min(48, Math.max(12, Math.hypot(point.x - previous.x, point.y - previous.y) * 0.28));
+    const dx = point.x - head.x;
+    const dy = point.y - head.y;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    return {
+      x: (previous.x + point.x) / 2 - (dy / length) * bend,
+      y: (previous.y + point.y) / 2 + (dx / length) * bend,
+    };
+  }
+
+  function cinematicScale(transition, t) {
+    if (t < 0.18) {
+      return lerp(transition.fromScale, transition.launchScale, smootherstep(t / 0.18));
+    }
+    return lerp(transition.launchScale, transition.toScale, smootherstep((t - 0.18) / 0.82));
+  }
+
+  function lerp(a, b, t) {
+    return a + (b - a) * Math.max(0, Math.min(1, t));
+  }
+
+  function smootherstep(t) {
+    const value = Math.max(0, Math.min(1, t));
+    return value * value * value * (value * (value * 6 - 15) + 10);
+  }
+
+  function prefersReducedMotion() {
+    return typeof window !== "undefined"
+      && window.matchMedia
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function nowMs() {
+    return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now();
   }
 
   function drawOrbits(layout, state) {
@@ -215,6 +350,10 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     const nodeById = new Map((layout.nodes || []).map(node => [node.id, node]));
     const selectedNode = state.selectedNodeId ? nodeById.get(String(state.selectedNodeId)) : null;
     const selectedSystem = selectedNode?.id?.startsWith("system:") ? selectedNode.memorySystem : null;
+    const selectedComet = state.selectedCometId
+      ? (layout.comets || []).find(comet => comet.id === state.selectedCometId)
+      : null;
+    const selectedCometSystems = new Set((selectedComet?.influences || []).map(influence => influence.system).filter(Boolean));
     const relationMode = String(state.relationshipMode || "all");
     for (const link of layout.links || []) {
       const source = nodeById.get(String(link.source?.id || link.source));
@@ -222,17 +361,21 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
       if (!source || !target) continue;
       const selected = state.selectedNodeId && (source.id === state.selectedNodeId || target.id === state.selectedNodeId);
       const selectedBySystem = selectedSystem && (source.memorySystem === selectedSystem || target.memorySystem === selectedSystem);
-      if (!selected && !selectedBySystem) continue;
-      if (relationMode === "direct" && !selected) continue;
-      if (relationMode === "inbound" && String(link.target?.id || link.target) !== state.selectedNodeId) continue;
-      if (relationMode === "outbound" && String(link.source?.id || link.source) !== state.selectedNodeId) continue;
+      const selectedByComet = selectedCometSystems.size > 0
+        && (selectedCometSystems.has(source.memorySystem) || selectedCometSystems.has(target.memorySystem));
+      if (!selected && !selectedBySystem && !selectedByComet) continue;
+      if (selectedCometSystems.size === 0) {
+        if (relationMode === "direct" && !selected) continue;
+        if (relationMode === "inbound" && String(link.target?.id || link.target) !== state.selectedNodeId) continue;
+        if (relationMode === "outbound" && String(link.source?.id || link.source) !== state.selectedNodeId) continue;
+      }
       const line = new PIXI.Graphics();
       line.memoryGalaxyLink = {
         sourceId: String(link.source?.id || link.source),
         targetId: String(link.target?.id || link.target),
-        selected,
+        selected: selected || selectedByComet,
       };
-      drawNodeLinkLine(line, source, target, selected);
+      drawNodeLinkLine(line, source, target, selected || selectedByComet);
       linkLayer.addChild(line);
     }
   }
@@ -242,7 +385,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     for (const comet of layout.comets || []) {
       const graphic = new PIXI.Graphics();
       graphic.memoryGalaxyCometId = comet.id;
-      drawCometVisual(graphic, comet);
+      drawCometVisual(graphic, comet, state, layout);
       cometLayer.addChild(graphic);
 
       const hit = new PIXI.Graphics();
@@ -265,23 +408,37 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     }
   }
 
-  function drawCometVisual(graphic, comet) {
+  function drawCometVisual(graphic, comet, state = {}, layout = {}) {
+    syncCometInfluenceAnchors(comet, layout);
     const trailPoints = (comet.trailHistory || comet.tail || []).filter(point => Number(point.alpha || 0) > 0.02);
-    let previous = comet.head;
-    for (const point of trailPoints) {
-      const control = smoothTrailControl(comet.head, previous, point);
-      graphic.moveTo(previous.x, previous.y).quadraticCurveTo(control.x, control.y, point.x, point.y);
-      graphic.stroke({ width: 14, color: 0x22d3ee, alpha: Math.max(0.03, Number(point.alpha || 0.3) * 0.16) });
-      graphic.moveTo(previous.x, previous.y).quadraticCurveTo(control.x, control.y, point.x, point.y);
-      graphic.stroke({ width: 6, color: 0xf97316, alpha: Math.max(0.12, Number(point.alpha || 0.3) * 0.72) });
-      previous = point;
+    const selected = state.selectedCometId === comet.id;
+    const segments = buildCometTrailSegments(comet, trailPoints.length ? trailPoints : comet.path || []);
+    const routePreview = buildCometTrailSegments(comet, comet.path || []);
+    for (const segment of routePreview) {
+      graphic.moveTo(segment.from.x, segment.from.y).lineTo(segment.to.x, segment.to.y);
+      graphic.stroke({ width: selected ? 5 : 4, color: 0x7dd3fc, alpha: selected ? 0.22 : 0.12 });
     }
-    for (const influence of comet.influences || []) {
+    for (const segment of segments) {
+      const glowAlpha = Math.max(0.03, Number(segment.alpha || 0.3) * (selected ? 0.28 : 0.16));
+      const coreAlpha = Math.max(0.12, Number(segment.alpha || 0.3) * (selected ? 0.95 : 0.72));
+      graphic.moveTo(segment.from.x, segment.from.y).lineTo(segment.to.x, segment.to.y);
+      graphic.stroke({ width: selected ? 18 : 14, color: 0x22d3ee, alpha: glowAlpha });
+      graphic.moveTo(segment.from.x, segment.from.y).lineTo(segment.to.x, segment.to.y);
+      graphic.stroke({ width: selected ? 8 : 6, color: 0xf97316, alpha: coreAlpha });
+    }
+
+    if (selected) {
+      for (const influence of comet.influences || []) {
       const influenceColor = parseColor(influence.color || "#f97316");
       const weight = Math.max(0, Math.min(1, Number(influence.weight || 0)));
-      graphic.moveTo(comet.head.x, comet.head.y).lineTo(influence.x, influence.y);
-      graphic.stroke({ width: Math.max(1.5, weight * 5.4), color: influenceColor, alpha: Math.max(0.18, weight * 0.52) });
+        const anchor = resolveCometInfluenceAnchor(influence, layout);
+        graphic.circle(anchor.x, anchor.y, Math.max(18, weight * 22));
+        graphic.stroke({ width: 2.4, color: influenceColor, alpha: Math.max(0.18, weight * 0.45) });
+        graphic.circle(anchor.x, anchor.y, Math.max(28, weight * 34));
+        graphic.stroke({ width: 1.2, color: influenceColor, alpha: Math.max(0.08, weight * 0.22) });
+      }
     }
+
     graphic.circle(comet.head.x, comet.head.y, 34);
     graphic.fill({ color: 0xf97316, alpha: 0.08 });
     graphic.circle(comet.head.x, comet.head.y, 22);
@@ -290,6 +447,11 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     graphic.fill({ color: 0xf97316, alpha: 0.95 });
     graphic.circle(comet.head.x - 5, comet.head.y - 5, 4);
     graphic.fill({ color: 0xfff7ed, alpha: 0.88 });
+  }
+
+  function resolveCometInfluenceAnchor(influence, layout) {
+    const system = (layout.systems || []).find(item => item.key === influence.system);
+    return system ? { x: system.x, y: system.y } : { x: influence.x, y: influence.y };
   }
 
   function drawCometHit(hit, comet) {
@@ -363,11 +525,13 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     const placed = [];
     for (const node of layout.nodes || []) {
       if (!shouldLabel(node, state)) continue;
-      const anchor = dynamicLabelAnchor(node);
+      const anchor = dynamicLabelAnchor(node, scale);
       const systemLike = isSystemLikeNode(node);
       const label = systemLike
         ? createSystemLabel(PIXI, node, anchor)
         : createNodeLabel(PIXI, node, state, anchor);
+      applyResponsiveLabelScale(label, scale);
+      positionLabel(label, anchor);
       const bounds = label.bounds;
       if (!isPinned(node, state) && placed.some(item => overlaps(item, bounds))) continue;
       placed.push(bounds);
@@ -378,7 +542,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
         labelLayer.addChild(leader);
       }
       for (const text of label.texts) labelLayer.addChild(text);
-      labelsByNodeId.set(node.id, { ...label, leader });
+      labelsByNodeId.set(node.id, { ...label, leader, node });
     }
   }
 
@@ -431,9 +595,11 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   function applyTransform() {
     root.scale.set(scale);
     root.position.set(pan.x, pan.y);
+    refreshResponsiveLabels();
   }
 
   function animateScene(deltaSeconds) {
+    updateCameraTransition();
     if (!currentLayout || dragState) return;
     const changed = advanceGalaxyAnimationNodes(currentLayout, deltaSeconds, nodeGraphicsById, currentState?.animationSpeed ?? 1);
     if (!changed || !currentState) return;
@@ -444,10 +610,13 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   return {
     draw,
     fitToBounds,
+    flyToBounds,
     focusOn,
     centerOn,
     setTransform,
     getTransform: () => ({ scale, pan: { ...pan } }),
+    isCameraTransitionActive,
+    advanceCameraTransitionForTest,
   };
 
   function updateSystemHitTargets(layout) {
@@ -475,7 +644,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
 
   function updateAnimatedSceneVisuals(layout, state) {
     if (state?.showComets !== false && (layout.comets || []).length) {
-      updateCometGraphics(layout);
+      updateCometGraphics(layout, state);
     }
     updateSystemHitTargets(layout);
     updateSolarPlanetHitTargets(layout);
@@ -491,7 +660,8 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     for (const node of layout.nodes || []) {
       const label = labelsByNodeId.get(node.id);
       if (!label) continue;
-      const anchor = dynamicLabelAnchor(node);
+      applyResponsiveLabelScale(label, scale);
+      const anchor = dynamicLabelAnchor(node, scale);
       positionLabel(label, anchor);
       if (label.leader) {
         label.leader.clear();
@@ -500,14 +670,14 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
     }
   }
 
-  function updateCometGraphics(layout) {
+  function updateCometGraphics(layout, state) {
     const cometsById = new Map((layout.comets || []).map(comet => [String(comet.id), comet]));
     for (const graphic of cometLayer.children || []) {
       if (graphic.memoryGalaxyCometId) {
         const comet = cometsById.get(String(graphic.memoryGalaxyCometId));
         if (!comet) continue;
         graphic.clear();
-        drawCometVisual(graphic, comet);
+        drawCometVisual(graphic, comet, state, layout);
         continue;
       }
       if (graphic.memoryGalaxyCometHitId) {
@@ -515,6 +685,20 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
         if (!comet) continue;
         graphic.clear();
         drawCometHit(graphic, comet);
+      }
+    }
+  }
+
+  function refreshResponsiveLabels() {
+    for (const label of labelsByNodeId.values()) {
+      applyResponsiveLabelScale(label, scale);
+      if (label.node) {
+        const anchor = dynamicLabelAnchor(label.node, scale);
+        positionLabel(label, anchor);
+        if (label.leader) {
+          label.leader.clear();
+          drawLabelLeader(label.leader, label.node, anchor);
+        }
       }
     }
   }
@@ -547,6 +731,47 @@ function drawSystemOrbitGuide(guide, system) {
     guide.ellipse(system.x, system.y, miniOrbit.radius, miniOrbit.radius * Number(miniOrbit.aspect || 0.62));
     guide.stroke({ width: 0.8, color: parseColor(system.color || "#7dd3fc"), alpha: 0.12 });
   }
+}
+
+function buildCometTrailSegments(comet, trailPoints) {
+  const points = [comet.head, ...trailPoints];
+  const segments = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1];
+    const to = points[index];
+    segments.push({
+      from,
+      to,
+      alpha: Number(to.alpha ?? 0.72),
+    });
+  }
+  return segments;
+}
+
+function syncCometInfluenceAnchors(comet, layout) {
+  for (const influence of comet.influences || []) {
+    const anchor = resolveCometInfluenceAnchorGlobal(influence, layout);
+    influence.x = anchor.x;
+    influence.y = anchor.y;
+  }
+  for (const point of comet.trajectory || []) {
+    const anchor = resolveCometInfluenceAnchorGlobal(point, layout);
+    point.x = anchor.x;
+    point.y = anchor.y;
+  }
+  comet.path = buildDynamicCometPath(comet);
+}
+
+function resolveCometInfluenceAnchorGlobal(influence, layout) {
+  const system = (layout.systems || []).find(item => item.key === influence.system);
+  return system ? { x: system.x, y: system.y } : { x: influence.x, y: influence.y };
+}
+
+function buildDynamicCometPath(comet) {
+  const anchors = [comet.head, ...((comet.trajectory || []).length ? comet.trajectory : comet.influences || [])]
+    .map(point => ({ x: point.x, y: point.y }));
+  if (anchors.length <= 1) return anchors;
+  return anchors;
 }
 
 function drawSatelliteOrbitGuide(guide, satelliteSystem) {
@@ -646,6 +871,7 @@ export function advanceGalaxyAnimationNodes(layout, deltaSeconds, nodeGraphicsBy
   }
   for (const comet of layout.comets || []) {
     const animation = comet.animation;
+    syncCometInfluenceAnchors(comet, layout);
     const path = Array.isArray(comet.path) ? comet.path : [];
     if (!animation || path.length < 2 || Number(animation.pathSpeed || 0) === 0) continue;
     const previousHead = { x: comet.head.x, y: comet.head.y };
@@ -1011,17 +1237,35 @@ function createSystemLabel(PIXI, node, anchor) {
       stroke: { color: 0x020617, width: 3, alpha: 0.82 },
     },
   });
+  title.__baseFontSize = titleFontSize;
+  subtitle.__baseFontSize = subtitleFontSize;
+  count.__baseFontSize = countFontSize;
   const label = { kind: "system", texts: [title, subtitle, count].filter(text => text.text) };
+  label.prominentSolarLabel = prominentSolarLabel;
   positionLabel(label, anchor);
   label.bounds = groupLabelBounds(label.texts, anchor.align);
   return label;
+}
+
+function applyResponsiveLabelScale(label, viewScale = 1) {
+  if (!label?.prominentSolarLabel) return;
+  const normalizedScale = Math.max(0.08, Number.isFinite(viewScale) ? viewScale : 1);
+  const targetTitleScreenSize = 13.5;
+  for (const text of label.texts || []) {
+    const baseFontSize = Number(text.__baseFontSize || text.style?.fontSize || 0);
+    if (!baseFontSize) continue;
+    const targetWorldSize = baseFontSize * (targetTitleScreenSize / 44) / normalizedScale;
+    const minWorldSize = baseFontSize * 0.64;
+    const maxWorldSize = baseFontSize * 1.22;
+    text.style.fontSize = Math.round(Math.max(minWorldSize, Math.min(maxWorldSize, targetWorldSize)) * 10) / 10;
+  }
 }
 
 function positionLabel(label, anchor) {
   const alignAnchor = anchor.align === "right" ? 1 : 0;
   if (label.kind === "system") {
     const maxFontSize = Math.max(...label.texts.map(text => Number(text.style?.fontSize || 0)));
-    const lineGap = maxFontSize >= 40 ? 42 : maxFontSize >= 20 ? 26 : 17;
+    const lineGap = maxFontSize >= 40 ? maxFontSize * 1.06 : maxFontSize >= 20 ? maxFontSize * 1.08 : 17;
     const centerOffset = (label.texts.length - 1) / 2;
     label.texts.forEach((text, index) => {
       text.anchor?.set?.(alignAnchor, 0.5);
@@ -1055,16 +1299,19 @@ function overlaps(a, b) {
   return a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
 }
 
-function dynamicLabelAnchor(node) {
+function dynamicLabelAnchor(node, viewScale = 1) {
   const centerX = Number(node.animation?.orbitCenterX ?? 0);
   const centerY = Number(node.animation?.orbitCenterY ?? 0);
   const angle = Math.atan2(node.y - centerY || 0.0001, node.x - centerX || 0.0001);
   const align = Math.cos(angle) < 0 ? "right" : "left";
   if (node.isPlanetSystemNode || node.isSolarCenterStar) {
+    const normalizedScale = Math.max(0.08, Number.isFinite(viewScale) ? viewScale : 1);
+    const screenGap = node.isSolarCenterStar ? 44 : 34;
+    const scaledGap = screenGap / normalizedScale;
     const offset = node.isSolarCenterStar
-      ? Math.min(240, Math.max(160, Number(node.renderRadius || 24) + 86))
-      : Math.min(132, Math.max(82, Number(node.renderRadius || 12) + 48));
-    const elbow = node.isSolarCenterStar ? 100 : 68;
+      ? Math.min(260, Math.max(170, Number(node.renderRadius || 24) + scaledGap))
+      : Math.min(150, Math.max(94, Number(node.renderRadius || 12) + scaledGap));
+    const elbow = Math.min(node.isSolarCenterStar ? 118 : 82, Math.max(node.isSolarCenterStar ? 74 : 54, screenGap / normalizedScale));
     const sign = align === "right" ? -1 : 1;
     return {
       x: node.x + Math.cos(angle) * offset + sign * elbow,

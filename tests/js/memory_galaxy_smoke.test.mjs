@@ -138,11 +138,12 @@ exports.createGalaxyViewState = createGalaxyViewState;
 exports.selectGalaxySystem = selectGalaxySystem;
 exports.selectSolarPlanet = selectSolarPlanet;
 exports.pauseGalaxyMotionForSelection = pauseGalaxyMotionForSelection;
-exports.resumeGalaxyMotionFromBlank = resumeGalaxyMotionFromBlank;`,
+exports.resumeGalaxyMotionFromBlank = resumeGalaxyMotionFromBlank;
+exports.selectCometOverlay = selectCometOverlay;`,
   viewStateContext,
   { filename: viewStateHelperPath },
 );
-const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank } = viewStateContext.exports;
+const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank, selectCometOverlay } = viewStateContext.exports;
 
 const viewerSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/viewer.js"), "utf8");
 assert.match(viewerSource, /enteredSolar/);
@@ -151,6 +152,10 @@ assert.doesNotMatch(viewerSource, /result\.entered(?!Solar|Planet)/);
 assert.match(viewerSource, /influence-stack/);
 assert.match(viewerSource, /influence-bar-fill/);
 assert.match(viewerSource, /Trajectory/);
+assert.match(viewerSource, /function redrawCurrentLayoutState\(\)/);
+assert.match(viewerSource, /onBlankTap:[\s\S]*resumeGalaxyMotionFromBlank\(state\);[\s\S]*redrawCurrentLayoutState\(\);/);
+assert.match(viewerSource, /pauseGalaxyMotionForSelection\(state, state\.selectedNodeId\);[\s\S]*redrawCurrentLayoutState\(\);/);
+assert.doesNotMatch(viewerSource, /pauseGalaxyMotionForSelection\(state, state\.selectedNodeId\);[\s\S]{0,500}drawCurrentLayout\(\{ preserveView:/);
 
 const rendererHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-renderer.js");
 const rendererHelperSource = readFileSync(rendererHelperPath, "utf8").replaceAll("export function ", "function ");
@@ -161,7 +166,8 @@ exports.createMemoryGalaxyRenderer = createMemoryGalaxyRenderer;
 exports.advanceGalaxyAnimationNodes = advanceGalaxyAnimationNodes;
 exports.dynamicLabelAnchor = dynamicLabelAnchor;
 exports.buildDeterministicStarfield = buildDeterministicStarfield;
-exports.systemLabelLines = systemLabelLines;`,
+exports.systemLabelLines = systemLabelLines;
+exports.buildCometTrailSegments = buildCometTrailSegments;`,
   rendererContext,
   { filename: rendererHelperPath },
 );
@@ -171,7 +177,53 @@ const {
   dynamicLabelAnchor,
   buildDeterministicStarfield,
   systemLabelLines,
+  buildCometTrailSegments,
 } = rendererContext.exports;
+
+function createFakePixiRenderer() {
+  class FakeContainer {
+    constructor() {
+      this.children = [];
+      this.scale = { value: 1, set: value => { this.scale.value = value; } };
+      this.position = { x: 0, y: 0, set: (x, y) => { this.position.x = x; this.position.y = y; } };
+    }
+    addChild(...children) {
+      this.children.push(...children);
+    }
+  }
+  const fakeApp = {
+    screen: { width: 1000, height: 800 },
+    tickerCallback: null,
+  };
+  fakeApp.ticker = { add: callback => { fakeApp.tickerCallback = callback; } };
+  return createMemoryGalaxyRenderer({
+    PIXI: {
+      Container: FakeContainer,
+      Graphics: class {},
+      Text: class {},
+    },
+    app: fakeApp,
+    stage: Object.assign(new FakeContainer(), {
+      on() {},
+    }),
+  });
+}
+
+{
+  const cinematicRenderer = createFakePixiRenderer();
+  cinematicRenderer.setTransform({ scale: 1, pan: { x: 0, y: 0 } });
+  const started = cinematicRenderer.focusOn(100, 80, 1.2);
+  const duringFlight = cinematicRenderer.getTransform();
+  assert.equal(started, true);
+  assert.notDeepEqual(duringFlight, { scale: 1.2, pan: { x: 380, y: 304 } });
+  assert.equal(cinematicRenderer.isCameraTransitionActive(), true);
+  cinematicRenderer.advanceCameraTransitionForTest(5000);
+  const arrived = cinematicRenderer.getTransform();
+  assert.equal(arrived.scale, 1.2);
+  assert.equal(arrived.pan.x, 380);
+  assert.equal(arrived.pan.y, 304);
+  assert.equal(cinematicRenderer.isCameraTransitionActive(), false);
+}
 
 const starsA = buildDeterministicStarfield("fixture", 4, { minX: 0, maxX: 10, minY: 0, maxY: 10 });
 const starsB = buildDeterministicStarfield("fixture", 4, { minX: 0, maxX: 10, minY: 0, maxY: 10 });
@@ -753,13 +805,15 @@ for (const comet of cometOverlay.comets) {
   assert.ok(visibleComet);
   const circles = visibleComet.commands.filter(command => command.name === "circle");
   assert.ok(circles.length >= 3);
-  assert.ok(visibleComet.commands.some(command => command.name === "quadraticCurveTo"));
+  assert.equal(visibleComet.commands.some(command => command.name === "quadraticCurveTo"), false);
+  assert.ok(visibleComet.commands.some(command => command.name === "lineTo"));
   const strokeColors = visibleComet.commands
     .filter(command => command.name === "stroke")
     .map(command => command.args[0]?.color)
     .filter(color => Number.isFinite(color));
   assert.ok(strokeColors.includes(0x22d3ee));
-  assert.ok(strokeColors.includes(0x34d399));
+  assert.ok(strokeColors.includes(0xf97316));
+  assert.ok(visibleComet.commands.filter(command => command.name === "lineTo").length >= 3);
   const hitCircle = cometGraphics.find(child => child.commands.some(command => command.name === "fill" && command.args[0]?.alpha === 0.001))
     ?.commands.find(command => command.name === "circle");
   assert.ok(hitCircle);
@@ -808,20 +862,29 @@ const pauseState = createGalaxyViewState();
 pauseState.animationSpeed = 1.35;
 pauseState.motionEnabled = true;
 pauseState.selectedNodeId = "old-node";
+pauseState.selectedCometId = "comet:test";
 pauseState.selectedSystem = "skill";
 pauseGalaxyMotionForSelection(pauseState, "node-1");
 assert.equal(pauseState.animationSpeed, 0);
 assert.equal(pauseState.motionEnabled, false);
 assert.equal(pauseState.motionResumeSpeed, 1.35);
 assert.equal(pauseState.selectedNodeId, "node-1");
+assert.equal(pauseState.selectedCometId, null);
 assert.equal(pauseState.selectedSystem, "skill");
 
 resumeGalaxyMotionFromBlank(pauseState);
 assert.equal(pauseState.animationSpeed, 1.35);
 assert.equal(pauseState.motionEnabled, true);
 assert.equal(pauseState.selectedNodeId, null);
+assert.equal(pauseState.selectedCometId, null);
 assert.equal(pauseState.selectedSystem, null);
 assert.equal(pauseState.hoveredNodeId, null);
+
+const cometSelectionState = createGalaxyViewState();
+cometSelectionState.selectedNodeId = "node-1";
+selectCometOverlay(cometSelectionState, "comet:test");
+assert.equal(cometSelectionState.selectedNodeId, null);
+assert.equal(cometSelectionState.selectedCometId, "comet:test");
 
 const defaultResumeState = createGalaxyViewState();
 defaultResumeState.animationSpeed = 0;
@@ -933,9 +996,11 @@ const animatedLayout = {
     tail: [],
     trailHistory: [{ x: 90, y: 0, alpha: 0.72 }],
     path: [{ x: 100, y: 0 }, { x: 0, y: 100 }],
+    influences: [{ system: "skill", x: 10, y: 0, weight: 0.9 }],
     animation: { pathProgress: 0, pathSpeed: 1 },
   }],
 };
+const initialPathPointY = animatedLayout.comets[0].path[1].y;
 assert.equal(advanceGalaxyAnimationNodes(animatedLayout, 1, new Map(), 1), true);
 assert.ok(Math.abs(animatedLayout.systems[0].x) < 0.0001);
 assert.ok(Math.abs(animatedLayout.systems[0].y - 10) < 0.0001);
@@ -947,6 +1012,7 @@ assert.ok(Math.abs(animatedLayout.nodes[2].y - (animatedLayout.nodes[1].y + 2)) 
 assert.ok(Math.abs(animatedLayout.satelliteSystems[0].x - animatedLayout.nodes[1].x) < 0.0001);
 assert.ok(Math.abs(animatedLayout.satelliteSystems[0].y - animatedLayout.nodes[1].y) < 0.0001);
 assert.ok(animatedLayout.comets[0].trailHistory[0].alpha < 0.72);
+assert.notEqual(animatedLayout.comets[0].path[1].y, initialPathPointY);
 const stationaryLayout = JSON.parse(JSON.stringify(animatedLayout));
 advanceGalaxyAnimationNodes(stationaryLayout, 1, new Map(), 0);
 assert.equal(stationaryLayout.systems[0].x, animatedLayout.systems[0].x);
@@ -1040,7 +1106,7 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   perfLayout.view = "galaxy";
   perfLayout.nodes[1].label = "Animated planet";
   perfLayout.nodes[1].renderRadius = 8;
-  fakeRenderer.draw(perfLayout, { selectedNodeId: perfLayout.nodes[1].id, hoveredNodeId: null, labelMode: "medium", animationSpeed: 1 }, {});
+  fakeRenderer.draw(perfLayout, { selectedNodeId: perfLayout.nodes[1].id, hoveredNodeId: null, labelMode: "medium", animationSpeed: 1, showComets: false }, {});
   const afterInitialDrawRemoveCalls = removeChildrenCalls;
   const afterInitialDestroyedChildren = destroyedChildren;
   const root = stage.children[0];
@@ -1126,13 +1192,19 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   assert.ok(labelLayer);
   const planetLabel = labelLayer.children.find(child => child.text === "DENSE PLANET 0");
   assert.ok(planetLabel);
-  assert.ok(Number(planetLabel.style.fontSize || 0) >= 44);
+  assert.ok(Number(planetLabel.style.fontSize || 0) >= 28);
   const centerLabel = labelLayer.children.find(child => child.text === "SKILL SYSTEM");
   assert.ok(centerLabel);
   assert.equal(centerLabel.style.fontSize, planetLabel.style.fontSize);
   const planetSubtitle = labelLayer.children.find(child => child.text === "Planet System");
   assert.ok(planetSubtitle);
-  assert.ok(Number(planetSubtitle.style.fontSize || 0) >= 24);
+  assert.ok(Number(planetSubtitle.style.fontSize || 0) >= 15);
+  renderer.setTransform({ scale: 0.45, pan: { x: 0, y: 0 } });
+  const wideTitleScreenSize = Number(planetLabel.style.fontSize || 0) * 0.45;
+  const wideSubtitleScreenSize = Number(planetSubtitle.style.fontSize || 0) * 0.45;
+  assert.ok(wideTitleScreenSize >= 12 && wideTitleScreenSize <= 16);
+  assert.ok(wideSubtitleScreenSize >= 6.5 && wideSubtitleScreenSize <= 9);
+  assert.equal(centerLabel.style.fontSize, planetLabel.style.fontSize);
   const leaderLayer = root.children.find(layer => layer.children.some(child => child.commands?.some(command => command.name === "moveTo")));
   const leader = leaderLayer.children.find(child => child.commands?.some(command => command.name === "moveTo") && child.commands?.filter(command => command.name === "lineTo").length >= 2);
   assert.ok(leader);

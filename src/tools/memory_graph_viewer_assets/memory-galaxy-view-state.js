@@ -4,6 +4,7 @@ export function createGalaxyViewState() {
     selectedSystem: null,
     selectedPlanet: null,
     selectedNodeId: null,
+    selectedCometId: null,
     hoveredNodeId: null,
     relationshipMode: "structure",
     nodeScale: 0.48,
@@ -19,6 +20,8 @@ export function enterGalaxyView(state) {
   state.view = "galaxy";
   state.selectedSystem = null;
   state.selectedPlanet = null;
+  state.selectedNodeId = null;
+  state.selectedCometId = null;
   state.viewStack = [];
   return state;
 }
@@ -30,6 +33,7 @@ export function enterSolarView(state, systemKey) {
   state.view = "solar";
   state.selectedSystem = systemKey;
   state.selectedPlanet = null;
+  state.selectedCometId = null;
   return state;
 }
 
@@ -37,6 +41,7 @@ export function enterPlanetView(state, planetId) {
   state.viewStack.push({ view: state.view, selectedSystem: state.selectedSystem, selectedPlanet: state.selectedPlanet });
   state.view = "planet";
   state.selectedPlanet = planetId;
+  state.selectedCometId = null;
   return state;
 }
 
@@ -63,6 +68,7 @@ export function selectGalaxySystem(state, systemKey, options = {}) {
   const enterSolar = Boolean(options.forceEnter) || lockedSystemTap || (lastSystemTap.key === systemKey && now - lastSystemTap.time < doubleTapMs);
   state.selectedSystem = systemKey;
   state.selectedNodeId = null;
+  state.selectedCometId = null;
   const nextTap = { key: systemKey, time: now };
   if (enterSolar) enterSolarView(state, systemKey);
   return { enteredSolar: enterSolar, lastSystemTap: nextTap };
@@ -81,6 +87,7 @@ export function selectSolarPlanet(state, planetId, options = {}) {
   const lockedPlanetTap = state.selectedNodeId === planetId;
   const enterPlanet = Boolean(options.forceEnter) || lockedPlanetTap || (lastPlanetTap.id === planetId && now - lastPlanetTap.time < doubleTapMs);
   state.selectedNodeId = planetId;
+  state.selectedCometId = null;
   const nextTap = { id: planetId, time: now };
   if (enterPlanet) enterPlanetView(state, planetId);
   return { enteredPlanet: enterPlanet, lastPlanetTap: nextTap };
@@ -92,6 +99,13 @@ export function pauseGalaxyMotionForSelection(state, selectedNodeId = null) {
   state.animationSpeed = 0;
   state.motionEnabled = false;
   if (selectedNodeId !== null) state.selectedNodeId = selectedNodeId;
+  state.selectedCometId = null;
+  return state;
+}
+
+export function selectCometOverlay(state, cometId) {
+  state.selectedNodeId = null;
+  state.selectedCometId = cometId;
   return state;
 }
 
@@ -100,6 +114,7 @@ export function resumeGalaxyMotionFromBlank(state) {
   state.animationSpeed = resumeSpeed > 0 ? resumeSpeed : 1;
   state.motionEnabled = true;
   state.selectedNodeId = null;
+  state.selectedCometId = null;
   if (state.view === "galaxy") {
     state.selectedSystem = null;
     state.selectedPlanet = null;

@@ -18,3 +18,5 @@ C:\Users\Administrator\total-agent-memory\src\server.py:342: UserWarning: The mo
 [memory-self] competency 'reasonix' updated: outcome=routine, delta=+0.005
 [memory-self] competency 'self_rules' updated: outcome=routine, delta=+0.005
 [memory-self] competency 'lesson' updated: outcome=routine, delta=+0.005
+Starting TAM HTTP server... 
+^C
