@@ -145,6 +145,12 @@ def test_main_page_includes_v6_panels(dashboard_server):
     assert "Token savings" in body
     assert "v6 queues" in body
     assert "v6 coverage" in body
+    assert "window.__tamAgentBridge" in body
+    assert 'surface: "memory-dashboard"' in body
+    assert '"set-tab"' in body
+    assert '"set-search"' in body
+    assert '"open-knowledge"' in body
+    assert 'new CustomEvent("tam:agent-event"' in body
     # Marker must be replaced, not left raw
     assert "V6_PANELS_HERE" not in body
 

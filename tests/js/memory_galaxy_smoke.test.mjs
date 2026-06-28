@@ -149,6 +149,13 @@ const viewerSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/
 assert.match(viewerSource, /enteredSolar/);
 assert.match(viewerSource, /enteredPlanet/);
 assert.doesNotMatch(viewerSource, /result\.entered(?!Solar|Planet)/);
+assert.match(viewerSource, /window\.__tamAgentBridge/);
+assert.match(viewerSource, /surface: "memory-galaxy-2d"/);
+assert.match(viewerSource, /getCapabilities/);
+assert.match(viewerSource, /execute\(command, payload = \{\}\)/);
+assert.match(viewerSource, /new CustomEvent\("tam:agent-event"/);
+assert.match(viewerSource, /"set-search"/);
+assert.match(viewerSource, /"select-node"/);
 assert.match(viewerSource, /influence-stack/);
 assert.match(viewerSource, /influence-bar-fill/);
 assert.match(viewerSource, /Trajectory/);

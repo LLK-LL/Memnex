@@ -77,6 +77,85 @@ window.__memoryGalaxyDebug = {
   }),
 };
 
+window.__tamAgentBridge = {
+  surface: "memory-galaxy-2d",
+  version: 1,
+  getState: () => ({
+    view: state.view,
+    selectedSystem: state.selectedSystem,
+    selectedPlanet: state.selectedPlanet,
+    selectedNodeId: state.selectedNodeId,
+    selectedCometId: state.selectedCometId,
+    motionEnabled: state.motionEnabled,
+    animationSpeed: state.animationSpeed,
+    visibleNodes: filteredGraph.nodes.length,
+    visibleEdges: filteredGraph.links.length,
+    query: document.getElementById("search")?.value || "",
+  }),
+  getCapabilities: () => [
+    "set-search",
+    "select-node",
+    "clear-selection",
+    "reset-view",
+    "back-view",
+    "fit-view",
+    "set-motion",
+  ],
+  execute(command, payload = {}) {
+    switch (command) {
+      case "set-search": {
+        const value = String(payload.query || "");
+        for (const id of ["search", "stageSearchMirror"]) {
+          const input = document.getElementById(id);
+          if (input) input.value = value;
+        }
+        applyFilters();
+        return { ok: true, state: this.getState() };
+      }
+      case "select-node": {
+        const node = filteredNodeById(payload.nodeId);
+        if (!node) return { ok: false, error: "node-not-found" };
+        handleNodeTap(node, { detail: 1 });
+        return { ok: true, state: this.getState() };
+      }
+      case "clear-selection":
+        resumeGalaxyMotionFromBlank(state);
+        syncMotionControls();
+        redrawCurrentLayoutState();
+        return { ok: true, state: this.getState() };
+      case "reset-view":
+        enterGalaxyView(state);
+        state.selectedNodeId = null;
+        state.selectedCometId = null;
+        state.hoveredNodeId = null;
+        state.selectedSystem = null;
+        state.selectedPlanet = null;
+        shouldAutoFit = true;
+        drawCurrentLayout();
+        return { ok: true, state: this.getState() };
+      case "back-view":
+        goBackView(state);
+        shouldAutoFit = true;
+        drawCurrentLayout();
+        return { ok: true, state: this.getState() };
+      case "fit-view":
+        shouldAutoFit = true;
+        if (currentLayout) drawCurrentLayout();
+        return { ok: true, state: this.getState() };
+      case "set-motion": {
+        const enabled = payload.enabled !== false;
+        state.motionEnabled = enabled;
+        state.animationSpeed = enabled ? Number(payload.speed || state.motionResumeSpeed || 1) : 0;
+        syncMotionControls();
+        redrawCurrentLayoutState();
+        return { ok: true, state: this.getState() };
+      }
+      default:
+        return { ok: false, error: "unknown-command" };
+    }
+  },
+};
+
 function loadEmbeddedGraph() {
   const el = document.getElementById("graph-data");
   if (!el?.textContent) return null;
@@ -1398,6 +1477,13 @@ function emitEvent(type, node, context) {
     context,
   });
   interactionLog.push(event);
+  window.dispatchEvent(new CustomEvent("tam:agent-event", {
+    detail: {
+      surface: "memory-galaxy-2d",
+      event,
+      state: window.__tamAgentBridge?.getState?.(),
+    },
+  }));
   const prompt = suggestAgentPrompt(event, node?.raw || {});
   if (prompt) document.getElementById("agentPrompt").textContent = renderPromptText(prompt);
 }

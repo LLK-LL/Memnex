@@ -1870,6 +1870,80 @@ async function api(path) {
     return resp.json();
 }
 
+function emitAgentEvent(type, detail = {}) {
+    window.dispatchEvent(new CustomEvent("tam:agent-event", {
+        detail: {
+            surface: "memory-dashboard",
+            type,
+            detail,
+            state: window.__tamAgentBridge?.getState?.(),
+            timestamp: new Date().toISOString(),
+        },
+    }));
+}
+
+window.__tamAgentBridge = {
+    surface: "memory-dashboard",
+    version: 1,
+    getState: () => ({
+        activeTab: document.querySelector('.tab.active')?.dataset.tab || 'knowledge',
+        currentPage,
+        totalPages,
+        query: document.getElementById('search-input')?.value || '',
+        type: document.getElementById('type-filter')?.value || '',
+        project: document.getElementById('project-filter')?.value || '',
+        modalOpen: document.getElementById('detail-modal')?.classList.contains('active') || false,
+    }),
+    getCapabilities: () => [
+        "set-tab",
+        "set-search",
+        "set-filter",
+        "next-page",
+        "prev-page",
+        "open-knowledge",
+        "close-modal",
+    ],
+    execute(command, payload = {}) {
+        switch (command) {
+            case "set-tab": {
+                const tab = document.querySelector(`.tab[data-tab="${CSS.escape(String(payload.tab || ''))}"]`);
+                if (!tab) return { ok: false, error: "tab-not-found" };
+                tab.click();
+                return { ok: true, state: this.getState() };
+            }
+            case "set-search": {
+                const input = document.getElementById('search-input');
+                if (input) input.value = String(payload.query || '');
+                currentPage = 1;
+                loadKnowledge();
+                return { ok: true, state: this.getState() };
+            }
+            case "set-filter": {
+                if (payload.type !== undefined) document.getElementById('type-filter').value = String(payload.type || '');
+                if (payload.project !== undefined) document.getElementById('project-filter').value = String(payload.project || '');
+                currentPage = 1;
+                loadKnowledge();
+                return { ok: true, state: this.getState() };
+            }
+            case "next-page":
+                if (currentPage < totalPages) { currentPage++; loadKnowledge(); }
+                return { ok: true, state: this.getState() };
+            case "prev-page":
+                if (currentPage > 1) { currentPage--; loadKnowledge(); }
+                return { ok: true, state: this.getState() };
+            case "open-knowledge":
+                if (!payload.id) return { ok: false, error: "missing-id" };
+                showDetail(payload.id);
+                return { ok: true, state: this.getState() };
+            case "close-modal":
+                closeModal();
+                return { ok: true, state: this.getState() };
+            default:
+                return { ok: false, error: "unknown-command" };
+        }
+    },
+};
+
 function escapeHtml(str) {
     if (!str) return '';
     const d = document.createElement('div');
@@ -3241,6 +3315,7 @@ document.querySelectorAll('.tab').forEach(tab => {
         if (target === 'v5-self') { loadV5SelfModel(); if (!window._selfModelInterval) window._selfModelInterval = setInterval(loadV5SelfModel, 60000); }
         if (target === 'v5-reflection') loadV5Reflection();
         if (target === 'live-feed') initLiveFeed();
+        emitAgentEvent("tab:selected", { tab: target });
     });
 });
 
@@ -3249,9 +3324,11 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ============================================================
 document.getElementById('prev-btn').addEventListener('click', () => {
     if (currentPage > 1) { currentPage--; loadKnowledge(); }
+    emitAgentEvent("page:previous", { page: currentPage });
 });
 document.getElementById('next-btn').addEventListener('click', () => {
     if (currentPage < totalPages) { currentPage++; loadKnowledge(); }
+    emitAgentEvent("page:next", { page: currentPage });
 });
 
 // ============================================================
@@ -3278,9 +3355,18 @@ let searchTimeout;
 document.getElementById('search-input').addEventListener('input', () => {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => { currentPage = 1; loadKnowledge(); }, 300);
+    emitAgentEvent("search:input", { query: document.getElementById('search-input').value });
 });
-document.getElementById('type-filter').addEventListener('change', () => { currentPage = 1; loadKnowledge(); });
-document.getElementById('project-filter').addEventListener('change', () => { currentPage = 1; loadKnowledge(); });
+document.getElementById('type-filter').addEventListener('change', () => {
+    currentPage = 1;
+    loadKnowledge();
+    emitAgentEvent("filter:type", { type: document.getElementById('type-filter').value });
+});
+document.getElementById('project-filter').addEventListener('change', () => {
+    currentPage = 1;
+    loadKnowledge();
+    emitAgentEvent("filter:project", { project: document.getElementById('project-filter').value });
+});
 
 // ============================================================
 // Modal
