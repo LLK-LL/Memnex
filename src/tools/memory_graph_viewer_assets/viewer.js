@@ -441,7 +441,7 @@ function drawCurrentLayout(options = {}) {
           if (result.enteredPlanet) resumeGalaxyMotionFromBlank(state);
           else pauseGalaxyMotionForSelection(state, planetNode.id);
           syncMotionControls();
-          if (clickCount(event) < 2) {
+          if (!result.enteredPlanet) {
             state.selectedNodeId = planetNode.id;
             renderer.draw(currentLayout, state, activeRendererHandlers());
             renderer.focusOn(planetNode.x, planetNode.y, 1.06);
@@ -588,7 +588,7 @@ function handleNodeTap(node, event) {
       if (result.enteredPlanet) resumeGalaxyMotionFromBlank(state);
       else pauseGalaxyMotionForSelection(state, planetNode.id);
       syncMotionControls();
-      if (clickCount(event) < 2) {
+      if (!result.enteredPlanet) {
         state.selectedNodeId = planetNode.id;
         renderer.draw(currentLayout, state, activeRendererHandlers());
         renderer.focusOn(planetNode.x, planetNode.y, 1.06);

@@ -789,12 +789,12 @@ const firstPlanetTap = selectSolarPlanet(solarClickState, "planet-1", {
 planetTap = firstPlanetTap.lastPlanetTap;
 assert.equal(firstPlanetTap.enteredPlanet, false);
 assert.equal(solarClickState.view, "solar");
-const forcedPlanetTap = selectSolarPlanet(solarClickState, "planet-1", {
-  now: 2200,
+const secondPlanetTap = selectSolarPlanet(solarClickState, "planet-1", {
+  now: 3000,
   lastPlanetTap: planetTap,
-  forceEnter: true,
+  doubleTapMs: 420,
 });
-assert.equal(forcedPlanetTap.enteredPlanet, true);
+assert.equal(secondPlanetTap.enteredPlanet, true);
 assert.equal(solarClickState.view, "planet");
 
 const animatedLayout = {

@@ -78,11 +78,12 @@ export function selectSolarPlanet(state, planetId, options = {}) {
   const now = Number(options.now ?? Date.now());
   const doubleTapMs = Number(options.doubleTapMs ?? 420);
   const lastPlanetTap = options.lastPlanetTap || { id: null, time: 0 };
-  const doubleTap = Boolean(options.forceEnter) || (lastPlanetTap.id === planetId && now - lastPlanetTap.time < doubleTapMs);
+  const lockedPlanetTap = state.selectedNodeId === planetId;
+  const enterPlanet = Boolean(options.forceEnter) || lockedPlanetTap || (lastPlanetTap.id === planetId && now - lastPlanetTap.time < doubleTapMs);
   state.selectedNodeId = planetId;
   const nextTap = { id: planetId, time: now };
-  if (doubleTap) enterPlanetView(state, planetId);
-  return { enteredPlanet: doubleTap, lastPlanetTap: nextTap };
+  if (enterPlanet) enterPlanetView(state, planetId);
+  return { enteredPlanet: enterPlanet, lastPlanetTap: nextTap };
 }
 
 export function pauseGalaxyMotionForSelection(state, selectedNodeId = null) {
