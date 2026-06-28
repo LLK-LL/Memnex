@@ -388,9 +388,9 @@ function drawCurrentLayout(options = {}) {
       syncMotionControls();
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
-      shouldAutoFit = clickCount(event) >= 2;
-      drawCurrentLayout({ preserveView: clickCount(event) < 2 });
-      if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+      shouldAutoFit = result.enteredSolar;
+      drawCurrentLayout({ preserveView: !result.enteredSolar });
+      if (!result.enteredSolar) renderer.focusOn(system.x, system.y, 1.04);
     },
     onSystemHover: () => {},
     onCometTap: comet => {
@@ -421,9 +421,9 @@ function drawCurrentLayout(options = {}) {
           if (result.enteredSolar) showSystemSelection(system.key);
           else showNodeSelection(node);
           emitEvent("system:selected", null, { system: system.key });
-          shouldAutoFit = clickCount(event) >= 2;
-          drawCurrentLayout({ preserveView: clickCount(event) < 2 });
-          if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+          shouldAutoFit = result.enteredSolar;
+          drawCurrentLayout({ preserveView: !result.enteredSolar });
+          if (!result.enteredSolar) renderer.focusOn(system.x, system.y, 1.04);
           return;
         }
       }
@@ -509,9 +509,9 @@ function activeRendererHandlers() {
       syncMotionControls();
       showSystemSelection(system.key);
       emitEvent("system:selected", null, { system: system.key });
-      shouldAutoFit = clickCount(event) >= 2;
-      drawCurrentLayout({ preserveView: clickCount(event) < 2 });
-      if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+      shouldAutoFit = result.enteredSolar;
+      drawCurrentLayout({ preserveView: !result.enteredSolar });
+      if (!result.enteredSolar) renderer.focusOn(system.x, system.y, 1.04);
     },
     onSystemHover: () => {},
     onCometTap: comet => {
@@ -568,9 +568,9 @@ function handleNodeTap(node, event) {
       if (result.enteredSolar) showSystemSelection(system.key);
       else showNodeSelection(node);
       emitEvent("system:selected", null, { system: system.key });
-      shouldAutoFit = clickCount(event) >= 2;
-      drawCurrentLayout({ preserveView: clickCount(event) < 2 });
-      if (clickCount(event) < 2) renderer.focusOn(system.x, system.y, 1.04);
+      shouldAutoFit = result.enteredSolar;
+      drawCurrentLayout({ preserveView: !result.enteredSolar });
+      if (!result.enteredSolar) renderer.focusOn(system.x, system.y, 1.04);
       return;
     }
   }

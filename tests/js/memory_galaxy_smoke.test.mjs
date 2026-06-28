@@ -721,7 +721,7 @@ systemTap = firstTap.lastSystemTap;
 assert.equal(firstTap.enteredSolar, false);
 assert.equal(galaxyClickState.view, "galaxy");
 const secondTap = selectGalaxySystem(galaxyClickState, "skill", {
-  now: 1200,
+  now: 2000,
   lastSystemTap: systemTap,
   doubleTapMs: 420,
 });

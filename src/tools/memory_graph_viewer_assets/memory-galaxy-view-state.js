@@ -59,12 +59,13 @@ export function selectGalaxySystem(state, systemKey, options = {}) {
   const now = Number(options.now ?? Date.now());
   const doubleTapMs = Number(options.doubleTapMs ?? 420);
   const lastSystemTap = options.lastSystemTap || { key: null, time: 0 };
-  const doubleTap = Boolean(options.forceEnter) || (lastSystemTap.key === systemKey && now - lastSystemTap.time < doubleTapMs);
+  const lockedSystemTap = state.selectedSystem === systemKey;
+  const enterSolar = Boolean(options.forceEnter) || lockedSystemTap || (lastSystemTap.key === systemKey && now - lastSystemTap.time < doubleTapMs);
   state.selectedSystem = systemKey;
   state.selectedNodeId = null;
   const nextTap = { key: systemKey, time: now };
-  if (doubleTap) enterSolarView(state, systemKey);
-  return { enteredSolar: doubleTap, lastSystemTap: nextTap };
+  if (enterSolar) enterSolarView(state, systemKey);
+  return { enteredSolar: enterSolar, lastSystemTap: nextTap };
 }
 
 export function selectSolarPlanet(state, planetId, options = {}) {
