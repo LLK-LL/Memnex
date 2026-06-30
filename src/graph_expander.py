@@ -81,6 +81,7 @@ def expand_top_k(
     seed_ids: list[int],
     budget: int = 10,
     min_strength: float = 0.3,
+    edge_families: list[str] | None = None,
 ) -> list[tuple[int, float]]:
     """Expand seed knowledge ids through graph_nodes/graph_edges 1-hop.
 
@@ -137,11 +138,11 @@ def expand_top_k(
         # 2) walk 1 hop in both directions
         edge_rows = db.execute(
             f"""
-            SELECT target_id AS neighbor, {weight_select} AS w
+            SELECT target_id AS neighbor, {weight_select} AS w, relation_type, context
             FROM graph_edges
             WHERE source_id IN ({node_placeholders}) {weight_filter}
             UNION ALL
-            SELECT source_id AS neighbor, {weight_select} AS w
+            SELECT source_id AS neighbor, {weight_select} AS w, relation_type, context
             FROM graph_edges
             WHERE target_id IN ({node_placeholders}) {weight_filter}
             """,
@@ -157,7 +158,13 @@ def expand_top_k(
     # neighbor node_id -> best incoming edge weight
     neighbor_best: dict[str, float] = {}
     seed_node_set = set(seed_node_ids)
-    for neighbor, w in edge_rows:
+    try:
+        from graph.edge_taxonomy import relation_allowed_by_families
+    except Exception:
+        relation_allowed_by_families = lambda _rel, _families: True  # type: ignore
+    for neighbor, w, relation_type, _context in edge_rows:
+        if not relation_allowed_by_families(relation_type, edge_families):
+            continue
         if neighbor is None or neighbor in seed_node_set:
             continue
         try:
@@ -274,7 +281,10 @@ def expand_via_associations(
 
 
 def expand(
-    db: sqlite3.Connection, seed_ids: list[int], budget: int = 10
+    db: sqlite3.Connection,
+    seed_ids: list[int],
+    budget: int = 10,
+    edge_families: list[str] | None = None,
 ) -> list[tuple[int, float]]:
     """Combine graph-edge expansion and association expansion, dedupe, keep max score."""
     seeds = _as_int_list(seed_ids)
@@ -282,12 +292,78 @@ def expand(
         return []
 
     # Split budget generously then trim at the end.
-    a = expand_top_k(db, seeds, budget=budget)
+    a = expand_top_k(db, seeds, budget=budget, edge_families=edge_families)
     b = expand_via_associations(db, seeds, budget=budget)
 
     merged = _dedupe_merge(a + b, exclude=set(seeds))
     ranked = sorted(merged.items(), key=lambda p: p[1], reverse=True)[:budget]
     return ranked
+
+
+def explain_expansion_paths(
+    db: sqlite3.Connection,
+    seed_ids: list[int],
+    *,
+    candidate_ids: list[int],
+    edge_families: list[str] | None = None,
+) -> dict[int, dict]:
+    """Explain the first one-hop graph path from seed knowledge to candidates."""
+    seeds = _as_int_list(seed_ids)
+    candidates = _as_int_list(candidate_ids)
+    if not seeds or not candidates:
+        return {}
+    if not (_table_exists(db, "knowledge_nodes") and _table_exists(db, "graph_edges")):
+        return {}
+
+    try:
+        from graph.edge_taxonomy import edge_family_for_relation, relation_allowed_by_families
+    except Exception:
+        edge_family_for_relation = lambda _rel: "semantic"  # type: ignore
+        relation_allowed_by_families = lambda _rel, _families: True  # type: ignore
+
+    seed_ph = ",".join("?" for _ in seeds)
+    candidate_ph = ",".join("?" for _ in candidates)
+    rows = db.execute(
+        f"""
+        SELECT skn.knowledge_id AS seed_id,
+               ckn.knowledge_id AS candidate_id,
+               ge.source_id,
+               ge.target_id,
+               ge.relation_type,
+               ge.weight,
+               ge.context
+          FROM knowledge_nodes skn
+          JOIN graph_edges ge
+            ON ge.source_id = skn.node_id OR ge.target_id = skn.node_id
+          JOIN knowledge_nodes ckn
+            ON ckn.node_id = CASE
+                WHEN ge.source_id = skn.node_id THEN ge.target_id
+                ELSE ge.source_id
+            END
+         WHERE skn.knowledge_id IN ({seed_ph})
+           AND ckn.knowledge_id IN ({candidate_ph})
+        """,
+        seeds + candidates,
+    ).fetchall()
+
+    out: dict[int, dict] = {}
+    for row in rows:
+        relation_type = row["relation_type"] if hasattr(row, "keys") else row[4]
+        if not relation_allowed_by_families(relation_type, edge_families):
+            continue
+        candidate_id = int(row["candidate_id"] if hasattr(row, "keys") else row[1])
+        if candidate_id in out:
+            continue
+        out[candidate_id] = {
+            "via_seed_id": int(row["seed_id"] if hasattr(row, "keys") else row[0]),
+            "source_id": row["source_id"] if hasattr(row, "keys") else row[2],
+            "target_id": row["target_id"] if hasattr(row, "keys") else row[3],
+            "relation_type": relation_type,
+            "edge_family": edge_family_for_relation(relation_type),
+            "weight": float(row["weight"] if hasattr(row, "keys") else row[5]),
+            "context": row["context"] if hasattr(row, "keys") else row[6],
+        }
+    return out
 
 
 def fetch_records(

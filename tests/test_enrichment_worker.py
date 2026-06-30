@@ -108,6 +108,29 @@ def test_enabled_when_true(monkeypatch):
     assert ew._enabled() is True
 
 
+def test_structural_consolidation_default_off(monkeypatch):
+    monkeypatch.delenv("MEMORY_STRUCTURAL_CONSOLIDATION", raising=False)
+    assert ew._structural_enabled() is False
+
+
+def test_structural_3b_profile_caps_to_one_task(monkeypatch):
+    monkeypatch.setenv("MEMORY_STRUCTURAL_CONSOLIDATION", "true")
+    monkeypatch.setenv("MEMORY_STRUCTURAL_MODEL_SIZE", "3b")
+    monkeypatch.setenv("MEMORY_STRUCTURAL_MAX_PER_TICK", "9")
+    assert ew._structural_max_per_tick() == 1
+
+
+def test_structural_throttle_skips_until_interval_elapsed(monkeypatch):
+    monkeypatch.setenv("MEMORY_STRUCTURAL_CONSOLIDATION", "true")
+    monkeypatch.setenv("MEMORY_STRUCTURAL_MIN_INTERVAL_SEC", "60")
+    ew._STRUCTURAL_LAST_RUN = 100.0
+    try:
+        assert ew._structural_should_run(now=120.0) is False
+        assert ew._structural_should_run(now=161.0) is True
+    finally:
+        ew._STRUCTURAL_LAST_RUN = 0.0
+
+
 # ──────────────────────────────────────────────
 # Enqueue
 # ──────────────────────────────────────────────

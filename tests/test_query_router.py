@@ -68,6 +68,7 @@ def test_classify_relational_with_two_entities_and_connector():
     assert c.kind == "relational"
     assert "wh-word" in c.signals
     assert any(s.startswith("connector:") for s in c.signals)
+    assert "entity" in c.graph_families
 
 
 def test_classify_relational_explicit_between():
@@ -82,9 +83,21 @@ def test_classify_relational_when_co_mention():
 
 
 def test_classify_semantic_for_factual_question():
-    c = qr.classify_query("how does the deploy script work")
+    c = qr.classify_query("what database are we using")
     assert c.kind in ("semantic", "hybrid")
     assert c.kind != "relational"
+    assert c.graph_families == ["semantic"]
+
+
+def test_classify_temporal_question_routes_to_temporal_graph():
+    c = qr.classify_query("when did we last touch the migration?")
+    assert "temporal" in c.graph_families
+
+
+def test_classify_causal_failure_question_routes_to_causal_and_procedural():
+    c = qr.classify_query("why did install fail and what fixed it?")
+    assert "causal" in c.graph_families
+    assert "procedural" in c.graph_families
 
 
 def test_classify_semantic_short_entity_lookup():

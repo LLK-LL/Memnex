@@ -34,6 +34,7 @@ class GraphQuery:
         node_id: str,
         depth: int = 2,
         types: list[str] | None = None,
+        edge_families: list[str] | None = None,
     ) -> dict[str, Any]:
         """BFS traversal returning a subgraph around a node.
 
@@ -61,7 +62,9 @@ class GraphQuery:
                 break
             next_frontier: set[str] = set()
             for nid in frontier:
-                edges = self.store.get_edges(nid, direction="both")
+                edges = self.store.get_edges(
+                    nid, direction="both", edge_families=edge_families,
+                )
                 for edge in edges:
                     if edge["id"] in seen_edge_ids:
                         continue

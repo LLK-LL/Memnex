@@ -261,6 +261,18 @@ class TestGraphStoreEdges:
         # Incoming from saas + outgoing to jwt + outgoing to go
         assert len(edges) == 3
 
+    def test_get_edges_filters_by_edge_family(self, graph_store):
+        a = graph_store.add_node("concept", "cause")
+        b = graph_store.add_node("concept", "effect")
+        c = graph_store.add_node("concept", "topic")
+        graph_store.add_edge(a, b, "caused_by", weight=0.8)
+        graph_store.add_edge(a, c, "similar_to", weight=0.7)
+
+        edges = graph_store.get_edges(a, direction="outgoing", edge_families=["causal"])
+
+        assert len(edges) == 1
+        assert edges[0]["relation_type"] == "caused_by"
+
     def test_reinforce_edge(self, graph_store):
         a = graph_store.add_node("concept", "a")
         b = graph_store.add_node("concept", "b")
@@ -362,6 +374,20 @@ class TestGraphQueryTraversal:
         result = graph_query.neighborhood("nonexistent")
         assert result["nodes"] == []
         assert result["edges"] == []
+
+    def test_neighborhood_filters_by_edge_family(self, graph_query, graph_store):
+        root = graph_store.add_node("concept", "root")
+        cause = graph_store.add_node("concept", "cause")
+        similar = graph_store.add_node("concept", "similar")
+        graph_store.add_edge(root, cause, "caused_by", weight=0.8)
+        graph_store.add_edge(root, similar, "similar_to", weight=0.7)
+
+        result = graph_query.neighborhood(root, depth=1, edge_families=["causal"])
+        node_names = {n["name"] for n in result["nodes"]}
+
+        assert "root" in node_names
+        assert "cause" in node_names
+        assert "similar" not in node_names
 
     def test_shortest_path(self, graph_query, populated_graph):
         path = graph_query.shortest_path(

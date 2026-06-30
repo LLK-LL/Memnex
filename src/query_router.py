@@ -97,6 +97,7 @@ class QueryClassification:
     confidence: float           # 0.0–1.0
     entities: list[str] = field(default_factory=list)
     signals: list[str] = field(default_factory=list)
+    graph_families: list[str] = field(default_factory=list)
 
 
 # ──────────────────────────────────────────────
@@ -146,27 +147,71 @@ def extract_entity_candidates(query: str) -> list[str]:
     return out
 
 
+_TEMPORAL_INTENT = re.compile(
+    r"\b(when|last|before|after|during|timeline|history|recent|recently|"
+    r"date|time|chronology|sequence)\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
+_CAUSAL_INTENT = re.compile(
+    r"\b(why|because|cause[sd]?|caused\s+by|reason|root\s+cause|fail(?:ed|ure)?|"
+    r"broke|breaks?|blocked?|fixed?|resolved?|prevent(?:ed)?|enable[sd]?)\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
+_PROCEDURAL_INTENT = re.compile(
+    r"\b(how|fix(?:ed)?|resolved?|step|workflow|procedure|runbook|install|"
+    r"deploy|implemented?|tested?)\b",
+    re.IGNORECASE | re.UNICODE,
+)
+
+
+def infer_graph_families(query: str, kind: str, entities: list[str]) -> list[str]:
+    """Choose MAGMA-style graph families for the query without model calls."""
+    families: list[str] = []
+    if _TEMPORAL_INTENT.search(query):
+        families.append("temporal")
+    if _CAUSAL_INTENT.search(query):
+        families.append("causal")
+    if _PROCEDURAL_INTENT.search(query):
+        families.append("procedural")
+    if kind == "relational" or entities:
+        families.append("entity")
+    if not families:
+        families.append("semantic")
+    try:
+        from graph.edge_taxonomy import normalize_edge_families
+        return normalize_edge_families(families)
+    except Exception:
+        return list(dict.fromkeys(families))
+
+
 def classify_query(query: str) -> QueryClassification:
     """Heuristic classifier — sub-millisecond, no model calls."""
     if not query or not query.strip():
         return QueryClassification(kind="hybrid", confidence=0.0,
-                                    entities=[], signals=["empty"])
+                                    entities=[], signals=["empty"],
+                                    graph_families=["semantic"])
 
     # Hard override for ops/CI testing — saves us from "MEMORY_*=true,
     # but I want to verify the relational path locally" gymnastics.
     forced = _force_kind()
     if forced:
+        entities = extract_entity_candidates(query)
         return QueryClassification(
             kind=forced, confidence=1.0,
-            entities=extract_entity_candidates(query),
+            entities=entities,
             signals=[f"forced-by-env={forced}"],
+            graph_families=infer_graph_families(query, forced, entities),
         )
 
     if not _enabled():
+        entities = extract_entity_candidates(query)
         return QueryClassification(
             kind="hybrid", confidence=0.0,
-            entities=extract_entity_candidates(query),
+            entities=entities,
             signals=["router disabled"],
+            graph_families=infer_graph_families(query, "hybrid", entities),
         )
 
     signals: list[str] = []
@@ -211,6 +256,7 @@ def classify_query(query: str) -> QueryClassification:
         confidence=score_relational if kind == "relational" else 1.0 - score_relational,
         entities=entities,
         signals=signals,
+        graph_families=infer_graph_families(query, kind, entities),
     )
 
 

@@ -374,6 +374,7 @@ class GraphStore:
         node_id: str,
         direction: str = "both",
         relation_types: list[str] | None = None,
+        edge_families: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get edges for a node.
 
@@ -381,6 +382,7 @@ class GraphStore:
             node_id: The node to query edges for.
             direction: 'outgoing', 'incoming', or 'both'.
             relation_types: Optional filter by relation types.
+            edge_families: Optional MAGMA-style family filter.
 
         Returns:
             List of edge dicts.
@@ -407,7 +409,14 @@ class GraphStore:
         rows = self.db.execute(
             f"SELECT * FROM graph_edges WHERE {where} ORDER BY weight DESC", params
         ).fetchall()
-        return [dict(r) for r in rows]
+        edges = [dict(r) for r in rows]
+        if edge_families:
+            from graph.edge_taxonomy import relation_allowed_by_families
+            edges = [
+                edge for edge in edges
+                if relation_allowed_by_families(edge.get("relation_type"), edge_families)
+            ]
+        return edges
 
     def reinforce_edge(
         self,

@@ -97,6 +97,48 @@ def _stale_after_sec() -> int:
         return 60
 
 
+_STRUCTURAL_LAST_RUN = 0.0
+
+
+def _structural_enabled() -> bool:
+    return os.environ.get("MEMORY_STRUCTURAL_CONSOLIDATION", "false").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _structural_model_size() -> str:
+    return os.environ.get("MEMORY_STRUCTURAL_MODEL_SIZE", "3b").strip().lower()
+
+
+def _structural_max_per_tick() -> int:
+    raw = os.environ.get("MEMORY_STRUCTURAL_MAX_PER_TICK")
+    try:
+        requested = int(raw) if raw else 1
+    except ValueError:
+        requested = 1
+    requested = max(1, min(20, requested))
+    if _structural_model_size() == "3b":
+        return 1
+    return requested
+
+
+def _structural_min_interval_sec() -> float:
+    raw = os.environ.get("MEMORY_STRUCTURAL_MIN_INTERVAL_SEC")
+    if not raw:
+        return 5.0 if _structural_model_size() == "3b" else 1.0
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 5.0 if _structural_model_size() == "3b" else 1.0
+
+
+def _structural_should_run(now: float | None = None) -> bool:
+    if not _structural_enabled():
+        return False
+    current = time.monotonic() if now is None else now
+    return current - _STRUCTURAL_LAST_RUN >= _structural_min_interval_sec()
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -391,6 +433,25 @@ def _run_wiki_refresh(db, task: EnrichmentTask, store=None) -> None:
     )
 
 
+def _run_structural_consolidation(db, task: EnrichmentTask, store=None) -> None:
+    """Throttled placeholder for MAGMA-style slow structural consolidation.
+
+    The stage is opt-in and intentionally conservative for local 3B Ollama:
+    at most one task per tick and a minimum interval between runs.  The first
+    slice records no edges; later slices can add causal/narrative inference
+    behind this throttle.
+    """
+    global _STRUCTURAL_LAST_RUN
+    if not _structural_should_run():
+        return
+    _STRUCTURAL_LAST_RUN = time.monotonic()
+    limit = _structural_max_per_tick()
+    LOG(
+        f"structural consolidation tick allowed "
+        f"(kid={task.knowledge_id}, max_per_tick={limit}, model={_structural_model_size()})"
+    )
+
+
 # Stages run in deterministic order. quality_gate first so a 'drop' is
 # visible to a follow-up read before contradiction_detector spends LLM
 # budget on a record we are about to soft-drop anyway.
@@ -400,6 +461,7 @@ _STAGES: list[tuple[str, Callable[..., None]]] = [
     ("contradiction", _run_contradiction_detector),
     ("episodic", _run_episodic_event),
     ("wiki", _run_wiki_refresh),
+    ("structural", _run_structural_consolidation),
 ]
 
 
@@ -458,20 +520,20 @@ class _WorkerThread(threading.Thread):
     def __init__(self, store):
         super().__init__(daemon=True, name="enrich-worker")
         self._store = store
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self) -> None:
         tick = _tick_interval()
         LOG(f"started (tick={tick}s, batch={_batch_size()})")
-        while not self._stop.is_set():
+        while not self._stop_event.is_set():
             try:
                 run_pending(self._store.db, store=self._store)
             except Exception as e:
                 LOG(f"tick error: {e}")
-            self._stop.wait(tick)
+            self._stop_event.wait(tick)
 
 
 def start_worker(store) -> _WorkerThread | None:
