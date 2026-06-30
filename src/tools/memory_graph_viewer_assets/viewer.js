@@ -441,6 +441,14 @@ function visibleNodeSystem(node) {
   return node.memorySystem || memorySystemForData(node.raw || node);
 }
 
+function matchesSystem(node, systemKey) {
+  const key = String(systemKey || "");
+  const parts = key.split(":");
+  const namespace = parts.length > 1 ? parts[0] : null;
+  return visibleNodeSystem(node) === baseSystemKey(systemKey)
+    && (!namespace || node.agentNamespace === namespace);
+}
+
 function scoreVisibleNode(node) {
   const raw = node.raw || {};
   const layerScore = { core: 80, active: 50, knowledge: 25, episode: 10, external: 6 }[node.layer] || 0;
@@ -930,7 +938,7 @@ function showNodeSelection(node) {
 
 function showSystemSelection(systemKey) {
   const members = filteredGraph.nodes
-    .filter(node => visibleNodeSystem(node) === systemKey)
+    .filter(node => matchesSystem(node, systemKey))
     .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
   const systemLinks = linksForNodes(new Set(members.map(node => node.id)));
   const typeBreakdown = summarizeBy(members, node => node.raw?.type || node.type || "memory");
@@ -1037,7 +1045,7 @@ function updateInspectorTabs() {
 
 function renderNodesForSystem(systemKey) {
   const members = filteredGraph.nodes
-    .filter(node => visibleNodeSystem(node) === systemKey)
+    .filter(node => matchesSystem(node, systemKey))
     .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
   document.getElementById("nodesPanel").innerHTML = renderNodeList(
     members,
@@ -1085,7 +1093,7 @@ function renderNodeListItem(node) {
         <span class="breakdown-dot" style="background:${escapeHtml(viewerSystemColor(system))}"></span>
         <strong>${escapeHtml(title)}</strong>
       </div>
-      <div class="meta">${escapeHtml(raw.type || node.type || "memory")} · ${escapeHtml(systemLabel(system))} · ${escapeHtml(raw.galaxy_layer || node.layer || "unknown")}</div>
+      <div class="meta">${escapeHtml(node.agentLabel || raw.agent_label || "Codex")} · ${escapeHtml(raw.type || node.type || "memory")} · ${escapeHtml(systemLabel(system))} · ${escapeHtml(raw.galaxy_layer || node.layer || "unknown")}</div>
       <div class="node-facts">
         <span>importance ${escapeHtml(raw.importance ?? 0)}</span>
         <span>mentions ${escapeHtml(raw.mention_count ?? 0)}</span>
@@ -1211,7 +1219,7 @@ function linksForNodes(nodeIds) {
 }
 
 function groupSystemRelations(systemKey) {
-  const memberIds = new Set(filteredGraph.nodes.filter(node => visibleNodeSystem(node) === systemKey).map(node => node.id));
+  const memberIds = new Set(filteredGraph.nodes.filter(node => matchesSystem(node, systemKey)).map(node => node.id));
   const grouped = {};
   for (const link of filteredGraph.links) {
     const sourceId = String(link.source.id || link.source);
@@ -1354,11 +1362,17 @@ function systemEvidenceSummary(members, links) {
 }
 
 function systemLabel(systemKey) {
-  return `${capitalize(systemKey)} System`;
+  return `${capitalize(baseSystemKey(systemKey))} System`;
 }
 
 function viewerSystemColor(systemKey) {
-  return systemColors[systemKey] || "#4ea1ff";
+  return systemColors[baseSystemKey(systemKey)] || "#4ea1ff";
+}
+
+function baseSystemKey(systemKey) {
+  const key = String(systemKey || "knowledge");
+  const parts = key.split(":");
+  return parts.length > 1 ? parts.at(-1) : key;
 }
 
 function selectedNodeLabel(nodeId) {
@@ -1496,6 +1510,7 @@ function renderStats(metadata) {
   const filteredEdges = Number(metadata.edge_count ?? totalEdges);
   const visibleNodes = Number(metadata.visible_node_count ?? filteredNodes);
   const visibleEdges = Number(metadata.visible_edge_count ?? filteredEdges);
+  const agentCount = Array.isArray(metadata?.agent_galaxies) ? metadata.agent_galaxies.length : 1;
   const visibleSuffix = visibleNodes !== filteredNodes || visibleEdges !== filteredEdges
     ? ` (${visibleNodes}/${visibleEdges} shown)`
     : "";
@@ -1504,6 +1519,7 @@ function renderStats(metadata) {
   if (liveRows) {
     liveRows.innerHTML = [
       ["Systems", countVisibleSystems()],
+      ["Agent galaxies", agentCount],
       ["Nodes", visibleNodes],
       ["Connections", visibleEdges],
       ["Inferred Links", filteredEdges],

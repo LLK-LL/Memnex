@@ -29,7 +29,7 @@ $InstallDir = if ($env:CLAUDE_MEMORY_INSTALL_DIR) {
 }
 $MemoryDir = if ($env:CLAUDE_MEMORY_DIR) { $env:CLAUDE_MEMORY_DIR } else { Join-Path $env:USERPROFILE ".claude-memory" }
 
-$HookPython = [System.IO.Path]::Combine($InstallDir, ".venv", "Scripts", "python.exe")
+$HookPython = if ($env:HOOK_PYTHON) { $env:HOOK_PYTHON } else { [System.IO.Path]::Combine($InstallDir, ".venv", "Scripts", "python.exe") }
 if (-not (Test-Path $HookPython)) {
     $HookPython = (Get-Command python -ErrorAction SilentlyContinue).Source
     if (-not $HookPython) {
@@ -121,9 +121,14 @@ state["nudge_count"] = int(state.get("nudge_count", 0)) + 1
 state_path.write_text(json.dumps(state))
 '@
     try {
-        $nudgeOut = & $HookPython -c $NudgeScript $TmpInput $MemoryDir 2>$null
+        $NudgePy = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "cmm-nudge-$(New-Guid).py")
+        [System.IO.File]::WriteAllText($NudgePy, $NudgeScript)
+        $nudgeOut = & $HookPython $NudgePy $TmpInput $MemoryDir 2>$null
+        Remove-Item -Path $NudgePy -ErrorAction SilentlyContinue
         if ($nudgeOut) { Write-Output $nudgeOut }
-    } catch { }
+    } catch {
+        if ($NudgePy) { Remove-Item -Path $NudgePy -ErrorAction SilentlyContinue }
+    }
 }
 
 # Opt-in guard — observation capture only when explicitly enabled.
@@ -198,6 +203,9 @@ except Exception:
 
 $arguments = @("-c", $PyScript, $SrcDir, $MemoryDir, $TmpInput)
 try {
+    $CapturePy = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "cmm-capture-$(New-Guid).py")
+    [System.IO.File]::WriteAllText($CapturePy, $PyScript)
+    $arguments = @($CapturePy, $SrcDir, $MemoryDir, $TmpInput)
     Start-Process -FilePath $HookPython `
         -ArgumentList $arguments `
         -WindowStyle Hidden `

@@ -293,7 +293,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
       orbitLayer.addChild(guide);
     }
     for (const system of layout.systems || []) {
-      if (system.key === "router") continue;
+      if ((system.baseKey || system.key) === "router") continue;
       const guide = new PIXI.Graphics();
       drawSystemOrbitGuide(guide, system);
       systemOrbitGuidesByKey.set(system.key, guide);
@@ -503,9 +503,9 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
         nodeLayer.addChild(hit);
       }
     }
-    if (layout.view === "galaxy") {
+      if (layout.view === "galaxy") {
       for (const system of layout.systems || []) {
-        if (system.key === "router") continue;
+        if ((system.baseKey || system.key) === "router") continue;
         const hit = new PIXI.Graphics();
         hit.eventMode = "static";
         hit.cursor = "pointer";
@@ -523,7 +523,11 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
 
   function drawLabels(layout, state) {
     const placed = [];
-    for (const node of layout.nodes || []) {
+    const labelNodes = [...(layout.nodes || [])].sort((a, b) =>
+      Number(b.labelPriority || 0) - Number(a.labelPriority || 0)
+      || Number(b.orbitalRole === "agent-core") - Number(a.orbitalRole === "agent-core")
+    );
+    for (const node of labelNodes) {
       if (!shouldLabel(node, state)) continue;
       const anchor = dynamicLabelAnchor(node, scale);
       const systemLike = isSystemLikeNode(node);
@@ -532,7 +536,7 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
         : createNodeLabel(PIXI, node, state, anchor);
       applyResponsiveLabelScale(label, scale);
       positionLabel(label, anchor);
-      const bounds = label.bounds;
+      const bounds = node.orbitalRole === "agent-core" ? padBounds(label.bounds, 18) : label.bounds;
       if (!isPinned(node, state) && placed.some(item => overlaps(item, bounds))) continue;
       placed.push(bounds);
       let leader = null;
@@ -548,10 +552,13 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
 
   function drawSystemArcs(layout, state) {
     if (layout?.view !== "galaxy") return;
-    const router = (layout.systems || []).find(system => system.key === "router");
-    if (!router) return;
+    const routers = new Map((layout.systems || [])
+      .filter(system => (system.baseKey || system.key) === "router")
+      .map(system => [system.agentNamespace || "codex", system]));
     for (const system of layout.systems || []) {
-      if (system.key === "router") continue;
+      if ((system.baseKey || system.key) === "router") continue;
+      const router = routers.get(system.agentNamespace || "codex");
+      if (!router) continue;
       const arc = new PIXI.Graphics();
       arc.memoryGalaxySystemArcKey = system.key;
       drawSystemArcLine(arc, router, system);
@@ -705,11 +712,14 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
 
   function updateLinkGraphics(layout) {
     const systemsByKey = new Map((layout.systems || []).map(system => [system.key, system]));
-    const router = systemsByKey.get("router");
+    const routers = new Map((layout.systems || [])
+      .filter(system => (system.baseKey || system.key) === "router")
+      .map(system => [system.agentNamespace || "codex", system]));
     const nodesById = new Map((layout.nodes || []).map(node => [String(node.id), node]));
     for (const graphic of linkLayer.children || []) {
       if (graphic.memoryGalaxySystemArcKey) {
         const system = systemsByKey.get(graphic.memoryGalaxySystemArcKey);
+        const router = system ? routers.get(system.agentNamespace || "codex") : null;
         if (router && system) drawSystemArcLine(graphic, router, system);
         continue;
       }
@@ -1144,7 +1154,7 @@ function isPinned(node, state) {
 }
 
 function isSystemLikeNode(node) {
-  return Boolean(node.isSystemNode || node.isPlanetSystemNode || ["galactic-core", "central-star", "star"].includes(node.orbitalRole));
+  return Boolean(node.isSystemNode || node.isPlanetSystemNode || ["agent-core", "galactic-core", "central-star", "star"].includes(node.orbitalRole));
 }
 
 function nextTapDetail(kind, key, lastTap) {
@@ -1201,9 +1211,10 @@ function createSystemLabel(PIXI, node, anchor) {
   const color = parseColor(node.color || "#7dd3fc");
   const lines = systemLabelLines(node);
   const prominentSolarLabel = Boolean(node.isPlanetSystemNode || node.isSolarCenterStar);
-  const titleFontSize = prominentSolarLabel ? 44 : node.orbitalRole === "galactic-core" ? 16 : 14;
-  const subtitleFontSize = prominentSolarLabel ? 24 : 11;
-  const countFontSize = prominentSolarLabel ? 21 : 11;
+  const isAgentCore = node.orbitalRole === "agent-core";
+  const titleFontSize = prominentSolarLabel ? 44 : isAgentCore ? 24 : node.orbitalRole === "galactic-core" ? 16 : 14;
+  const subtitleFontSize = prominentSolarLabel ? 24 : isAgentCore ? 12 : 11;
+  const countFontSize = prominentSolarLabel ? 21 : isAgentCore ? 12 : 11;
   const title = new PIXI.Text({
     text: lines[0],
     resolution: 2,
@@ -1212,7 +1223,7 @@ function createSystemLabel(PIXI, node, anchor) {
       fontFamily: "Segoe UI, Microsoft YaHei, sans-serif",
       fontSize: titleFontSize,
       fontWeight: "800",
-      stroke: { color: 0x020617, width: prominentSolarLabel ? 7 : 4, alpha: 0.94 },
+      stroke: { color: 0x020617, width: prominentSolarLabel || isAgentCore ? 7 : 4, alpha: 0.94 },
     },
   });
   const subtitle = new PIXI.Text({
@@ -1299,7 +1310,17 @@ function overlaps(a, b) {
   return a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
 }
 
+function padBounds(bounds, pad) {
+  return {
+    x1: bounds.x1 - pad,
+    y1: bounds.y1 - pad,
+    x2: bounds.x2 + pad,
+    y2: bounds.y2 + pad,
+  };
+}
+
 function dynamicLabelAnchor(node, viewScale = 1) {
+  if (node.orbitalRole === "agent-core" && node.labelAnchor) return node.labelAnchor;
   const centerX = Number(node.animation?.orbitCenterX ?? 0);
   const centerY = Number(node.animation?.orbitCenterY ?? 0);
   const angle = Math.atan2(node.y - centerY || 0.0001, node.x - centerX || 0.0001);

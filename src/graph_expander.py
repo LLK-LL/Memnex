@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sqlite3
 from typing import Iterable
 
@@ -52,6 +53,75 @@ def _columns(db: sqlite3.Connection, table: str) -> set[str]:
         return set()
 
 
+def _normalise_agent_namespace(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return "codex"
+    raw = re.sub(r"[^a-z0-9_.:-]+", "-", raw)
+    raw = raw.strip("-._:")
+    return raw or "codex"
+
+
+def _resolve_agent_namespace(value: str | None = None) -> str:
+    return _normalise_agent_namespace(
+        value
+        or os.environ.get("TAM_AGENT_NAMESPACE")
+        or os.environ.get("MEMORY_AGENT_NAMESPACE")
+        or "codex"
+    )
+
+
+def _resolve_agent_namespaces(
+    db: sqlite3.Connection,
+    seed_ids: list[int],
+    agent_namespace: str | None = None,
+    agent_namespaces: Iterable[str] | str | None = None,
+    scope: str | None = None,
+) -> list[str] | None:
+    if str(scope or "").strip().lower() in {"all", "all_agents", "cross_agent"}:
+        return None
+    if agent_namespaces:
+        values = [agent_namespaces] if isinstance(agent_namespaces, str) else list(agent_namespaces)
+        resolved = [_normalise_agent_namespace(v) for v in values if str(v).strip()]
+        return sorted(set(resolved)) or [_resolve_agent_namespace(agent_namespace)]
+    if agent_namespace:
+        return [_resolve_agent_namespace(agent_namespace)]
+    seed_namespaces = _seed_agent_namespaces(db, seed_ids)
+    return seed_namespaces or [_resolve_agent_namespace(None)]
+
+
+def _seed_agent_namespaces(db: sqlite3.Connection, seed_ids: list[int]) -> list[str]:
+    if not seed_ids or not _table_exists(db, "knowledge") or "agent_namespace" not in _columns(db, "knowledge"):
+        return ["codex"]
+    placeholders = ",".join("?" for _ in seed_ids)
+    try:
+        rows = db.execute(
+            f"SELECT DISTINCT agent_namespace FROM knowledge WHERE id IN ({placeholders})",
+            seed_ids,
+        ).fetchall()
+    except sqlite3.Error:
+        return ["codex"]
+    namespaces = sorted({
+        _normalise_agent_namespace(row[0])
+        for row in rows
+        if row[0] is not None and str(row[0]).strip()
+    })
+    return namespaces or ["codex"]
+
+
+def _knowledge_namespace_clause(
+    db: sqlite3.Connection,
+    namespace_filter: list[str] | None,
+    alias: str = "k",
+) -> tuple[str, list]:
+    if namespace_filter is None:
+        return "", []
+    if not _table_exists(db, "knowledge") or "agent_namespace" not in _columns(db, "knowledge"):
+        return ("", []) if "codex" in namespace_filter else (" AND 1=0", [])
+    placeholders = ",".join("?" for _ in namespace_filter)
+    return f" AND {alias}.agent_namespace IN ({placeholders})", list(namespace_filter)
+
+
 def _as_int_list(ids: Iterable[int]) -> list[int]:
     out: list[int] = []
     for x in ids:
@@ -82,6 +152,9 @@ def expand_top_k(
     budget: int = 10,
     min_strength: float = 0.3,
     edge_families: list[str] | None = None,
+    agent_namespace: str | None = None,
+    agent_namespaces: Iterable[str] | str | None = None,
+    scope: str | None = None,
 ) -> list[tuple[int, float]]:
     """Expand seed knowledge ids through graph_nodes/graph_edges 1-hop.
 
@@ -92,6 +165,10 @@ def expand_top_k(
     seeds = _as_int_list(seed_ids)
     if not seeds or budget <= 0:
         return []
+    namespace_filter = _resolve_agent_namespaces(
+        db, seeds, agent_namespace=agent_namespace,
+        agent_namespaces=agent_namespaces, scope=scope,
+    )
 
     if not (
         _table_exists(db, "knowledge_nodes")
@@ -182,15 +259,21 @@ def expand_top_k(
     neigh_list = list(neighbor_best.keys())
     neigh_ph = ",".join("?" for _ in neigh_list)
     strength_select = f", {strength_col}" if strength_col else ", 1.0"
+    namespace_join = ""
+    namespace_clause, namespace_params = _knowledge_namespace_clause(db, namespace_filter, "k")
+    if namespace_clause:
+        namespace_join = "JOIN knowledge k ON k.id = kn.knowledge_id"
     try:
         kn_rows = db.execute(
             f"""
             SELECT kn.knowledge_id, kn.node_id {strength_select}
             FROM knowledge_nodes kn
+            {namespace_join}
             WHERE kn.node_id IN ({neigh_ph})
               AND kn.knowledge_id NOT IN ({placeholders})
+              {namespace_clause}
             """,
-            neigh_list + seeds,
+            neigh_list + seeds + namespace_params,
         ).fetchall()
     except sqlite3.Error as e:
         logger.warning("graph_expander: neighbor->knowledge map failed: %s", e)
@@ -285,6 +368,9 @@ def expand(
     seed_ids: list[int],
     budget: int = 10,
     edge_families: list[str] | None = None,
+    agent_namespace: str | None = None,
+    agent_namespaces: Iterable[str] | str | None = None,
+    scope: str | None = None,
 ) -> list[tuple[int, float]]:
     """Combine graph-edge expansion and association expansion, dedupe, keep max score."""
     seeds = _as_int_list(seed_ids)
@@ -292,7 +378,11 @@ def expand(
         return []
 
     # Split budget generously then trim at the end.
-    a = expand_top_k(db, seeds, budget=budget, edge_families=edge_families)
+    a = expand_top_k(
+        db, seeds, budget=budget, edge_families=edge_families,
+        agent_namespace=agent_namespace, agent_namespaces=agent_namespaces,
+        scope=scope,
+    )
     b = expand_via_associations(db, seeds, budget=budget)
 
     merged = _dedupe_merge(a + b, exclude=set(seeds))
@@ -306,6 +396,9 @@ def explain_expansion_paths(
     *,
     candidate_ids: list[int],
     edge_families: list[str] | None = None,
+    agent_namespace: str | None = None,
+    agent_namespaces: Iterable[str] | str | None = None,
+    scope: str | None = None,
 ) -> dict[int, dict]:
     """Explain the first one-hop graph path from seed knowledge to candidates."""
     seeds = _as_int_list(seed_ids)
@@ -314,6 +407,10 @@ def explain_expansion_paths(
         return {}
     if not (_table_exists(db, "knowledge_nodes") and _table_exists(db, "graph_edges")):
         return {}
+    namespace_filter = _resolve_agent_namespaces(
+        db, seeds, agent_namespace=agent_namespace,
+        agent_namespaces=agent_namespaces, scope=scope,
+    )
 
     try:
         from graph.edge_taxonomy import edge_family_for_relation, relation_allowed_by_families
@@ -323,6 +420,10 @@ def explain_expansion_paths(
 
     seed_ph = ",".join("?" for _ in seeds)
     candidate_ph = ",".join("?" for _ in candidates)
+    namespace_join = ""
+    namespace_clause, namespace_params = _knowledge_namespace_clause(db, namespace_filter, "k")
+    if namespace_clause:
+        namespace_join = "JOIN knowledge k ON k.id = ckn.knowledge_id"
     rows = db.execute(
         f"""
         SELECT skn.knowledge_id AS seed_id,
@@ -340,10 +441,12 @@ def explain_expansion_paths(
                 WHEN ge.source_id = skn.node_id THEN ge.target_id
                 ELSE ge.source_id
             END
+          {namespace_join}
          WHERE skn.knowledge_id IN ({seed_ph})
            AND ckn.knowledge_id IN ({candidate_ph})
+           {namespace_clause}
         """,
-        seeds + candidates,
+        seeds + candidates + namespace_params,
     ).fetchall()
 
     out: dict[int, dict] = {}

@@ -405,23 +405,9 @@ function Register-Mcp-Codex {
     $memEsc = $MemoryDir.Replace("\", "/").Replace('"', '\"')
 
     $tomlBlock = @"
-# --- Claude Total Memory MCP Server ---
+# --- Claude Total Memory MCP Server (Streamable HTTP for Codex Desktop) ---
 [mcp_servers.memory]
-type = "stdio"
-command = "$pyEsc"
-args = ["$srvEsc"]
-required = true
-startup_timeout_sec = 15.0
-tool_timeout_sec = 120.0
-
-[mcp_servers.memory.env]
-CLAUDE_MEMORY_DIR = "$memEsc"
-TAM_MEMORY_DIR = "$memEsc"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-MEMORY_TRIPLE_TIMEOUT_SEC = "120"
-MEMORY_ENRICH_TIMEOUT_SEC = "90"
-MEMORY_REPR_TIMEOUT_SEC = "120"
-MEMORY_TRIPLE_MAX_PREDICT = "512"
+url = "http://127.0.0.1:3737/mcp/"
 # --- End Claude Total Memory ---
 "@
 
@@ -431,7 +417,7 @@ MEMORY_TRIPLE_MAX_PREDICT = "512"
         if (-not $content) { $content = "" }
     }
 
-    $fenceRegex = '(?s)# --- Claude Total Memory MCP Server ---.*?# --- End Claude Total Memory ---'
+    $fenceRegex = '(?s)# --- Claude Total Memory MCP Server(?: \(Streamable HTTP for Codex Desktop\))? ---.*?# --- End Claude Total Memory ---'
     $sectionRegex = '(?s)\[mcp_servers\.memory\].*?(?=\n\[|\z)'
 
     # MatchEvaluator avoids dollar-sign / backslash interpolation in the

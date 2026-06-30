@@ -741,25 +741,10 @@ srv_path = toml_escape(os.environ['SRV_PATH'])
 memory_dir = toml_escape(os.environ['MEMORY_DIR'])
 
 toml_block = f'''
-# --- total-agent-memory MCP Server ---
+# --- Claude Total Memory MCP Server (Streamable HTTP for Codex Desktop) ---
 [mcp_servers.memory]
-type = "stdio"
-command = "{py_path}"
-args = ["{srv_path}"]
-required = true
-startup_timeout_sec = 15.0
-tool_timeout_sec = 120.0
-
-[mcp_servers.memory.env]
-TAM_MEMORY_DIR = "{memory_dir}"
-CLAUDE_MEMORY_DIR = "{memory_dir}"
-MEMORY_MODE = "fast"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-MEMORY_TRIPLE_TIMEOUT_SEC = "120"
-MEMORY_ENRICH_TIMEOUT_SEC = "90"
-MEMORY_REPR_TIMEOUT_SEC = "120"
-MEMORY_TRIPLE_MAX_PREDICT = "512"
-# --- End total-agent-memory ---
+url = "http://127.0.0.1:3737/mcp/"
+# --- End Claude Total Memory ---
 '''
 
 content = ''
@@ -768,7 +753,7 @@ if os.path.exists(config_path):
         content = f.read()
 
 if '[mcp_servers.memory]' in content:
-    pattern = r'# --- (Claude Total Memory|total-agent-memory) MCP Server ---.*?# --- End (Claude Total Memory|total-agent-memory) ---'
+    pattern = r'# --- (Claude Total Memory|total-agent-memory) MCP Server(?: \(Streamable HTTP for Codex Desktop\))? ---.*?# --- End (Claude Total Memory|total-agent-memory) ---'
     if re.search(pattern, content, re.DOTALL):
         content = re.sub(pattern, toml_block.strip(), content, flags=re.DOTALL)
     else:

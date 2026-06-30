@@ -156,6 +156,7 @@ def gdb():
             session_id TEXT, type TEXT, content TEXT,
             project TEXT, tags TEXT DEFAULT '[]',
             status TEXT DEFAULT 'active',
+            agent_namespace TEXT NOT NULL DEFAULT 'codex',
             created_at TEXT, last_confirmed TEXT,
             recall_count INTEGER DEFAULT 0
         );
@@ -191,16 +192,16 @@ def gdb():
     db.close()
 
 
-def _seed_event(db, knowledge_id, content, entity_names, project="vito"):
+def _seed_event(db, knowledge_id, content, entity_names, project="vito", agent_namespace="codex"):
     """Helper that mirrors what save_knowledge would have done."""
     import json
     import episodic as ep
 
     db.execute(
         "INSERT INTO knowledge (id, session_id, type, content, project, "
-        "tags, created_at) VALUES (?, 's1', 'decision', ?, ?, '[]', "
+        "tags, agent_namespace, created_at) VALUES (?, 's1', 'decision', ?, ?, '[]', ?, "
         "'2026-04-27T00:00:00Z')",
-        (knowledge_id, content, project),
+        (knowledge_id, content, project, agent_namespace),
     )
     for i, name in enumerate(entity_names):
         nid = f"k{knowledge_id}-e{i}"
@@ -238,6 +239,39 @@ def test_graph_search_single_entity_returns_all_mentions(gdb):
     _seed_event(gdb, 2, "Postgres extension audit", ["Postgres"])
 
     rows = qr.graph_search(gdb, entities=["Postgres"], project="vito")
+    assert {r["id"] for r in rows} == {1, 2}
+
+
+def test_graph_search_defaults_to_codex_namespace(gdb):
+    _seed_event(gdb, 1, "Codex Postgres memory", ["Postgres"], agent_namespace="codex")
+    _seed_event(gdb, 2, "Reasonix Postgres memory", ["Postgres"], agent_namespace="reasonix")
+
+    rows = qr.graph_search(gdb, entities=["Postgres"], project="vito")
+
+    assert {r["id"] for r in rows} == {1}
+    assert rows[0]["agent_namespace"] == "codex"
+
+
+def test_graph_search_can_query_reasonix_namespace(gdb):
+    _seed_event(gdb, 1, "Codex Postgres memory", ["Postgres"], agent_namespace="codex")
+    _seed_event(gdb, 2, "Reasonix Postgres memory", ["Postgres"], agent_namespace="reasonix")
+
+    rows = qr.graph_search(
+        gdb, entities=["Postgres"], project="vito", agent_namespace="reasonix",
+    )
+
+    assert {r["id"] for r in rows} == {2}
+    assert rows[0]["agent_namespace"] == "reasonix"
+
+
+def test_graph_search_all_agents_scope_returns_all_namespaces(gdb):
+    _seed_event(gdb, 1, "Codex Postgres memory", ["Postgres"], agent_namespace="codex")
+    _seed_event(gdb, 2, "Reasonix Postgres memory", ["Postgres"], agent_namespace="reasonix")
+
+    rows = qr.graph_search(
+        gdb, entities=["Postgres"], project="vito", scope="all_agents",
+    )
+
     assert {r["id"] for r in rows} == {1, 2}
 
 

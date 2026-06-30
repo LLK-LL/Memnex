@@ -57,6 +57,10 @@ def test_stats_counts_grow_after_save(store):
     recall = _srv.Recall(store)
     stats = recall.stats()
 
-    # Three queues each should have 2 pending items
-    for name, counts in stats["v6_queues"].items():
-        assert counts["pending"] == 2, f"queue {name} expected 2 pending, got {counts}"
+    # Triple/deep enrichment remain queued for background processing. The
+    # lightweight representation view is generated synchronously on save and
+    # its queue item is immediately marked done.
+    assert stats["v6_queues"]["triple_extraction"]["pending"] == 2
+    assert stats["v6_queues"]["deep_enrichment"]["pending"] == 2
+    assert stats["v6_queues"]["representations"]["pending"] == 0
+    assert stats["v6_queues"]["representations"]["done"] == 2

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -71,6 +72,16 @@ def _stable_hash(values: list[str]) -> str:
     return digest.hexdigest()
 
 
+def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(row["name"] == column for row in rows)
+
+
+def _agent_label(namespace: str | None) -> str:
+    parts = re.split(r"[-_:]+", namespace or "codex")
+    return " ".join(part[:1].upper() + part[1:] for part in parts if part) or "Codex"
+
+
 def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -132,6 +143,19 @@ def load_graph(
         node_params = (max_nodes,)
     node_rows = conn.execute(node_sql, node_params).fetchall()
     node_ids = {row["id"] for row in node_rows}
+    knowledge_by_node = _load_knowledge_links(conn, node_ids, content_limit)
+    node_namespace: dict[str, str] = {}
+    node_export_ids: dict[str, str] = {}
+    for row in node_rows:
+        raw_id = str(row["id"])
+        namespace_counts: dict[str, int] = {}
+        for item in knowledge_by_node.get(raw_id, []):
+            namespace = str(item.get("agent_namespace") or "codex")
+            namespace_counts[namespace] = namespace_counts.get(namespace, 0) + 1
+        namespace = max(namespace_counts, key=namespace_counts.get) if namespace_counts else "codex"
+        node_namespace[raw_id] = namespace
+        node_export_ids[raw_id] = f"{namespace}:{raw_id}"
+
     seen_dates = [_parse_iso(row["last_seen_at"]) for row in node_rows]
     seen_dates = [date for date in seen_dates if date is not None]
     oldest_seen = min(seen_dates) if seen_dates else None
@@ -155,12 +179,16 @@ def load_graph(
     for row in edge_rows:
         if row["source_id"] not in node_ids or row["target_id"] not in node_ids:
             continue
+        source = node_export_ids[str(row["source_id"])]
+        target = node_export_ids[str(row["target_id"])]
         edges.append(
             {
                 "data": {
                     "id": row["id"],
-                    "source": row["source_id"],
-                    "target": row["target_id"],
+                    "source": source,
+                    "target": target,
+                    "source_id": row["source_id"],
+                    "target_id": row["target_id"],
                     "relation": row["relation_type"],
                     "weight": float(row["weight"] or 0.0),
                     "context": row["context"] or "",
@@ -179,18 +207,20 @@ def load_graph(
     for edge in edges:
         data = edge["data"]
         relation = str(data["relation"] or "related")
-        for endpoint in (str(data["source"]), str(data["target"])):
+        for endpoint in (str(data["source_id"]), str(data["target_id"])):
             counts = relation_counts_by_node.setdefault(endpoint, {"total": 0})
             counts["total"] = counts.get("total", 0) + 1
             counts[relation] = counts.get(relation, 0) + 1
 
-    node_ids_hash = _stable_hash([str(row["id"]) for row in node_rows])
+    node_ids_hash = _stable_hash([node_export_ids[str(row["id"])] for row in node_rows])
     edge_ids_hash = _stable_hash([str(edge["data"]["id"]) for edge in edges])
-    knowledge_by_node = _load_knowledge_links(conn, node_ids, content_limit)
     nodes = [
         {
             "data": {
-                "id": row["id"],
+                "id": node_export_ids[str(row["id"])],
+                "source_id": row["id"],
+                "agent_namespace": node_namespace[str(row["id"])],
+                "agent_label": _agent_label(node_namespace[str(row["id"])]),
                 "label": row["name"],
                 "type": row["type"],
                 "content": _truncate(row["content"], content_limit),
@@ -221,9 +251,30 @@ def load_graph(
     ]
 
     type_counts: dict[str, int] = {}
+    agent_counts: dict[str, dict[str, int]] = {}
     for node in nodes:
         node_type = str(node["data"]["type"])
         type_counts[node_type] = type_counts.get(node_type, 0) + 1
+        namespace = str(node["data"].get("agent_namespace") or "codex")
+        counts = agent_counts.setdefault(namespace, {"nodes": 0, "edges": 0})
+        counts["nodes"] += 1
+
+    for edge in edges:
+        source_namespace = str(edge["data"]["source"]).split(":", 1)[0] or "codex"
+        target_namespace = str(edge["data"]["target"]).split(":", 1)[0] or "codex"
+        for namespace in {source_namespace, target_namespace}:
+            counts = agent_counts.setdefault(namespace, {"nodes": 0, "edges": 0})
+            counts["edges"] += 1
+
+    agent_galaxies = [
+        {
+            "namespace": namespace,
+            "label": _agent_label(namespace),
+            "node_count": counts["nodes"],
+            "edge_count": counts["edges"],
+        }
+        for namespace, counts in sorted(agent_counts.items())
+    ]
 
     return {
         "metadata": {
@@ -233,6 +284,8 @@ def load_graph(
             "max_edges": max_edges,
             "min_edge_weight": min_edge_weight,
             "type_counts": type_counts,
+            "agent_galaxies": agent_galaxies,
+            "default_agent_namespace": os.environ.get("TAM_AGENT_NAMESPACE", "codex"),
             "timeline": {
                 "start": oldest_seen.isoformat() if oldest_seen else "",
                 "end": newest_seen.isoformat() if newest_seen else "",
@@ -260,11 +313,16 @@ def _load_knowledge_links(
     if not node_ids:
         return {}
     placeholders = ",".join("?" for _ in node_ids)
+    agent_namespace_expr = (
+        "k.agent_namespace AS agent_namespace"
+        if _column_exists(conn, "knowledge", "agent_namespace")
+        else "'codex' AS agent_namespace"
+    )
     rows = conn.execute(
         f"""
         SELECT kn.node_id, kn.role, kn.strength,
                k.id AS knowledge_id, k.type, k.project, k.content, k.tags,
-               k.importance, k.created_at
+               k.importance, k.created_at, {agent_namespace_expr}
         FROM knowledge_nodes kn
         JOIN knowledge k ON k.id = kn.knowledge_id
         WHERE kn.node_id IN ({placeholders})
@@ -289,6 +347,7 @@ def _load_knowledge_links(
                 "tags": _json_loads(row["tags"]) if row["tags"] else [],
                 "importance": row["importance"],
                 "created_at": row["created_at"],
+                "agent_namespace": row["agent_namespace"] or "codex",
             }
         )
     return links

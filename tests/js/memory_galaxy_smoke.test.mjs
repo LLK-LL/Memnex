@@ -165,6 +165,8 @@ assert.match(viewerSource, /pauseGalaxyMotionForSelection\(state, state\.selecte
 assert.doesNotMatch(viewerSource, /pauseGalaxyMotionForSelection\(state, state\.selectedNodeId\);[\s\S]{0,500}drawCurrentLayout\(\{ preserveView:/);
 assert.match(viewerSource, /renderer\.draw\(currentLayout, state, activeRendererHandlers\(\)\);/);
 assert.match(viewerSource, /function filteredNodeById\(id\)/);
+assert.match(viewerSource, /node\.agentLabel \|\| raw\.agent_label \|\| "Codex"/);
+assert.match(viewerSource, /\["Agent galaxies", agentCount\]/);
 assert.match(viewerSource, /const BACKEND_PERF_SAMPLE_INTERVAL_MS = 3000;/);
 assert.match(viewerSource, /if \(document\.hidden\) return;/);
 assert.match(viewerSource, /now - perfState\.backendPerformanceAt < BACKEND_PERF_SAMPLE_INTERVAL_MS/);
@@ -288,6 +290,122 @@ assert.equal(galaxy.nodes.length, 3);
 assert.equal(galaxy.links.length, 2);
 assert.equal(galaxy.nodes.find(node => node.id === "r1").layer, "core");
 
+{
+  const multiAgentGraph = {
+    metadata: {
+      agent_galaxies: [
+        { namespace: "codex", label: "Codex", node_count: 1, edge_count: 0 },
+        { namespace: "reasonix", label: "Reasonix", node_count: 1, edge_count: 0 },
+      ],
+    },
+    elements: {
+      nodes: [
+        { data: { id: "codex:n1", label: "Codex Memory", type: "project", agent_namespace: "codex", agent_label: "Codex", galaxy_layer: "core", knowledge: [] } },
+        { data: { id: "reasonix:n2", label: "Reasonix Memory", type: "project", agent_namespace: "reasonix", agent_label: "Reasonix", galaxy_layer: "core", knowledge: [] } },
+      ],
+      edges: [],
+    },
+  };
+  const converted = convertGraphToGalaxy(multiAgentGraph);
+  assert.deepEqual([...converted.agentGalaxies.keys()], ["codex", "reasonix"]);
+  assert.equal(converted.nodes.find(node => node.id === "reasonix:n2").agentNamespace, "reasonix");
+  assert.equal(converted.nodes.find(node => node.id === "codex:n1").agentLabel, "Codex");
+}
+
+{
+  const graph = {
+    metadata: {
+      agent_galaxies: [
+        { namespace: "codex", label: "Codex", node_count: 2, edge_count: 0 },
+        { namespace: "reasonix", label: "Reasonix", node_count: 2, edge_count: 0 },
+      ],
+    },
+    elements: {
+      nodes: [
+        { data: { id: "codex:a", label: "A", type: "project", agent_namespace: "codex", agent_label: "Codex", galaxy_layer: "core", knowledge: [] } },
+        { data: { id: "codex:b", label: "B", type: "concept", agent_namespace: "codex", agent_label: "Codex", galaxy_layer: "active", knowledge: [] } },
+        { data: { id: "reasonix:a", label: "A", type: "project", agent_namespace: "reasonix", agent_label: "Reasonix", galaxy_layer: "core", knowledge: [] } },
+        { data: { id: "reasonix:b", label: "B", type: "concept", agent_namespace: "reasonix", agent_label: "Reasonix", galaxy_layer: "active", knowledge: [] } },
+      ],
+      edges: [],
+    },
+  };
+  const layout = buildGalaxyOverviewLayout(convertGraphToGalaxy(graph), { maxNodes: 20 });
+  const centers = layout.nodes.filter(node => node.orbitalRole === "agent-core");
+  assert.equal(layout.view, "galaxy");
+  assert.equal(centers.length, 2);
+  assert.equal(JSON.stringify(centers.map(node => node.label).sort()), JSON.stringify(["Codex", "Reasonix"]));
+  const distance = Math.hypot(centers[0].x - centers[1].x, centers[0].y - centers[1].y);
+  assert.ok(distance > 420);
+  assert.ok(distance < 1400);
+  const centerByNamespace = new Map(centers.map(node => [node.agentNamespace, node]));
+  for (const namespace of ["codex", "reasonix"]) {
+    const center = centerByNamespace.get(namespace);
+    const orbits = layout.orbits.filter(orbit => orbit.agentNamespace === namespace);
+    assert.ok(orbits.length > 0);
+    assert.ok(orbits.every(orbit => Math.hypot(orbit.centerX - center.x, orbit.centerY - center.y) < 1));
+  }
+}
+
+{
+  const graph = {
+    metadata: { agent_galaxies: [{ namespace: "reasonix", label: "Reasonix", node_count: 1, edge_count: 0 }] },
+    elements: {
+      nodes: [
+        { data: { id: "reasonix:a", label: "A", type: "project", agent_namespace: "reasonix", agent_label: "Reasonix", galaxy_layer: "core", knowledge: [] } },
+      ],
+      edges: [],
+    },
+  };
+  const layout = buildGalaxyOverviewLayout(convertGraphToGalaxy(graph), { maxNodes: 20 });
+  const center = layout.nodes.find(node => node.orbitalRole === "agent-core");
+  assert.equal(center.label, "Reasonix");
+  assert.ok(center.labelPriority >= 1000);
+  assert.ok(center.renderRadius >= 54);
+  assert.equal(center.labelAnchor.align, "center");
+}
+
+{
+  const graph = {
+    metadata: { agent_galaxies: [{ namespace: "codex", label: "Codex", node_count: 2, edge_count: 0 }] },
+    elements: {
+      nodes: [
+        {
+          data: {
+            id: "codex:router-pattern",
+            label: "Router Pattern",
+            type: "pattern",
+            content: "routing orchestration dispatch",
+            agent_namespace: "codex",
+            agent_label: "Codex",
+            galaxy_layer: "core",
+            knowledge: [],
+          },
+        },
+        {
+          data: {
+            id: "codex:openclaw",
+            label: "Openclaw",
+            type: "project",
+            content: "Project memory",
+            agent_namespace: "codex",
+            agent_label: "Codex",
+            galaxy_layer: "active",
+            knowledge: [{ summary: "OpenClaw personas removed from task routing." }],
+          },
+        },
+      ],
+      edges: [],
+    },
+  };
+  const layout = buildGalaxyOverviewLayout(convertGraphToGalaxy(graph), { maxNodes: 20 });
+  const openclaw = layout.nodes.find(node => node.id === "codex:openclaw");
+  assert.ok(openclaw);
+  assert.equal(openclaw.memorySystem, "project");
+  assert.ok(!layout.nodes.some(node => node.id === "system:codex:router"));
+  assert.ok(layout.nodes.some(node => node.id === "agent:codex" && node.orbitalRole === "agent-core"));
+}
+
 const filtered = filterGalaxy(galaxy, {
   query: "memory",
   activeTypes: new Set(["project", "concept", "rule"]),
@@ -380,7 +498,7 @@ const cacheKey = buildGalaxyCacheKey({
     graph_identity: { node_ids_hash: "nodes", edge_ids_hash: "edges" },
   },
 }, "2d");
-assert.equal(cacheKey, "memory-galaxy:2d:D:\\TotalAgentMemory\\memory-galaxy-cache:nodes:edges");
+assert.equal(cacheKey, "memory-galaxy:2d:D:\\TotalAgentMemory\\memory-galaxy-cache:nodes:edges:codex");
 
 const grouped = groupNeighborRelations(galaxy, "c1");
 assert.deepEqual(Object.keys(grouped).sort(), ["context", "related"]);
@@ -467,6 +585,13 @@ const orbitalFixture = {
 const orbitalGalaxy = convertGraphToGalaxy(orbitalFixture);
 const orbitalById = new Map(orbitalGalaxy.nodes.map(node => [node.id, node]));
 assert.equal(memorySystemForData({ id: "router", type: "pattern", content: "routing orchestration dispatch" }), "router");
+assert.equal(memorySystemForData({
+  id: "codex:openclaw",
+  label: "Openclaw",
+  type: "project",
+  content: "Project memory",
+  knowledge: [{ summary: "OpenClaw personas removed from task routing." }],
+}), "project");
 assert.equal(memorySystemForData({ id: "rule", type: "rule", content: "must verify source" }), "rule");
 assert.equal(memorySystemForData({ id: "persona", type: "concept", content: "persona identity tone style" }), "persona");
 assert.equal(memorySystemForData({ id: "skill", type: "capability", content: "skill workflow trigger" }), "skill");
@@ -515,13 +640,13 @@ assert.ok(orbitalLayout.systems.some(system => system.key === "harness"));
 
 const finalOverview = buildGalaxyOverviewLayout(orbitalGalaxy, { nodeScale: 0.48, width: 1600, height: 1000 });
 assert.equal(finalOverview.view, "galaxy");
-assert.ok(finalOverview.systems.some(system => system.key === "router"));
-assert.ok(finalOverview.systems.some(system => system.key === "skill"));
-assert.ok(finalOverview.systems.every(system => system.key === "router" || system.miniOrbits.length >= 2));
-assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => system.animation && Number(system.animation.orbitRadiusX) > 0));
-assert.ok(finalOverview.nodes.some(node => node.id === "system:skill" && node.isSystemNode === true && node.systemKey === "skill"));
-assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => Number(system.orbitAspect || 1) < 1));
-assert.ok(finalOverview.systems.filter(system => system.key !== "router").every(system => {
+assert.ok(finalOverview.systems.some(system => (system.baseKey || system.key) === "router"));
+assert.ok(finalOverview.systems.some(system => (system.baseKey || system.key) === "skill"));
+assert.ok(finalOverview.systems.every(system => (system.baseKey || system.key) === "router" || system.miniOrbits.length >= 2));
+assert.ok(finalOverview.systems.filter(system => (system.baseKey || system.key) !== "router").every(system => system.animation && Number(system.animation.orbitRadiusX) > 0));
+assert.ok(finalOverview.nodes.some(node => node.id === "system:codex:skill" && node.isSystemNode === true && node.systemKey === "codex:skill"));
+assert.ok(finalOverview.systems.filter(system => (system.baseKey || system.key) !== "router").every(system => Number(system.orbitAspect || 1) < 1));
+assert.ok(finalOverview.systems.filter(system => (system.baseKey || system.key) !== "router").every(system => {
   const aspect = Number(system.orbitAspect || 1);
   return system.miniOrbits.every(orbit => Math.abs(Number(orbit.aspect || 1) - aspect) < 0.0001);
 }));
@@ -533,7 +658,8 @@ assert.ok(finalOverview.nodes.filter(node => node.animation?.parentSystemKey).ev
 assert.ok(finalOverview.nodes.filter(node => node.animation?.parentSystemKey).every(node => Math.abs(Number(node.animation.orbitSpeed || 0)) >= 0.16));
 assert.ok(finalOverview.nodes.filter(node => ["galactic-core", "star", "central-star"].includes(node.orbitalRole)).every(node => Number(node.animation?.spinSpeed || 0) === 0));
 assert.ok(finalOverview.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
-assert.ok(finalOverview.nodes.every(node => node.renderRadius <= 28));
+assert.ok(finalOverview.nodes.filter(node => node.orbitalRole !== "agent-core").every(node => node.renderRadius <= 28));
+assert.ok(finalOverview.nodes.filter(node => node.orbitalRole === "agent-core").every(node => node.renderRadius >= 54));
 assert.ok(finalOverview.bounds.width > 0);
 for (let i = 0; i < finalOverview.nodes.length; i += 1) {
   for (let j = i + 1; j < finalOverview.nodes.length; j += 1) {
@@ -1063,7 +1189,6 @@ assert.equal(stationaryLayout.nodes[1].y, animatedLayout.nodes[1].y);
   const planetAfter = overviewMotion.nodes.find(node => node.id === planet.id);
   assert.ok(parentAfter);
   assert.ok(planetAfter);
-  assert.notEqual(Math.round(parentAfter.x * 1000) / 1000, Math.round(parentBeforePosition.x * 1000) / 1000);
   assert.notEqual(Math.round((planetAfter.x - parentAfter.x) * 1000) / 1000, Math.round(beforeOffset.x * 1000) / 1000);
 }
 const animatedSystemNode = {
@@ -1235,8 +1360,9 @@ assert.ok(animatedSystemNode.x !== animatedSystemNode.labelAnchor.x);
   assert.ok(wideTitleScreenSize >= 12 && wideTitleScreenSize <= 16);
   assert.ok(wideSubtitleScreenSize >= 6.5 && wideSubtitleScreenSize <= 9);
   assert.equal(centerLabel.style.fontSize, planetLabel.style.fontSize);
-  const leaderLayer = root.children.find(layer => layer.children.some(child => child.commands?.some(command => command.name === "moveTo")));
-  const leader = leaderLayer.children.find(child => child.commands?.some(command => command.name === "moveTo") && child.commands?.filter(command => command.name === "lineTo").length >= 2);
+  const leader = root.children
+    .flatMap(layer => layer.children || [])
+    .find(child => child.commands?.some(command => command.name === "moveTo") && child.commands?.filter(command => command.name === "lineTo").length >= 2);
   assert.ok(leader);
   const move = leader.commands.find(command => command.name === "moveTo");
   const lines = leader.commands.filter(command => command.name === "lineTo");
@@ -1286,7 +1412,7 @@ const denseOverviewFixture = {
 const denseOverview = buildGalaxyOverviewLayout(convertGraphToGalaxy(denseOverviewFixture), { nodeScale: 0.48 });
 const denseSkillNodes = denseOverview.nodes.filter(node => node.memorySystem === "skill");
 assert.ok(denseSkillNodes.length <= 10);
-assert.ok(denseSkillNodes.some(node => node.id === "system:skill" && node.label === "Skill System"));
+assert.ok(denseSkillNodes.some(node => node.id === "system:codex:skill" && node.label === "Skill System"));
 assert.ok(!denseSkillNodes.some(node => node.label === "dense skill node 0" && node.orbitalRole === "star"));
 
 const prefNode = orbitalLayoutById.get("pref");

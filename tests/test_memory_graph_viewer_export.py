@@ -117,7 +117,9 @@ def test_load_graph_filters_orphan_edges_and_links_knowledge(tmp_path):
     assert graph["metadata"]["graph_identity"]["edge_ids_hash"]
     assert graph["metadata"]["layout_seed"] == graph["metadata"]["graph_identity"]["node_ids_hash"][:16]
     assert graph["elements"]["edges"][0]["data"]["id"] == "e1"
-    rag = next(node for node in graph["elements"]["nodes"] if node["data"]["id"] == "n1")
+    rag = next(node for node in graph["elements"]["nodes"] if node["data"]["id"] == "codex:n1")
+    assert rag["data"]["source_id"] == "n1"
+    assert rag["data"]["agent_namespace"] == "codex"
     assert rag["data"]["knowledge"][0]["summary"] == "Use RAG first"
     assert "galaxy_layer" in rag["data"]
     assert rag["data"]["galaxy_layer"] in {"core", "active", "knowledge", "episode", "external"}

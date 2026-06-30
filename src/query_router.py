@@ -35,6 +35,45 @@ from typing import Iterable
 LOG = lambda msg: sys.stderr.write(f"[query-router] {msg}\n")
 
 
+def _normalise_agent_namespace(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return "codex"
+    raw = re.sub(r"[^a-z0-9_.:-]+", "-", raw)
+    raw = raw.strip("-._:")
+    return raw or "codex"
+
+
+def _resolve_agent_namespace(value: str | None = None) -> str:
+    return _normalise_agent_namespace(
+        value
+        or os.environ.get("TAM_AGENT_NAMESPACE")
+        or os.environ.get("MEMORY_AGENT_NAMESPACE")
+        or "codex"
+    )
+
+
+def _resolve_agent_namespaces(
+    agent_namespace=None,
+    agent_namespaces=None,
+    scope=None,
+) -> list[str] | None:
+    if str(scope or "").strip().lower() in {"all", "all_agents", "cross_agent"}:
+        return None
+    if agent_namespaces:
+        values = [agent_namespaces] if isinstance(agent_namespaces, str) else list(agent_namespaces)
+        resolved = [_normalise_agent_namespace(v) for v in values if str(v).strip()]
+        return sorted(set(resolved)) or [_resolve_agent_namespace(agent_namespace)]
+    return [_resolve_agent_namespace(agent_namespace)]
+
+
+def _has_column(db, table: str, column: str) -> bool:
+    try:
+        return any(row[1] == column for row in db.execute(f"PRAGMA table_info({table})").fetchall())
+    except Exception:
+        return False
+
+
 # ──────────────────────────────────────────────
 # Patterns
 # ──────────────────────────────────────────────
@@ -271,6 +310,9 @@ def graph_search(
     entities: list[str],
     project: str | None = None,
     limit: int = 10,
+    agent_namespace: str | None = None,
+    agent_namespaces: Iterable[str] | str | None = None,
+    scope: str | None = None,
 ) -> list[dict]:
     """Walk the graph for the given entity names and return knowledge
     rows referenced by their Events. Newest-first.
@@ -303,13 +345,28 @@ def graph_search(
         return []
 
     placeholders = ",".join("?" * len(knowledge_ids))
+    namespace_filter = _resolve_agent_namespaces(agent_namespace, agent_namespaces, scope)
+    has_agent_namespace = _has_column(db, "knowledge", "agent_namespace")
+    namespace_select = (
+        "agent_namespace"
+        if has_agent_namespace
+        else "'codex' AS agent_namespace"
+    )
+    namespace_where = ""
+    params: list = list(knowledge_ids)
+    if namespace_filter and has_agent_namespace:
+        namespace_placeholders = ",".join("?" * len(namespace_filter))
+        namespace_where = f" AND agent_namespace IN ({namespace_placeholders})"
+        params.extend(namespace_filter)
+    elif namespace_filter and not has_agent_namespace and "codex" not in namespace_filter:
+        return []
     try:
         rows = db.execute(
             f"""SELECT id, type, content, project, tags, status, created_at,
-                       last_confirmed, recall_count
+                       last_confirmed, recall_count, {namespace_select}
                   FROM knowledge
-                 WHERE id IN ({placeholders}) AND status = 'active'""",
-            knowledge_ids,
+                 WHERE id IN ({placeholders}) AND status = 'active'{namespace_where}""",
+            params,
         ).fetchall()
     except Exception as exc:
         LOG(f"graph_search knowledge fetch failed: {exc}")
@@ -324,7 +381,7 @@ def graph_search(
             continue
         d = dict(row) if hasattr(row, "keys") else dict(zip(
             ("id", "type", "content", "project", "tags", "status",
-             "created_at", "last_confirmed", "recall_count"), row))
+             "created_at", "last_confirmed", "recall_count", "agent_namespace"), row))
         d["_via"] = "graph_router"
         d["_event_node_id"] = h.event_node_id
         out.append(d)

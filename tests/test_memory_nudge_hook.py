@@ -13,6 +13,7 @@ The hook lives in `hooks/post-tool-use.sh`.
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,9 +24,24 @@ import pytest
 HOOK_PATH = (
     Path(__file__).resolve().parent.parent / "hooks" / "post-tool-use.sh"
 )
+HOOK_PS1_PATH = (
+    Path(__file__).resolve().parent.parent / "hooks" / "post-tool-use.ps1"
+)
 NUDGE_LIB = (
     Path(__file__).resolve().parent.parent / "hooks" / "lib" / "memory-nudge.sh"
 )
+ON_STOP_PS1 = (
+    Path(__file__).resolve().parent.parent / "hooks" / "on-stop.ps1"
+)
+
+
+def _hook_command() -> list[str]:
+    if shutil.which("bash"):
+        return ["bash", str(HOOK_PATH)]
+    pwsh = shutil.which("pwsh") or shutil.which("powershell")
+    if pwsh:
+        return [pwsh, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(HOOK_PS1_PATH)]
+    pytest.skip("requires bash or PowerShell to run post-tool-use hook")
 
 
 def run_hook(payload: dict, env_extra: dict | None = None, memory_dir: Path = None):
@@ -39,7 +55,7 @@ def run_hook(payload: dict, env_extra: dict | None = None, memory_dir: Path = No
     if env_extra:
         env.update({k: str(v) for k, v in env_extra.items()})
     proc = subprocess.run(
-        ["bash", str(HOOK_PATH)],
+        _hook_command(),
         input=json.dumps(payload).encode(),
         env=env,
         capture_output=True,
@@ -185,6 +201,23 @@ class TestNudgeSummary:
     bash-side too."""
 
     def _run_summary(self, tmp_path: Path, session_id: str, project: str) -> str:
+        if not shutil.which("bash"):
+            pwsh = shutil.which("pwsh") or shutil.which("powershell")
+            if not pwsh:
+                pytest.skip("requires bash or PowerShell to run nudge summary")
+            env = os.environ.copy()
+            env["CLAUDE_MEMORY_DIR"] = str(tmp_path)
+            env["CLAUDE_MEMORY_INSTALL_DIR"] = str(ON_STOP_PS1.parent.parent)
+            env["HOOK_PYTHON"] = sys.executable
+            env["CLAUDE_SESSION_ID"] = session_id
+            proc = subprocess.run(
+                [pwsh, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ON_STOP_PS1)],
+                env=env,
+                capture_output=True,
+                timeout=10,
+            )
+            lines = proc.stdout.decode().splitlines()
+            return "\n".join(line for line in lines if line.startswith("MEMORY_FINAL_")).strip()
         wrapper = f"""
             export CLAUDE_MEMORY_DIR={tmp_path}
             export HOOK_PYTHON={sys.executable}

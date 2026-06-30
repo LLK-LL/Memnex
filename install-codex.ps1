@@ -124,19 +124,9 @@ srv_path = toml_escape(os.environ['_CTM_SRV'])
 memory_dir = toml_escape(os.environ['_CTM_MEM'])
 
 toml_block = f'''
-# --- Claude Total Memory MCP Server ---
+# --- Claude Total Memory MCP Server (Streamable HTTP for Codex Desktop) ---
 [mcp_servers.memory]
-type = "stdio"
-command = "{py_path}"
-args = ["{srv_path}"]
-required = true
-startup_timeout_sec = 15.0
-tool_timeout_sec = 120.0
-
-[mcp_servers.memory.env]
-CLAUDE_MEMORY_DIR = "{memory_dir}"
-TAM_MEMORY_DIR = "{memory_dir}"
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+url = "http://127.0.0.1:3737/mcp/"
 # --- End Claude Total Memory ---
 '''
 
@@ -146,7 +136,7 @@ if os.path.exists(config_path):
         content = f.read()
 
 if '[mcp_servers.memory]' in content:
-    pattern = r'# --- Claude Total Memory MCP Server ---.*?# --- End Claude Total Memory ---'
+    pattern = r'# --- Claude Total Memory MCP Server(?: \(Streamable HTTP for Codex Desktop\))? ---.*?# --- End Claude Total Memory ---'
     if re.search(pattern, content, re.DOTALL):
         content = re.sub(pattern, toml_block.strip(), content, flags=re.DOTALL)
     else:

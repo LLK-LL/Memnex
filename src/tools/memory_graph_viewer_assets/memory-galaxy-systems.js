@@ -40,11 +40,13 @@ export function systemLayerForKey(system) {
 }
 
 export function memorySystemForData(data = {}) {
+  const type = String(data.type || "").toLowerCase();
+  const layer = String(data.galaxy_layer || "").toLowerCase();
   const text = [
     data.id,
     data.label,
     data.name,
-    data.type,
+    type,
     data.content,
     data.source,
     data.project,
@@ -53,15 +55,21 @@ export function memorySystemForData(data = {}) {
       : []).map(item => `${item.type || ""} ${item.project || ""} ${item.summary || ""}`),
   ].join(" ").toLowerCase();
 
-  if (/\b(router|routing|route|dispatch|orchestrat)/.test(text)) return "router";
-  if (data.type === "rule" || /\b(rule|policy|must|never|required|guardrail)\b/.test(text)) return "rule";
+  if (type === "project") return "project";
+  if (type === "rule") return "rule";
+  if (type === "capability") return "skill";
+  if (["event", "episode", "session", "observation"].includes(type) || layer === "episode") return "event";
+  if (["source", "citation", "provenance"].includes(type) || layer === "external") return "source";
+  const explicitRouter = ["router", "routing", "route", "dispatch", "orchestration", "orchestrator"].includes(type)
+    || /\b(router|routing|route|dispatch|orchestrat)/.test(String(data.id || data.label || data.name || "").toLowerCase())
+    || (type === "pattern" && /\b(router|routing|route|dispatch|orchestrat)/.test(text));
+  if (explicitRouter) return "router";
+  if (/\b(rule|policy|must|never|required|guardrail)\b/.test(text)) return "rule";
   if (/\b(persona|personality|identity|tone|style|voice|character)\b/.test(text)) return "persona";
-  if (data.type === "capability" || /\b(skill|capability|trigger|workflow|procedure)\b/.test(text)) return "skill";
+  if (/\b(skill|capability|trigger|workflow|procedure)\b/.test(text)) return "skill";
   if (/\b(harness|eval|evaluation|pytest|test runner|smoke test|verification|playwright|benchmark)\b/.test(text)) return "harness";
   if (/\b(preference|prefers|user wants|style preference|interaction preference)\b/.test(text)) return "preference";
-  if (data.type === "project") return "project";
-  if (["event", "episode", "session", "observation"].includes(data.type) || data.galaxy_layer === "episode") return "event";
-  if (["source", "citation", "provenance"].includes(data.type) || /\b(source|provenance|evidence|citation|origin)\b/.test(text) || data.galaxy_layer === "external") return "source";
+  if (/\b(source|provenance|evidence|citation|origin)\b/.test(text)) return "source";
   return "knowledge";
 }
 

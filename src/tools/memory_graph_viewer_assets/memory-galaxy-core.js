@@ -74,6 +74,7 @@ export function nodeColor(type) {
 export function convertGraphToGalaxy(graph) {
   const nodes = graph.elements.nodes.map((node, index) => {
     const data = node.data;
+    const agentNamespace = data.agent_namespace || "codex";
     const layer = data.galaxy_layer || inferLayer(data);
     const orbit = layerOrbit[layer] || layerOrbit.external;
     const angle = index * 2.399963229728653;
@@ -90,6 +91,8 @@ export function convertGraphToGalaxy(graph) {
       y: lift,
       z: Math.sin(angle) * orbit,
       raw: data,
+      agentNamespace,
+      agentLabel: data.agent_label || labelForAgentNamespace(agentNamespace),
     };
     galaxyNode.memorySystem = memorySystemForNode(galaxyNode);
     return galaxyNode;
@@ -103,10 +106,34 @@ export function convertGraphToGalaxy(graph) {
     raw: edge.data,
   }));
 
+  const agentGalaxies = new Map();
+  for (const meta of graph.metadata?.agent_galaxies || []) {
+    const namespace = meta.namespace || "codex";
+    agentGalaxies.set(namespace, {
+      namespace,
+      label: meta.label || labelForAgentNamespace(namespace),
+      nodeCount: Number(meta.node_count || 0),
+      edgeCount: Number(meta.edge_count || 0),
+    });
+  }
+  for (const node of nodes) {
+    if (!agentGalaxies.has(node.agentNamespace)) {
+      agentGalaxies.set(node.agentNamespace, {
+        namespace: node.agentNamespace,
+        label: node.agentLabel || labelForAgentNamespace(node.agentNamespace),
+        nodeCount: 0,
+        edgeCount: 0,
+      });
+    }
+    const meta = agentGalaxies.get(node.agentNamespace);
+    meta.nodeCount += 1;
+  }
+
   return {
     nodes,
     links,
     metadata: graph.metadata || {},
+    agentGalaxies,
   };
 }
 
@@ -132,7 +159,7 @@ export function filterGalaxy(galaxy, options) {
     nodeIds.has(String(link.target.id || link.target))
   );
 
-  return { nodes, links, metadata: galaxy.metadata };
+  return { nodes, links, metadata: galaxy.metadata, agentGalaxies: galaxy.agentGalaxies };
 }
 
 export function buildFocusGalaxy(galaxy, options = {}) {
@@ -180,7 +207,7 @@ export function buildFocusGalaxy(galaxy, options = {}) {
     nodeIds.has(String(link.target.id || link.target))
   );
 
-  return { nodes, links, metadata: galaxy.metadata };
+  return { nodes, links, metadata: galaxy.metadata, agentGalaxies: galaxy.agentGalaxies };
 }
 
 export function buildGalaxy2DLayout(galaxy, options = {}) {
@@ -205,7 +232,7 @@ export function buildGalaxy2DLayout(galaxy, options = {}) {
       labelPriority: nodeScore(node),
     };
   });
-  return { nodes, links: focused.links, metadata: focused.metadata };
+  return { nodes, links: focused.links, metadata: focused.metadata, agentGalaxies: focused.agentGalaxies };
 }
 
 export function buildClusterGalaxy2DLayout(galaxy, options = {}) {
@@ -239,7 +266,7 @@ export function buildClusterGalaxy2DLayout(galaxy, options = {}) {
   const pruned = pruneGalaxyLinks({ nodes, links: focused.links, metadata: focused.metadata }, {
     perNodeLimit: Number(options.perNodeLimit || 4),
   });
-  return { nodes, links: pruned.links, metadata: focused.metadata };
+  return { nodes, links: pruned.links, metadata: focused.metadata, agentGalaxies: focused.agentGalaxies };
 }
 
 export function buildGalacticOrbital2DLayout(galaxy, options = {}) {
@@ -298,6 +325,7 @@ export function buildGalacticOrbital2DLayout(galaxy, options = {}) {
     nodes,
     links: pruned.links,
     metadata: focused.metadata,
+    agentGalaxies: focused.agentGalaxies,
     systems: Object.entries(galacticSystemCenters).map(([key, value]) => ({ key, ...value })),
   };
 }
@@ -360,7 +388,7 @@ export function buildSphereGalaxyLayout(galaxy, options = {}) {
       labelPriority: nodeScore(node),
     };
   });
-  return { nodes, links: focused.links, metadata: focused.metadata };
+  return { nodes, links: focused.links, metadata: focused.metadata, agentGalaxies: focused.agentGalaxies };
 }
 
 export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, options = {}) {
@@ -410,7 +438,7 @@ export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, o
     return expansionParentId ? { ...link, expansionParentId } : link;
   });
 
-  return { nodes, links, metadata: sourceGalaxy.metadata };
+  return { nodes, links, metadata: sourceGalaxy.metadata, agentGalaxies: sourceGalaxy.agentGalaxies };
 }
 
 export function buildEditIntent(action, payload) {
@@ -423,16 +451,24 @@ export function buildEditIntent(action, payload) {
 }
 
 export function memorySystemForNode(node) {
+  const type = String(node.type || "").toLowerCase();
+  const layer = String(node.layer || node.galaxy_layer || "").toLowerCase();
   const text = semanticText(node);
-  if (/\b(router|routing|route|dispatch|orchestrat)/.test(text)) return "router";
-  if (node.type === "rule" || /\b(rule|policy|must|never|required|guardrail)\b/.test(text)) return "rule";
+  if (type === "project") return "project";
+  if (type === "rule") return "rule";
+  if (type === "capability") return "skill";
+  if (["event", "episode", "session", "observation"].includes(type) || layer === "episode") return "event";
+  if (["source", "citation", "provenance"].includes(type) || layer === "external") return "source";
+  const explicitRouter = ["router", "routing", "route", "dispatch", "orchestration", "orchestrator"].includes(type)
+    || /\b(router|routing|route|dispatch|orchestrat)/.test(String(node.id || node.label || node.name || "").toLowerCase())
+    || (type === "pattern" && /\b(router|routing|route|dispatch|orchestrat)/.test(text));
+  if (explicitRouter) return "router";
+  if (/\b(rule|policy|must|never|required|guardrail)\b/.test(text)) return "rule";
   if (/\b(persona|personality|identity|tone|style|voice|character)\b/.test(text)) return "persona";
-  if (/\b(skill|capability|trigger|workflow|procedure)\b/.test(text) || node.type === "capability") return "skill";
+  if (/\b(skill|capability|trigger|workflow|procedure)\b/.test(text)) return "skill";
   if (/\b(harness|eval|evaluation|pytest|test runner|smoke test|verification|playwright|benchmark|browser automation|workflow runner)\b/.test(text)) return "harness";
   if (/\b(preference|prefers|user wants|style preference|interaction preference)\b/.test(text)) return "preference";
-  if (node.type === "project") return "project";
-  if (["event", "episode", "session", "observation"].includes(node.type) || node.layer === "episode") return "event";
-  if (/\b(source|provenance|evidence|citation|origin)\b/.test(text) || node.layer === "external") return "source";
+  if (/\b(source|provenance|evidence|citation|origin)\b/.test(text)) return "source";
   return "knowledge";
 }
 
@@ -512,12 +548,16 @@ export function buildGalaxyCacheKey(graph, view) {
   const metadata = graph.metadata || {};
   const cache = metadata.cache || {};
   const identity = metadata.graph_identity || {};
+  const namespaces = graph.agentGalaxies
+    ? [...graph.agentGalaxies.keys()].join(",")
+    : (metadata.agent_galaxies || []).map(item => item.namespace || "codex").join(",") || "codex";
   return [
     cache.layout_namespace || "memory-galaxy",
     view || "unknown",
     cache.default_root || "D:\\TotalAgentMemory\\memory-galaxy-cache",
     identity.node_ids_hash || "nodes",
     identity.edge_ids_hash || "edges",
+    namespaces,
   ].join(":");
 }
 
@@ -599,7 +639,16 @@ function withFocusRings(galaxy, rings) {
     nodes: galaxy.nodes.map(node => positionForFocusRing(node, rings.get(node.id) ?? 2)),
     links: galaxy.links,
     metadata: galaxy.metadata,
+    agentGalaxies: galaxy.agentGalaxies,
   };
+}
+
+function labelForAgentNamespace(namespace) {
+  return String(namespace || "codex")
+    .split(/[-_:]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Codex";
 }
 
 function positionForFocusRing(node, ring) {

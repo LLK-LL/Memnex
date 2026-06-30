@@ -131,6 +131,15 @@ ARCHIVE_AFTER_DAYS = int(os.environ.get("ARCHIVE_AFTER_DAYS", "180"))
 PURGE_AFTER_DAYS = int(os.environ.get("PURGE_AFTER_DAYS", "365"))
 OBSERVATION_RETENTION_DAYS = int(os.environ.get("OBSERVATION_RETENTION_DAYS", "30"))
 
+
+def _allow_ollama_embed_hot_path() -> bool:
+    return (
+        os.environ.get("MEMORY_ALLOW_OLLAMA_IN_HOT_PATH", "false")
+        .strip()
+        .lower()
+        in ("1", "true", "yes", "on")
+    )
+
 # v10 — importance multipliers applied to the final recall score so a
 # `critical` decision outranks ten `medium` observations at the same RRF
 # rank. Override individual values via env (e.g. MEMORY_IMPORTANCE_BOOST_CRITICAL=2.0).
@@ -154,6 +163,37 @@ USE_BINARY_SEARCH = os.environ.get("USE_BINARY_SEARCH", "auto")  # auto|true|fal
 LITERAL_MATCH_BOOST = float(os.environ.get("MEMORY_LITERAL_MATCH_BOOST", "4.0"))
 LITERAL_MATCH_MIN_LEN = int(os.environ.get("MEMORY_LITERAL_MATCH_MIN_LEN", "12"))
 LOG = lambda msg: sys.stderr.write(f"[memory-mcp] {msg}\n")
+
+
+def _normalise_agent_namespace(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if not raw:
+        return "codex"
+    raw = re.sub(r"[^a-z0-9_.:-]+", "-", raw)
+    raw = raw.strip("-._:")
+    return raw or "codex"
+
+
+def resolve_agent_namespace(value: str | None = None) -> str:
+    return _normalise_agent_namespace(
+        value
+        or os.environ.get("TAM_AGENT_NAMESPACE")
+        or os.environ.get("MEMORY_AGENT_NAMESPACE")
+        or "codex"
+    )
+
+
+def resolve_agent_namespaces(agent_namespace=None, agent_namespaces=None, scope=None) -> list[str] | None:
+    if str(scope or "").strip().lower() in {"all", "all_agents", "cross_agent"}:
+        return None
+    if agent_namespaces:
+        if isinstance(agent_namespaces, str):
+            values = [agent_namespaces]
+        else:
+            values = list(agent_namespaces)
+        resolved = [_normalise_agent_namespace(v) for v in values if str(v).strip()]
+        return sorted(set(resolved)) or [resolve_agent_namespace(agent_namespace)]
+    return [resolve_agent_namespace(agent_namespace)]
 
 # ── Super Memory v5 modules (lazy init) ──
 _v5_modules = {}
@@ -319,8 +359,13 @@ class Store:
         # background thread instead of synchronously. Default OFF so
         # existing deployments keep their current latency profile.
         try:
-            import enrichment_worker as _ew
-            self._enrich_worker = _ew.start_worker(self)
+            if os.environ.get("MEMORY_ENRICHMENT_ENABLED", "false").strip().lower() in (
+                "1", "true", "yes", "on",
+            ):
+                import enrichment_worker as _ew
+                self._enrich_worker = _ew.start_worker(self)
+            else:
+                self._enrich_worker = None
         except Exception as e:
             LOG(f"enrichment worker init skipped: {e}")
             self._enrich_worker = None
@@ -431,8 +476,12 @@ class Store:
                 return "st"
             return "none"
 
-        # Check Ollama availability
-        if USE_OLLAMA_EMBED == "true" or USE_OLLAMA_EMBED == "auto":
+        # Check Ollama availability only when explicitly allowed. In fast
+        # mode even a harmless /api/tags probe violates the hot-path contract.
+        if (
+            (USE_OLLAMA_EMBED == "true" or USE_OLLAMA_EMBED == "auto")
+            and _allow_ollama_embed_hot_path()
+        ):
             if self._check_ollama():
                 return "ollama"
 
@@ -614,25 +663,15 @@ class Store:
                     return r
                 # v11: silent fallback to Ollama is forbidden in fast mode.
                 # Power users opt back in with MEMORY_ALLOW_OLLAMA_IN_HOT_PATH=true.
-                allow_ollama = os.environ.get(
-                    "MEMORY_ALLOW_OLLAMA_IN_HOT_PATH", "false"
-                ).strip().lower() in ("1", "true", "yes", "on")
-                if allow_ollama and self._check_ollama():
+                if _allow_ollama_embed_hot_path() and self._check_ollama():
                     return self._ollama_embed(batch)
             if self._embed_mode == "ollama":
                 r = self._ollama_embed(batch)
                 if r:
                     return r
-            # v11: SentenceTransformer fallback is also gated. Allowed when
-            # the user explicitly opts in OR the mode is not "fastembed"
-            # (i.e. they configured embed_mode=st on purpose).
-            allow_st = (
-                self._embed_mode != "fastembed"
-                or os.environ.get(
-                    "MEMORY_ALLOW_OLLAMA_IN_HOT_PATH", "false"
-                ).strip().lower() in ("1", "true", "yes", "on")
-            )
-            if allow_st and self._embed_mode in ("st", "ollama", "fastembed", "openai", "cohere") and self.embedder:
+            # SentenceTransformers is local and network-free after model
+            # availability, so it is a safe fallback when FastEmbed is absent.
+            if self._embed_mode in ("st", "ollama", "fastembed", "openai", "cohere") and self.embedder:
                 try:
                     return self.embedder.encode(batch).tolist()
                 except Exception:
@@ -952,6 +991,29 @@ class Store:
         if "branch" not in cols:
             self.db.execute("ALTER TABLE knowledge ADD COLUMN branch TEXT DEFAULT ''")
             LOG("Migration: added branch to knowledge table")
+        # v12.6: agent namespace isolation (Codex, Reasonix, future agents).
+        if "agent_namespace" not in cols:
+            self.db.execute("ALTER TABLE knowledge ADD COLUMN agent_namespace TEXT NOT NULL DEFAULT 'codex'")
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_k_agent_namespace ON knowledge(agent_namespace)")
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_k_project_agent_namespace "
+                "ON knowledge(project, agent_namespace)"
+            )
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_k_type_agent_namespace "
+                "ON knowledge(type, agent_namespace)"
+            )
+            LOG("Migration: added agent_namespace to knowledge table")
+        else:
+            self.db.execute("CREATE INDEX IF NOT EXISTS idx_k_agent_namespace ON knowledge(agent_namespace)")
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_k_project_agent_namespace "
+                "ON knowledge(project, agent_namespace)"
+            )
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_k_type_agent_namespace "
+                "ON knowledge(type, agent_namespace)"
+            )
         # Claude Code v2.1.139+ subagent lineage (OTEL agent_id / parent_agent_id)
         if "agent_id" not in cols:
             self.db.execute("ALTER TABLE knowledge ADD COLUMN agent_id TEXT DEFAULT NULL")
@@ -1282,7 +1344,7 @@ class Store:
         """Escape a word for FTS5 by wrapping in double quotes."""
         return '"' + word.replace('"', '""') + '"'
 
-    def _find_duplicate(self, content, ktype, project):
+    def _find_duplicate(self, content, ktype, project, agent_namespace="codex"):
         """Check if very similar knowledge already exists."""
         try:
             words = [w for w in content.split()[:12] if len(w) > 2]
@@ -1293,8 +1355,9 @@ class Store:
                 SELECT k.id, k.content FROM knowledge_fts f
                 JOIN knowledge k ON k.id=f.rowid
                 WHERE f.content MATCH ? AND k.status='active' AND k.project=? AND k.type=?
+                  AND k.agent_namespace=?
                 ORDER BY rank LIMIT 5
-            """, (fts_q, project, ktype))
+            """, (fts_q, project, ktype, agent_namespace))
             for row in rows:
                 if self._jaccard(content, row["content"]) > 0.85:
                     return row["id"]
@@ -1324,7 +1387,7 @@ class Store:
     def save_knowledge(self, sid, content, ktype, project="general", tags=None,
                         context="", branch="", skip_dedup=False, filter_name=None,
                         importance="medium", skip_quality=False, coref=None,
-                        agent_id=None, parent_agent_id=None,
+                        agent_id=None, parent_agent_id=None, agent_namespace=None,
                         _from_outbox=False):
         """Save knowledge. Returns
         ``(record_id, was_deduplicated, was_redacted, private_sections, quality_meta)``.
@@ -1361,16 +1424,18 @@ class Store:
                 filter_name=filter_name, importance=importance,
                 skip_quality=skip_quality, coref=coref,
                 agent_id=agent_id, parent_agent_id=parent_agent_id,
+                agent_namespace=agent_namespace,
                 _from_outbox=_from_outbox,
             )
 
     def _save_knowledge_impl(self, sid, content, ktype, project="general", tags=None,
                               context="", branch="", skip_dedup=False, filter_name=None,
                               importance="medium", skip_quality=False, coref=None,
-                              agent_id=None, parent_agent_id=None,
+                              agent_id=None, parent_agent_id=None, agent_namespace=None,
                               _from_outbox=False):
         """Underlying implementation; wrapped by `save_knowledge` for telemetry."""
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        agent_namespace = resolve_agent_namespace(agent_namespace)
 
         # v10 — Outbox / WriteIntent. Persist the original payload before
         # any work so a mid-save crash is recoverable. _from_outbox=True
@@ -1388,6 +1453,7 @@ class Store:
                         "context": context or "", "branch": branch or "",
                         "filter_name": filter_name, "importance": importance,
                         "agent_id": agent_id, "parent_agent_id": parent_agent_id,
+                        "agent_namespace": agent_namespace,
                     },
                     session_id=sid, content=content, ktype=ktype, project=project,
                 )
@@ -1564,7 +1630,7 @@ class Store:
                 LOG(f"quality_gate error (continuing): {e}")
 
         if not skip_dedup:
-            dup_id = self._find_duplicate(content, ktype, project)
+            dup_id = self._find_duplicate(content, ktype, project, agent_namespace)
             if dup_id:
                 self.db.execute("UPDATE knowledge SET last_confirmed=? WHERE id=?", (now, dup_id))
                 self.db.commit()
@@ -1585,10 +1651,10 @@ class Store:
         cur = self.db.execute("""
             INSERT INTO knowledge (session_id,type,content,context,project,tags,source,confidence,
                                    created_at,last_confirmed,recall_count,branch,importance,
-                                   agent_id,parent_agent_id)
-            VALUES (?,?,?,?,?,?,'explicit',1.0,?,?,0,?,?,?,?)
+                                   agent_id,parent_agent_id,agent_namespace)
+            VALUES (?,?,?,?,?,?,'explicit',1.0,?,?,0,?,?,?,?,?)
         """, (sid, ktype, content, context, project, json.dumps(tags or []), now, now,
-              branch or "", importance_value, agent_id, parent_agent_id))
+              branch or "", importance_value, agent_id, parent_agent_id, agent_namespace))
         self.db.commit()
         rid = cur.lastrowid
 
@@ -1661,7 +1727,8 @@ class Store:
             if embs and _v11_space != "text":
                 # Honest record-keeping: the row IS in `text` model space
                 # because per-space encoder failed — degrade gracefully.
-                _v11_space = "text"
+                model_name = self._active_embed_model_name()
+                _v11_provider_name = self._embed_mode or "fastembed"
         if embs:
             self._upsert_embedding(
                 rid, embs[0], model_name,
@@ -2703,7 +2770,8 @@ class Recall:
         return self.s._check_ollama()
 
     def search(self, query, project=None, ktype="all", limit=10, detail="full", branch=None, fusion="rrf",
-               rerank=False, diverse=False, embedding_space=None, _explain=False):
+               rerank=False, diverse=False, embedding_space=None, agent_namespace=None,
+               agent_namespaces=None, scope=None, _explain=False):
         # v11 Phase 5 — total wall-clock for this search; recorded into
         # `memory_core.telemetry.counters['search_total_ms']`.
         try:
@@ -2718,12 +2786,14 @@ class Recall:
             return self._search_impl(
                 query, project=project, ktype=ktype, limit=limit, detail=detail,
                 branch=branch, fusion=fusion, rerank=rerank, diverse=diverse,
-                embedding_space=embedding_space, _explain=_explain,
+                embedding_space=embedding_space, agent_namespace=agent_namespace,
+                agent_namespaces=agent_namespaces, scope=scope, _explain=_explain,
             )
 
     def _search_impl(self, query, project=None, ktype="all", limit=10, detail="full",
                      branch=None, fusion="rrf", rerank=False, diverse=False,
-                     embedding_space=None, _explain=False):
+                     embedding_space=None, agent_namespace=None, agent_namespaces=None,
+                     scope=None, _explain=False):
         """Underlying implementation; wrapped by `search` for telemetry.
 
         v11 Phase 6b — `embedding_space` (str | list[str] | None) filters
@@ -2745,6 +2815,38 @@ class Recall:
             _v11_spaces = sorted({
                 str(s).strip().lower() for s in embedding_space if str(s).strip()
             }) or None
+        namespace_filter = resolve_agent_namespaces(
+            agent_namespace=agent_namespace,
+            agent_namespaces=agent_namespaces,
+            scope=scope,
+        )
+
+        def _namespace_allows(row) -> bool:
+            if namespace_filter is None:
+                return True
+            if row is None:
+                return False
+            try:
+                value = row.get("agent_namespace", "codex")
+            except AttributeError:
+                keys = row.keys() if hasattr(row, "keys") else []
+                value = row["agent_namespace"] if "agent_namespace" in keys else "codex"
+            return _normalise_agent_namespace(value) in namespace_filter
+
+        def _drop_namespace_disallowed():
+            if namespace_filter is None:
+                return
+            dropped = {
+                kid for kid, item in results.items()
+                if not _namespace_allows(item.get("r"))
+            }
+            if not dropped:
+                return
+            for kid in dropped:
+                results.pop(kid, None)
+            for tier_name, ranked_ids in list(tier_rankings.items()):
+                tier_rankings[tier_name] = [kid for kid in ranked_ids if kid not in dropped]
+
         # v9 A2 L1: fast-path query cache. Keyed by full filter set so that
         # different projects / ktypes / branches / spaces don't collide.
         _v9 = getattr(self.s, "v9_cache", None)
@@ -2753,6 +2855,7 @@ class Recall:
             "fusion": fusion, "rerank": rerank, "diverse": diverse,
             # v11 Phase 6b — embedding_space affects candidate pool, must be in cache key.
             "embedding_space": ",".join(_v11_spaces) if _v11_spaces else None,
+            "agent_namespaces": ",".join(namespace_filter) if namespace_filter else "*",
         }
         # _explain bypasses both caches: the payload includes ephemeral
         # tier rankings that are not part of the cached representation.
@@ -2766,7 +2869,8 @@ class Recall:
             cache_key = self.s.cache.make_key(query=query, project=project, ktype=ktype,
                                                limit=limit, detail=detail, branch=branch,
                                                fusion=fusion, rerank=rerank, diverse=diverse,
-                                               embedding_space=",".join(_v11_spaces) if _v11_spaces else None)
+                                               embedding_space=",".join(_v11_spaces) if _v11_spaces else None,
+                                               agent_namespaces=",".join(namespace_filter) if namespace_filter else "*")
             cached = self.s.cache.get(cache_key)
             if cached is not None:
                 return cached
@@ -2818,6 +2922,10 @@ class Recall:
             if branch:
                 conds.append("(k.branch=? OR k.branch='')")
                 params.append(branch)
+            if namespace_filter:
+                ph = ",".join("?" * len(namespace_filter))
+                conds.append(f"k.agent_namespace IN ({ph})")
+                params.extend(namespace_filter)
             # v11 Phase 6b — restrict FTS results to records whose
             # embedding row carries one of the requested spaces. Records
             # without an embedding row are admitted only when no space
@@ -2851,7 +2959,11 @@ class Recall:
             pass
 
         # ── Tier 2: Semantic search (binary quantization or ChromaDB fallback) ──
-        can_embed = self.s.fastembed or self.s.embedder or self.s._check_ollama()
+        can_embed = (
+            self.s.fastembed
+            or self.s.embedder
+            or (_allow_ollama_embed_hot_path() and self.s._check_ollama())
+        )
         semantic_tier = []   # (doc_id, score) for RRF
         hyde_tier = []       # (doc_id, score) for RRF
         if self.s._check_binary_search() and can_embed:
@@ -2871,7 +2983,7 @@ class Recall:
                             results[kid]["via"].append("semantic")
                         else:
                             rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (kid,))
-                            if rec:
+                            if rec and _namespace_allows(rec):
                                 results[kid] = {"r": rec, "score": score, "via": ["semantic"]}
                 except Exception:
                     pass
@@ -2895,7 +3007,7 @@ class Recall:
                                         results[kid]["via"].append("hyde")
                                 else:
                                     rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (kid,))
-                                    if rec:
+                                    if rec and _namespace_allows(rec):
                                         results[kid] = {"r": rec, "score": score, "via": ["hyde"]}
                     except Exception as e:
                         LOG(f"HyDE search failed: {e}")
@@ -2930,7 +3042,7 @@ class Recall:
                             results[rid]["via"].append("semantic")
                         else:
                             rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (rid,))
-                            if rec:
+                            if rec and _namespace_allows(rec):
                                 results[rid] = {"r": rec, "score": score, "via": ["semantic"]}
                 except Exception:
                     pass
@@ -2955,7 +3067,7 @@ class Recall:
                                         results[rid]["via"].append("hyde")
                                 else:
                                     rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (rid,))
-                                    if rec:
+                                    if rec and _namespace_allows(rec):
                                         results[rid] = {"r": rec, "score": score, "via": ["hyde"]}
                     except Exception as e:
                         LOG(f"HyDE search failed: {e}")
@@ -3000,7 +3112,7 @@ class Recall:
                                     results[kid]["matched_repr"] = winner
                             else:
                                 rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (kid,))
-                                if rec:
+                                if rec and _namespace_allows(rec):
                                     results[kid] = {
                                         "r": rec,
                                         "score": score * 20.0,
@@ -3026,6 +3138,10 @@ class Recall:
                 if branch:
                     conds2.append("(k.branch=? OR k.branch='')")
                     params2.append(branch)
+                if namespace_filter:
+                    ph = ",".join("?" * len(namespace_filter))
+                    conds2.append(f"k.agent_namespace IN ({ph})")
+                    params2.extend(namespace_filter)
                 params2.append(limit * 5)
                 candidates = self.s.q(f"""
                     SELECT * FROM knowledge k WHERE {' AND '.join(conds2)}
@@ -3055,6 +3171,7 @@ class Recall:
             # Multi-hop graph traversal (2 hops for architecture queries)
             before_ids = set(results.keys())
             multi_hop_expand(self.s, top5, results, depth=2)
+            _drop_namespace_disallowed()
             # Collect newly added graph results for RRF tier ranking
             for did in results:
                 if did not in before_ids:
@@ -3070,6 +3187,8 @@ class Recall:
                     JOIN knowledge k ON k.id = CASE WHEN rel.from_id=? THEN rel.to_id ELSE rel.from_id END
                     WHERE (rel.from_id=? OR rel.to_id=?) AND k.status='active'
                 """, (kid, kid, kid)):
+                    if not _namespace_allows(r):
+                        continue
                     if r["id"] not in results:
                         graph_score = results[kid]["score"] * 0.4
                         results[r["id"]] = {"r": r, "score": graph_score, "via": ["graph"]}
@@ -3109,7 +3228,7 @@ class Recall:
                                 "SELECT * FROM knowledge WHERE id=? AND status='active'",
                                 (fid,),
                             ).fetchone()
-                            if row is None:
+                            if row is None or not _namespace_allows(row):
                                 continue
                             ep_score = base * (1.0 / (1 + rank))
                             results[fid] = {"r": dict(row), "score": ep_score, "via": ["episode"]}
@@ -3138,6 +3257,8 @@ class Recall:
         # Operational tags like ``recovery`` or ``auto-extract`` mark records
         # that hold value for forensics but inflate recall noise. They remain
         # accessible via the dedicated ``memory_search_by_tag`` path.
+        _drop_namespace_disallowed()
+
         try:
             from config import get_recall_excluded_tags
             _ex = get_recall_excluded_tags()
@@ -3399,6 +3520,9 @@ class Recall:
                     entities=router_classification.entities,
                     project=project,
                     limit=max(5, limit),
+                    agent_namespace=agent_namespace,
+                    agent_namespaces=agent_namespaces,
+                    scope=scope,
                 )
                 if graph_rows:
                     existing_ids = {item["r"]["id"] for item in ranked}
@@ -3441,7 +3565,14 @@ class Recall:
             try:
                 seed_ids = [item["r"]["id"] for item in ranked[:3]]
                 existing_ids = {item["r"]["id"] for item in ranked}
-                neighbours = _graph_expand(self.s.db, seed_ids, budget=10)
+                neighbours = _graph_expand(
+                    self.s.db,
+                    seed_ids,
+                    budget=10,
+                    agent_namespace=agent_namespace,
+                    agent_namespaces=agent_namespaces,
+                    scope=scope,
+                )
                 new_kids = [kid for kid, _ in neighbours if kid not in existing_ids][:5]
                 if new_kids:
                     rows = _graph_fetch(self.s.db, new_kids)
@@ -3486,6 +3617,7 @@ class Recall:
                     "id": r["id"], "type": t,
                     "title": content[:80] + ("..." if len(content) > 80 else ""),
                     "project": r.get("project", ""),
+                    "agent_namespace": r.get("agent_namespace", "codex"),
                     "score": round(item["score"], 3),
                     "importance": importance,
                     "created_at": r.get("created_at", ""),
@@ -3502,6 +3634,7 @@ class Recall:
                 entry = {
                     "id": r["id"], "content": content, "context": context,
                     "project": r.get("project", ""), "tags": tags,
+                    "agent_namespace": r.get("agent_namespace", "codex"),
                     "confidence": r.get("confidence", 1.0),
                     "importance": importance,
                     "created_at": r.get("created_at", ""), "session_id": r.get("session_id", ""),
@@ -3535,6 +3668,7 @@ class Recall:
                 entry = {
                     "id": r["id"], "content": content, "context": context,
                     "project": r.get("project", ""), "tags": tags,
+                    "agent_namespace": r.get("agent_namespace", "codex"),
                     "confidence": r.get("confidence", 1.0),
                     "importance": importance,
                     "created_at": r.get("created_at", ""), "session_id": r.get("session_id", ""),
@@ -3553,6 +3687,10 @@ class Recall:
 
         result = {"query": query, "total": len(ranked), "detail": detail,
                   "fusion": fusion, "total_tokens": total_tokens, "results": grouped}
+        if namespace_filter is None:
+            result["agent_scope"] = "all_agents"
+        else:
+            result["agent_namespaces"] = list(namespace_filter)
         # v11 Phase 6b — record the requested embedding_space at the top level.
         if _v11_spaces:
             result["embedding_space"] = (
@@ -3572,7 +3710,8 @@ class Recall:
             cache_key = self.s.cache.make_key(query=query, project=project, ktype=ktype,
                                                limit=limit, detail=detail, branch=branch,
                                                fusion=fusion, rerank=rerank, diverse=diverse,
-                                               embedding_space=",".join(_v11_spaces) if _v11_spaces else None)
+                                               embedding_space=",".join(_v11_spaces) if _v11_spaces else None,
+                                               agent_namespaces=",".join(namespace_filter) if namespace_filter else "*")
             self.s.cache.put(cache_key, result, project=project)
 
         # v9 A2 L1: mirror into fast LRU tagged with the ids this result touched.
@@ -3935,6 +4074,9 @@ async def list_tools():
                                                       "Results include parsed schema payload under 'decision'."},
                     "include_cognitive": {"type": "boolean", "default": False,
                                           "description": "Set false to skip CognitiveEngine enrichment when rules/context were already loaded."},
+                    "agent_namespace": {"type": "string", "description": "Search one agent namespace. Defaults to current namespace."},
+                    "agent_namespaces": {"type": "array", "items": {"type": "string"}, "description": "Explicit list of agent namespaces for cross-agent search."},
+                    "scope": {"type": "string", "enum": ["default", "all_agents"], "description": "Use all_agents only when the user explicitly requests cross-agent search."},
                 },
                 "required": ["query"],
             },
@@ -3994,6 +4136,10 @@ async def list_tools():
                     "parent_agent_id": {
                         "type": "string",
                         "description": "Optional parent agent ID (the dispatching Agent tool / parent span). Together with agent_id forms the subagent lineage tree.",
+                    },
+                    "agent_namespace": {
+                        "type": "string",
+                        "description": "Owning agent memory namespace. Defaults to TAM_AGENT_NAMESPACE or codex. Use reasonix for Reasonix-originated writes.",
                     },
                 },
                 "required": ["content", "type"],
@@ -4758,6 +4904,10 @@ async def list_tools():
                     "importance": {"type": "string", "enum": ["critical", "high", "medium", "low"], "default": "medium"},
                     "agent_id": {"type": "string", "description": "Optional Claude Code subagent ID (v2.1.139+)"},
                     "parent_agent_id": {"type": "string", "description": "Optional parent agent ID (the dispatching span)"},
+                    "agent_namespace": {
+                        "type": "string",
+                        "description": "Owning agent memory namespace. Defaults to TAM_AGENT_NAMESPACE or codex. Use reasonix for Reasonix-originated writes.",
+                    },
                 },
                 "required": ["content", "type"],
             },
@@ -4780,6 +4930,9 @@ async def list_tools():
                         "type": ["string", "array"],
                         "description": "Filter to one or more embedding spaces (text|code|log|config).",
                     },
+                    "agent_namespace": {"type": "string", "description": "Search one agent namespace. Defaults to current namespace."},
+                    "agent_namespaces": {"type": "array", "items": {"type": "string"}, "description": "Explicit list of agent namespaces for cross-agent search."},
+                    "scope": {"type": "string", "enum": ["default", "all_agents"], "description": "Use all_agents only when the user explicitly requests cross-agent search."},
                 },
                 "required": ["query"],
             },
@@ -4798,6 +4951,9 @@ async def list_tools():
                     "type": {"type": "string", "enum": ["decision", "fact", "solution", "lesson", "convention", "all"], "default": "all"},
                     "limit": {"type": "integer", "default": 10},
                     "embedding_space": {"type": ["string", "array"]},
+                    "agent_namespace": {"type": "string", "description": "Search one agent namespace. Defaults to current namespace."},
+                    "agent_namespaces": {"type": "array", "items": {"type": "string"}, "description": "Explicit list of agent namespaces for cross-agent search."},
+                    "scope": {"type": "string", "enum": ["default", "all_agents"], "description": "Use all_agents only when the user explicitly requests cross-agent search."},
                 },
                 "required": ["query"],
             },
@@ -5348,7 +5504,10 @@ async def _do(name, a):
         result = recall.search(a["query"], a.get("project"), a.get("type", "all"),
                                a.get("limit", 10), search_detail,
                                a.get("branch"), a.get("fusion", "rrf"),
-                               a.get("rerank", False), a.get("diverse", False))
+                               a.get("rerank", False), a.get("diverse", False),
+                               agent_namespace=a.get("agent_namespace"),
+                               agent_namespaces=a.get("agent_namespaces"),
+                               scope=a.get("scope"))
         if a.get("detail") == "auto":
             result["auto_detail"] = detail_param
 
@@ -5577,7 +5736,8 @@ async def _do(name, a):
             importance=a.get("importance", "medium"),
             coref=a.get("coref"),
             agent_id=a.get("agent_id"),
-            parent_agent_id=a.get("parent_agent_id"))
+            parent_agent_id=a.get("parent_agent_id"),
+            agent_namespace=a.get("agent_namespace"))
         # v10 — quality gate dropped the record; surface the verdict so the
         # caller can iterate on the content rather than silently losing it.
         if rid is None:
@@ -5600,7 +5760,12 @@ async def _do(name, a):
         # v9 A2: drop L1 query cache wholesale on write — cheap + correct.
         if getattr(store, "v9_cache", None) is not None:
             store.v9_cache.invalidate_all()
-        result = {"saved": True, "id": rid, "deduplicated": was_dedup}
+        result = {
+            "saved": True,
+            "id": rid,
+            "deduplicated": was_dedup,
+            "agent_namespace": resolve_agent_namespace(a.get("agent_namespace")),
+        }
         if was_redacted:
             result["privacy_redacted"] = True
         if private_sections:
@@ -6392,6 +6557,7 @@ async def _do(name, a):
             coref=False,        # never spend an LLM round-trip on the fast path
             agent_id=a.get("agent_id"),
             parent_agent_id=a.get("parent_agent_id"),
+            agent_namespace=a.get("agent_namespace"),
         )
         if rid is None:
             return J({"saved": False, "rejected_by_quality_gate": False,
@@ -6400,7 +6566,13 @@ async def _do(name, a):
             store.cache.invalidate(project=a.get("project"))
         if getattr(store, "v9_cache", None) is not None:
             store.v9_cache.invalidate_all()
-        out = {"saved": True, "id": rid, "deduplicated": was_dedup, "mode": "fast"}
+        out = {
+            "saved": True,
+            "id": rid,
+            "deduplicated": was_dedup,
+            "mode": "fast",
+            "agent_namespace": resolve_agent_namespace(a.get("agent_namespace")),
+        }
         if was_redacted:
             out["privacy_redacted"] = True
         if private_sections:
@@ -6414,6 +6586,9 @@ async def _do(name, a):
             a.get("branch"), a.get("fusion", "rrf"),
             rerank=False, diverse=False,
             embedding_space=a.get("embedding_space"),
+            agent_namespace=a.get("agent_namespace"),
+            agent_namespaces=a.get("agent_namespaces"),
+            scope=a.get("scope"),
         )
         result["mode"] = "fast"
         return J(result)
@@ -6425,6 +6600,9 @@ async def _do(name, a):
             branch=a.get("branch"), fusion="rrf",
             rerank=False, diverse=False,
             embedding_space=a.get("embedding_space"),
+            agent_namespace=a.get("agent_namespace"),
+            agent_namespaces=a.get("agent_namespaces"),
+            scope=a.get("scope"),
             _explain=True,
         )
         return J(result)
@@ -7225,7 +7403,7 @@ async def _run_streamable_http(host: str, port: int):
     from starlette.applications import Starlette
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.routing import Mount, Route
+    from starlette.routing import Route
 
     # One manager per process — handles session multiplexing for many
     # concurrent clients. ``stateless=False`` keeps short-lived sessions
@@ -7237,8 +7415,11 @@ async def _run_streamable_http(host: str, port: int):
         stateless=False,
     )
 
-    async def handle_mcp(scope, receive, send):
-        await manager.handle_request(scope, receive, send)
+    class MCPHttpApp:
+        async def __call__(self, scope, receive, send):
+            await manager.handle_request(scope, receive, send)
+
+    mcp_http_app = MCPHttpApp()
 
     async def healthz(request: Request) -> Response:
         return JSONResponse({
@@ -7259,7 +7440,8 @@ async def _run_streamable_http(host: str, port: int):
         debug=False,
         routes=[
             Route("/healthz", healthz, methods=["GET"]),
-            Mount("/mcp", app=handle_mcp),
+            Route("/mcp", mcp_http_app, methods=["GET", "POST", "DELETE"]),
+            Route("/mcp/", mcp_http_app, methods=["GET", "POST", "DELETE"]),
         ],
         lifespan=lifespan,
     )
@@ -7275,7 +7457,7 @@ async def _run_streamable_http(host: str, port: int):
         timeout_graceful_shutdown=5,
     )
     server = uvicorn.Server(config)
-    LOG(f"MCP HTTP transport listening on http://{host}:{port}/mcp (healthz: /healthz)")
+    LOG(f"MCP HTTP transport listening on http://{host}:{port}/mcp/ (healthz: /healthz)")
     await server.serve()
 
 

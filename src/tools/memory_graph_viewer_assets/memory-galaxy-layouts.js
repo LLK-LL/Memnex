@@ -34,65 +34,74 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
   const nodes = cloneGraphNodes(galaxy);
   const links = cloneLinks(galaxy.links || []);
-  const grouped = groupBySystem(nodes);
-  if (!grouped.has("router")) grouped.set("router", []);
-
-  const systems = buildSystemDescriptors(grouped, nodeScale);
-  const systemByKey = new Map(systems.map(system => [system.key, system]));
+  const agentFrames = placeAgentGalaxies(groupByAgentNamespace(nodes, galaxy.agentGalaxies));
   const outputNodes = [];
+  const systems = [];
 
-  for (const system of systems) {
-    if (system.key === "router") {
-      const routerNode = syntheticNode("system:router", "Router Core", "router", nodeScale);
-      routerNode.raw.memberCount = nodes.length;
-      outputNodes.push(placeNode(routerNode, system.x, system.y, {
+  for (const frame of agentFrames) {
+    const grouped = groupBySystem(frame.nodes);
+    if (!grouped.has("router")) grouped.set("router", []);
+    const localSystems = buildSystemDescriptors(grouped, nodeScale, frame);
+    systems.push(...localSystems);
+
+    const agentCore = syntheticNode(`agent:${frame.namespace}`, frame.label, "router", nodeScale);
+    agentCore.raw.memberCount = frame.nodes.length;
+    outputNodes.push(placeNode(agentCore, frame.centerX, frame.centerY, {
         memorySystem: "router",
         orbitRole: "core",
-        orbitalRole: "galactic-core",
-        renderRadius: Math.max(18, priorityRadiusForData(routerNode.raw || routerNode, { scale: nodeScale })),
+        orbitalRole: "agent-core",
+        renderRadius: Math.max(54, priorityRadiusForData(agentCore.raw || agentCore, { scale: nodeScale }) * 2.4),
+        labelPriority: 1000,
+        labelAnchor: { x: frame.centerX, y: frame.centerY - 92, align: "center" },
+        agentNamespace: frame.namespace,
+        agentLabel: frame.label,
       }));
-      continue;
-    }
 
-    const members = grouped.get(system.key) || [];
-    const star = syntheticNode(`system:${system.key}`, systemLabels[system.key] || system.key, system.key, nodeScale);
-    star.raw.memberCount = members.length;
-    outputNodes.push(placeNode(star, system.x, system.y, {
-      memorySystem: system.key,
-      orbitRole: "star",
-      orbitalRole: "star",
-      renderRadius: Math.max(10, priorityRadiusForData(star.raw || star, { scale: nodeScale })),
-      isSystemNode: true,
-      systemKey: system.key,
-    }));
+    for (const system of localSystems) {
+      if ((system.baseKey || system.key) === "router") continue;
 
-    const bodies = overviewSummaryNodes(members).sort(compareNodePriority);
-    const byRole = splitByRole(bodies);
-    const roleSpecs = [
-      ["planet", byRole.planet, 34],
-      ["moon", byRole.moon, 58],
-      ["evidence", byRole.evidence, 84],
-    ];
-    system.miniOrbits = [];
-    const miniOrbitAspect = Number(system.orbitAspect || 1);
-    for (const [role, roleNodes, baseRadius] of roleSpecs) {
-      const tracks = splitTracks(roleNodes, baseRadius * Math.max(0.82, nodeScale / 0.48), 26, nodeScale);
-      if (tracks.length === 0) system.miniOrbits.push({ kind: role, radius: baseRadius * Math.max(0.82, nodeScale / 0.48), aspect: miniOrbitAspect });
-      else system.miniOrbits.push(...tracks.map(track => ({ kind: role, radius: track.radius, aspect: miniOrbitAspect })));
-      for (const track of tracks) {
-        outputNodes.push(...placeOrbit(track.nodes, {
-          centerX: system.x,
-          centerY: system.y,
-          radiusX: track.radius,
-          radiusY: track.radius * miniOrbitAspect,
-          startAngle: roleStartAngle(role),
-          memorySystem: system.key,
-          orbitRole: role,
-          orbitalRole: role,
-          nodeScale,
-          orbitSpeed: overviewOrbitSpeedFor(role),
-          parentSystemKey: system.key,
-        }));
+      const members = grouped.get(system.baseKey || system.key) || [];
+      const star = syntheticNode(`system:${frame.namespace}:${system.baseKey || system.key}`, systemLabels[system.baseKey || system.key] || system.key, system.baseKey || system.key, nodeScale);
+      star.raw.memberCount = members.length;
+      outputNodes.push(placeNode(star, system.x, system.y, {
+        memorySystem: system.baseKey || system.key,
+        orbitRole: "star",
+        orbitalRole: "star",
+        renderRadius: Math.max(10, priorityRadiusForData(star.raw || star, { scale: nodeScale })),
+        isSystemNode: true,
+        systemKey: system.key,
+        agentNamespace: frame.namespace,
+        agentLabel: frame.label,
+      }));
+
+      const bodies = overviewSummaryNodes(members).sort(compareNodePriority);
+      const byRole = splitByRole(bodies);
+      const roleSpecs = [
+        ["planet", byRole.planet, 34],
+        ["moon", byRole.moon, 58],
+        ["evidence", byRole.evidence, 84],
+      ];
+      system.miniOrbits = [];
+      const miniOrbitAspect = Number(system.orbitAspect || 1);
+      for (const [role, roleNodes, baseRadius] of roleSpecs) {
+        const tracks = splitTracks(roleNodes, baseRadius * Math.max(0.82, nodeScale / 0.48), 26, nodeScale);
+        if (tracks.length === 0) system.miniOrbits.push({ kind: role, radius: baseRadius * Math.max(0.82, nodeScale / 0.48), aspect: miniOrbitAspect });
+        else system.miniOrbits.push(...tracks.map(track => ({ kind: role, radius: track.radius, aspect: miniOrbitAspect })));
+        for (const track of tracks) {
+          outputNodes.push(...placeOrbit(track.nodes, {
+            centerX: system.x,
+            centerY: system.y,
+            radiusX: track.radius,
+            radiusY: track.radius * miniOrbitAspect,
+            startAngle: roleStartAngle(role),
+            memorySystem: system.baseKey || system.key,
+            orbitRole: role,
+            orbitalRole: role,
+            nodeScale,
+            orbitSpeed: overviewOrbitSpeedFor(role),
+            parentSystemKey: system.key,
+          }));
+        }
       }
     }
   }
@@ -109,25 +118,27 @@ export function buildGalaxyOverviewLayout(galaxy, options = {}) {
 
 export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.48);
+  const baseKey = baseSystemKey(systemKey);
+  const agentNamespace = agentNamespaceForSystemKey(systemKey, options.agentNamespace);
   const scaleRatio = Math.max(0.58, Math.min(2.15, nodeScale / 0.48));
   const solarElementScale = 2;
   const solarPlanetOrbitScale = 1.5;
   const solarSatelliteOrbitScale = 2;
   const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
-  const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], systemKey);
-  const center = syntheticNode(`system:${systemKey}`, systemLabels[systemKey] || systemKey, systemKey, nodeScale);
+  const { nodes: localNodes, links: localLinks } = buildSolarSubgraph(nodes, galaxy.links || [], baseKey, agentNamespace);
+  const center = syntheticNode(`system:${systemKey}`, systemLabels[baseKey] || baseKey, baseKey, nodeScale);
   const centralRenderRadius = Math.max(44, priorityRadiusForData(center.raw || center, { scale: nodeScale }) * 1.42) * 3;
   const outputNodes = [
     placeNode(center, 0, 0, {
-      memorySystem: systemKey,
+      memorySystem: baseKey,
       orbitRole: "star",
       orbitalRole: "central-star",
       renderRadius: centralRenderRadius,
       isSolarCenterStar: true,
     }),
   ];
-  const planetSystems = buildSolarPlanetSystems(localNodes, localLinks, systemKey);
+  const planetSystems = buildSolarPlanetSystems(localNodes, localLinks, baseKey);
   const planetNodes = [];
   const satelliteSystems = [];
   const orbits = [];
@@ -151,7 +162,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
       radiusX: track.radius,
       radiusY: track.radius * orbitAspect,
       startAngle: roleStartAngle("planet") + trackIndex * 0.41,
-      memorySystem: systemKey,
+      memorySystem: baseKey,
       orbitRole: "planet",
       orbitalRole: "planet",
       nodeScale,
@@ -184,7 +195,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
         radiusX: track.radius,
         radiusY: track.radius * satelliteProfile.aspect,
         startAngle: roleStartAngle("satellite") + satelliteProfile.phase + trackIndex * 0.73,
-        memorySystem: systemKey,
+        memorySystem: baseKey,
         orbitRole: "satellite",
         orbitalRole: "satellite",
         nodeScale,
@@ -200,7 +211,7 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
       y: parent.y,
       radius: childOrbits.at(-1)?.radius || 34,
       aspect: satelliteProfile.aspect,
-      color: parent.color || systemColor(systemKey),
+      color: parent.color || systemColor(baseKey),
       scaleFactor: solarElementScale,
       footprintRadius: parent.plannedFootprintRadius || ((childOrbits.at(-1)?.radius || 34) + Math.max(34, (parent.renderRadius || 12) * 2)),
       orbits: childOrbits,
@@ -229,23 +240,25 @@ export function buildSolarSystemLayout(galaxy, systemKey, options = {}) {
 
 export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options = {}) {
   const nodeScale = Number(options.nodeScale || 0.5);
+  const baseKey = baseSystemKey(systemKey);
+  const agentNamespace = agentNamespaceForSystemKey(systemKey, options.agentNamespace);
   const scaleRatio = Math.max(0.58, Math.min(2.15, nodeScale / 0.48));
   const orbitAspect = 0.58;
   const nodes = cloneGraphNodes(galaxy);
-  const source = nodes.find(node => node.id === planetId) || nodes.find(node => node.memorySystem === systemKey) || syntheticNode(planetId || `planet:${systemKey}`, planetId || systemKey, systemKey, nodeScale);
+  const source = nodes.find(node => node.id === planetId) || nodes.find(node => node.memorySystem === baseKey && node.agentNamespace === agentNamespace) || syntheticNode(planetId || `planet:${systemKey}`, planetId || systemKey, baseKey, nodeScale);
   const directIds = oneHopNeighborIds(galaxy.links || [], new Set([source.id]));
   const derivedIds = oneHopNeighborIds(galaxy.links || [], directIds);
   derivedIds.delete(source.id);
   for (const id of directIds) derivedIds.delete(id);
 
-  const direct = nodes.filter(node => directIds.has(node.id) && node.memorySystem === systemKey).sort(compareNodePriority);
-  const derived = nodes.filter(node => derivedIds.has(node.id) && node.memorySystem === systemKey).sort(compareNodePriority);
-  const evidence = nodes.filter(node => (directIds.has(node.id) || derivedIds.has(node.id)) && ["event", "source"].includes(node.memorySystem)).sort(compareNodePriority);
-  const external = nodes.filter(node => (directIds.has(node.id) || derivedIds.has(node.id)) && node.memorySystem !== systemKey && !["event", "source"].includes(node.memorySystem)).sort(compareNodePriority);
+  const direct = nodes.filter(node => node.agentNamespace === agentNamespace && directIds.has(node.id) && node.memorySystem === baseKey).sort(compareNodePriority);
+  const derived = nodes.filter(node => node.agentNamespace === agentNamespace && derivedIds.has(node.id) && node.memorySystem === baseKey).sort(compareNodePriority);
+  const evidence = nodes.filter(node => node.agentNamespace === agentNamespace && (directIds.has(node.id) || derivedIds.has(node.id)) && ["event", "source"].includes(node.memorySystem)).sort(compareNodePriority);
+  const external = nodes.filter(node => node.agentNamespace === agentNamespace && (directIds.has(node.id) || derivedIds.has(node.id)) && node.memorySystem !== baseKey && !["event", "source"].includes(node.memorySystem)).sort(compareNodePriority);
 
   const outputNodes = [
     placeNode(source, 0, 0, {
-      memorySystem: systemKey,
+      memorySystem: baseKey,
       orbitRole: "planet",
       orbitalRole: "central-planet",
       renderRadius: Math.max(24, priorityRadiusForData(source.raw || source, { scale: nodeScale }) * 1.35),
@@ -259,7 +272,7 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
   ];
   const orbits = [];
   for (const [kind, groupNodes, radius] of orbitGroups) {
-    const fallbackNodes = kind === "direct-moon" && groupNodes.length === 0 ? nodes.filter(node => node.memorySystem === systemKey && node.id !== source.id).slice(0, 3) : groupNodes;
+    const fallbackNodes = kind === "direct-moon" && groupNodes.length === 0 ? nodes.filter(node => node.agentNamespace === agentNamespace && node.memorySystem === baseKey && node.id !== source.id).slice(0, 3) : groupNodes;
     const tracks = splitTracks(fallbackNodes, radius, 54, nodeScale, 5);
     if (tracks.length === 0) orbits.push({ kind, radius, aspect: orbitAspect });
     for (const [trackIndex, track] of tracks.entries()) {
@@ -270,7 +283,7 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
         radiusX: track.radius,
         radiusY: track.radius * orbitAspect,
         startAngle: roleStartAngle(kind) + trackIndex * 0.73,
-        memorySystem: systemKey,
+        memorySystem: baseKey,
         orbitRole: kind,
         orbitalRole: kind,
         nodeScale,
@@ -301,6 +314,9 @@ export function buildPlanetSatelliteLayout(galaxy, systemKey, planetId, options 
 
 export function buildCometOverlayLayout(galaxyLayout, comets = []) {
   const systems = new Map((galaxyLayout.systems || []).map(system => [system.key, system]));
+  for (const system of galaxyLayout.systems || []) {
+    if (system.baseKey && !systems.has(system.baseKey)) systems.set(system.baseKey, system);
+  }
   const activeComets = comets.slice(0, 3).map((comet, index) => {
     const influences = (comet.influenced_systems || [])
       .map(item => {
@@ -423,7 +439,67 @@ function groupBySystem(nodes) {
   return grouped;
 }
 
-function buildSystemDescriptors(grouped, nodeScale) {
+function groupByAgentNamespace(nodes, agentGalaxies = new Map()) {
+  const groups = new Map();
+  for (const [namespace, meta] of agentGalaxies || []) {
+    groups.set(namespace, {
+      namespace,
+      label: meta.label || labelForAgentNamespace(namespace),
+      nodes: [],
+    });
+  }
+  for (const node of nodes) {
+    const namespace = node.agentNamespace || "codex";
+    if (!groups.has(namespace)) {
+      groups.set(namespace, {
+        namespace,
+        label: node.agentLabel || labelForAgentNamespace(namespace),
+        nodes: [],
+      });
+    }
+    groups.get(namespace).nodes.push(node);
+  }
+  return [...groups.values()].filter(group => group.nodes.length > 0);
+}
+
+function placeAgentGalaxies(groups) {
+  const count = Math.max(1, groups.length);
+  const radius = count === 1 ? 0 : Math.min(920, Math.max(520, 300 + count * 120));
+  return groups.map((group, index) => {
+    const angle = count === 1 ? 0 : (-Math.PI / 2) + (Math.PI * 2 * index) / count;
+    return {
+      ...group,
+      centerX: Math.cos(angle) * radius,
+      centerY: Math.sin(angle) * radius * 0.68,
+      galaxyRadius: Math.max(280, Math.min(520, 160 + Math.sqrt(group.nodes.length) * 42)),
+    };
+  });
+}
+
+function labelForAgentNamespace(namespace) {
+  return String(namespace || "codex")
+    .split(/[-_:]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Codex";
+}
+
+function baseSystemKey(systemKey) {
+  const key = String(systemKey || "knowledge");
+  const parts = key.split(":");
+  return parts.length > 1 ? parts.at(-1) : key;
+}
+
+function agentNamespaceForSystemKey(systemKey, fallback = "codex") {
+  const key = String(systemKey || "");
+  const parts = key.split(":");
+  return parts.length > 1 ? parts[0] : (fallback || "codex");
+}
+
+function buildSystemDescriptors(grouped, nodeScale, frame = null) {
+  const offsetX = Number(frame?.centerX || 0);
+  const offsetY = Number(frame?.centerY || 0);
+  const namespace = frame?.namespace || "codex";
   const byLayer = new Map(layerOrder.map(layer => [layer, []]));
   for (const key of layoutSystemOrder) {
     if (key === "router") continue;
@@ -433,11 +509,13 @@ function buildSystemDescriptors(grouped, nodeScale) {
     byLayer.get(layer).push(key);
   }
   const systems = [{
-    key: "router",
-    label: "Router Core",
+    key: `${namespace}:router`,
+    baseKey: "router",
+    agentNamespace: namespace,
+    label: frame?.label || "Codex",
     layer: "core",
-    x: 0,
-    y: 0,
+    x: offsetX,
+    y: offsetY,
     radius: 72,
     miniOrbits: [],
     orbitAspect: 1,
@@ -458,18 +536,20 @@ function buildSystemDescriptors(grouped, nodeScale) {
       const angle = angleOffset + (index * Math.PI * 2) / Math.max(1, keys.length);
       const miniRadius = 98 * Math.max(0.82, nodeScale / 0.48);
         systems.push({
-          key,
+          key: `${namespace}:${key}`,
+          baseKey: key,
+          agentNamespace: namespace,
           label: systemLabels[key] || key,
           layer,
           color: systemColor(key),
-          x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius * 0.58,
+          x: offsetX + Math.cos(angle) * radius,
+          y: offsetY + Math.sin(angle) * radius * 0.58,
           radius: miniRadius,
           miniOrbits: [],
           orbitAspect: 0.58,
           animation: {
-            orbitCenterX: 0,
-            orbitCenterY: 0,
+            orbitCenterX: offsetX,
+            orbitCenterY: offsetY,
             orbitRadiusX: radius,
             orbitRadiusY: radius * 0.58,
             orbitAngle: angle,
@@ -570,6 +650,9 @@ function placeNode(node, x, y, overrides = {}) {
     isSystemNode: overrides.isSystemNode ?? node.isSystemNode ?? false,
     isSolarCenterStar: overrides.isSolarCenterStar ?? node.isSolarCenterStar ?? false,
     systemKey: overrides.systemKey ?? node.systemKey ?? null,
+    agentNamespace: overrides.agentNamespace ?? node.agentNamespace ?? raw.agent_namespace ?? "codex",
+    agentLabel: overrides.agentLabel ?? node.agentLabel ?? raw.agent_label ?? labelForAgentNamespace(raw.agent_namespace || "codex"),
+    labelPriority: overrides.labelPriority ?? node.labelPriority,
     animation: {
       orbitCenterX: overrides.orbitCenterX ?? 0,
       orbitCenterY: overrides.orbitCenterY ?? 0,
@@ -879,11 +962,11 @@ function buildSolarPlanetSystems(localNodes, localLinks, systemKey) {
     });
 }
 
-function buildSolarSubgraph(nodes, links, systemKey) {
+function buildSolarSubgraph(nodes, links, systemKey, agentNamespace = "codex") {
   const clonedLinks = cloneLinks(links);
   const adjacency = buildAdjacencyMap(clonedLinks);
   const systemNodes = nodes
-    .filter(node => node.memorySystem === systemKey)
+    .filter(node => node.memorySystem === systemKey && node.agentNamespace === agentNamespace)
     .sort(compareNodePriority);
   const systemIds = new Set(systemNodes.map(node => String(node.id)));
   const directIds = new Set();
@@ -893,7 +976,7 @@ function buildSolarSubgraph(nodes, links, systemKey) {
     }
   }
   const directNodes = nodes
-    .filter(node => directIds.has(String(node.id)))
+    .filter(node => node.agentNamespace === agentNamespace && directIds.has(String(node.id)))
     .sort(compareNodePriority)
     .slice(0, 18);
   const directNodeIds = new Set(directNodes.map(node => String(node.id)));
@@ -905,7 +988,7 @@ function buildSolarSubgraph(nodes, links, systemKey) {
     }
   }
   const secondNodes = nodes
-    .filter(node => secondIds.has(String(node.id)))
+    .filter(node => node.agentNamespace === agentNamespace && secondIds.has(String(node.id)))
     .sort(compareNodePriority)
     .slice(0, 30);
   const selectedNodes = dedupeNodes([
@@ -962,11 +1045,17 @@ function buildGalacticOrbits(systems) {
   const seen = new Set();
   const orbits = [];
   for (const system of systems) {
-    if (system.layer === "core" || seen.has(system.layer)) continue;
-    seen.add(system.layer);
+    if (system.layer === "core") continue;
+    const key = `${system.agentNamespace || "codex"}:${system.layer}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     orbits.push({
       kind: system.layer,
+      agentNamespace: system.agentNamespace || "codex",
+      centerX: Number(system.animation?.orbitCenterX ?? 0),
+      centerY: Number(system.animation?.orbitCenterY ?? 0),
       radius: layerRadii[system.layer] || Math.hypot(system.x, system.y),
+      aspect: 0.58,
     });
   }
   return orbits;
@@ -1054,6 +1143,7 @@ function roleStartAngle(role) {
 
 function animationSpeedFor(role) {
   return {
+    "agent-core": 0,
     "galactic-core": 0,
     "central-star": 0,
     "central-planet": 0,
@@ -1076,6 +1166,7 @@ function overviewOrbitSpeedFor(role) {
 
 function spinSpeedFor(role) {
   return {
+    "agent-core": 0,
     "galactic-core": 0,
     "central-star": 0,
     "central-planet": 0,

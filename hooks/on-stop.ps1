@@ -22,7 +22,7 @@ $InstallDir = if ($env:CLAUDE_MEMORY_INSTALL_DIR) {
 }
 $MemoryDir = if ($env:CLAUDE_MEMORY_DIR) { $env:CLAUDE_MEMORY_DIR } else { Join-Path $env:USERPROFILE ".claude-memory" }
 
-$HookPython = [System.IO.Path]::Combine($InstallDir, ".venv", "Scripts", "python.exe")
+$HookPython = if ($env:HOOK_PYTHON) { $env:HOOK_PYTHON } else { [System.IO.Path]::Combine($InstallDir, ".venv", "Scripts", "python.exe") }
 if (-not (Test-Path $HookPython)) {
     $HookPython = (Get-Command python -ErrorAction SilentlyContinue).Source
     if (-not $HookPython) {
@@ -67,9 +67,14 @@ else:
     print(f"MEMORY_FINAL_OK: {writes} edits, {saves} saves recorded.")
 '@
     try {
-        $summary = & $HookPython -c $SummaryScript $MemoryDir $SessionId $Project 2>$null
+        $SummaryPy = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "cmm-summary-$(New-Guid).py")
+        [System.IO.File]::WriteAllText($SummaryPy, $SummaryScript)
+        $summary = & $HookPython $SummaryPy $MemoryDir $SessionId $Project 2>$null
+        Remove-Item -Path $SummaryPy -ErrorAction SilentlyContinue
         if ($summary) { Write-Output $summary; Write-Output "" }
-    } catch { }
+    } catch {
+        if ($SummaryPy) { Remove-Item -Path $SummaryPy -ErrorAction SilentlyContinue }
+    }
 }
 
 Write-Output "MEMORY_WARNING: Session ending. Before closing:"

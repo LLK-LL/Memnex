@@ -12,6 +12,7 @@ set MEMORY_MODE=fast
 set MEMORY_EMBED_PROVIDER=fastembed
 set MEMORY_MCP_SINGLE_INSTANCE=0
 set TAM_MEMORY_DIR=C:/Users/Administrator/.tam
+set TAM_AGENT_NAMESPACE=reasonix
 set MCP_TRANSPORT=http
 set MCP_HTTP_HOST=127.0.0.1
 set MCP_HTTP_PORT=%PORT%

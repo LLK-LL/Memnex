@@ -19,6 +19,7 @@ def _db():
             project TEXT,
             tags TEXT,
             status TEXT DEFAULT 'active',
+            agent_namespace TEXT NOT NULL DEFAULT 'codex',
             confidence REAL,
             source TEXT,
             created_at TEXT,
@@ -47,11 +48,11 @@ def _db():
 
 def _seed(db):
     db.executemany(
-        "INSERT INTO knowledge (id, type, content, project, created_at) VALUES (?, 'fact', ?, 'demo', '2026-06-30')",
+        "INSERT INTO knowledge (id, type, content, project, agent_namespace, created_at) VALUES (?, 'fact', ?, 'demo', ?, '2026-06-30')",
         [
-            (1, "seed"),
-            (2, "causal neighbor"),
-            (3, "semantic neighbor"),
+            (1, "seed", "codex"),
+            (2, "causal neighbor", "codex"),
+            (3, "semantic neighbor", "codex"),
         ],
     )
     db.executemany(
@@ -93,3 +94,64 @@ def test_explain_expansion_paths_reports_relation_family_and_context():
     assert result[2]["relation_type"] == "caused_by"
     assert result[2]["edge_family"] == "causal"
     assert result[2]["context"] == "cause path"
+
+
+def test_expand_top_k_defaults_to_seed_namespace():
+    db = _db()
+    _seed(db)
+    db.execute(
+        "INSERT INTO knowledge (id, type, content, project, agent_namespace, created_at) VALUES (4, 'fact', 'reasonix neighbor', 'demo', 'reasonix', '2026-06-30')"
+    )
+    db.execute(
+        "INSERT INTO knowledge_nodes (knowledge_id, node_id, strength) VALUES (4, 'reasonix-node', 1.0)"
+    )
+    db.execute(
+        "INSERT INTO graph_edges (id, source_id, target_id, relation_type, weight, context) VALUES ('e3', 'seed-node', 'reasonix-node', 'caused_by', 1.0, 'cross namespace path')"
+    )
+    db.commit()
+
+    result = graph_expander.expand_top_k(db, [1], budget=10, edge_families=["causal"])
+
+    assert result == [(2, 1.0)]
+
+
+def test_expand_top_k_all_agents_scope_keeps_cross_namespace_candidates():
+    db = _db()
+    _seed(db)
+    db.execute(
+        "INSERT INTO knowledge (id, type, content, project, agent_namespace, created_at) VALUES (4, 'fact', 'reasonix neighbor', 'demo', 'reasonix', '2026-06-30')"
+    )
+    db.execute(
+        "INSERT INTO knowledge_nodes (knowledge_id, node_id, strength) VALUES (4, 'reasonix-node', 1.0)"
+    )
+    db.execute(
+        "INSERT INTO graph_edges (id, source_id, target_id, relation_type, weight, context) VALUES ('e3', 'seed-node', 'reasonix-node', 'caused_by', 1.0, 'cross namespace path')"
+    )
+    db.commit()
+
+    result = graph_expander.expand_top_k(
+        db, [1], budget=10, edge_families=["causal"], scope="all_agents",
+    )
+
+    assert set(result) == {(2, 1.0), (4, 1.0)}
+
+
+def test_explain_expansion_paths_defaults_to_seed_namespace():
+    db = _db()
+    _seed(db)
+    db.execute(
+        "INSERT INTO knowledge (id, type, content, project, agent_namespace, created_at) VALUES (4, 'fact', 'reasonix neighbor', 'demo', 'reasonix', '2026-06-30')"
+    )
+    db.execute(
+        "INSERT INTO knowledge_nodes (knowledge_id, node_id, strength) VALUES (4, 'reasonix-node', 1.0)"
+    )
+    db.execute(
+        "INSERT INTO graph_edges (id, source_id, target_id, relation_type, weight, context) VALUES ('e3', 'seed-node', 'reasonix-node', 'caused_by', 1.0, 'cross namespace path')"
+    )
+    db.commit()
+
+    result = graph_expander.explain_expansion_paths(
+        db, [1], candidate_ids=[2, 4], edge_families=["causal"],
+    )
+
+    assert set(result) == {2}

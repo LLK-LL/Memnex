@@ -16,8 +16,13 @@ function Test-ViewerHealthy {
         if ($pixi.StatusCode -ne 200) { return $false }
         $response = Invoke-WebRequest -Uri $GraphUrl -UseBasicParsing -TimeoutSec 8
         if ($response.StatusCode -ne 200) { return $false }
-        $payload = $response.Content | ConvertFrom-Json
-        return $null -ne $payload.elements -and $null -ne $payload.elements.nodes
+        return (
+            $response.Content -match '"elements"\s*:' -and
+            $response.Content -match '"nodes"\s*:' -and
+            $response.Content -match '"metadata"\s*:' -and
+            $response.Content -match '"magma_families"\s*:' -and
+            $response.Content -match '"agent_galaxies"\s*:'
+        )
     } catch {
         return $false
     }
@@ -56,10 +61,10 @@ function Resolve-ChromePath {
     throw "Google Chrome was not found. Install Chrome or add chrome.exe to PATH."
 }
 
-if (-not (Test-ViewerHealthy)) {
-    Stop-ViewerServers
-    Start-Sleep -Milliseconds 400
+Stop-ViewerServers
+Start-Sleep -Milliseconds 400
 
+if (-not (Test-ViewerHealthy)) {
     $python = Get-Command py -ErrorAction SilentlyContinue
     if ($python) {
         Start-Process -FilePath $python.Source -ArgumentList @("-3", "-m", "src.tools.memory_graph_viewer_server", "--host", $HostName, "--port", [string]$Port) -WorkingDirectory $Root -WindowStyle Hidden
