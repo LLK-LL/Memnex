@@ -32,6 +32,8 @@ import os
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -137,6 +139,24 @@ def _structural_should_run(now: float | None = None) -> bool:
         return False
     current = time.monotonic() if now is None else now
     return current - _STRUCTURAL_LAST_RUN >= _structural_min_interval_sec()
+
+
+def _structural_model() -> str:
+    return os.environ.get("MEMORY_STRUCTURAL_OLLAMA_MODEL", "qwen2.5:3b").strip()
+
+
+def _ollama_url() -> str:
+    return os.environ.get("MEMORY_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+
+
+def _structural_timeout_sec() -> float:
+    raw = os.environ.get("MEMORY_STRUCTURAL_TIMEOUT_SEC")
+    if not raw:
+        return 45.0
+    try:
+        return max(5.0, min(180.0, float(raw)))
+    except ValueError:
+        return 45.0
 
 
 def _now() -> str:
@@ -433,23 +453,153 @@ def _run_wiki_refresh(db, task: EnrichmentTask, store=None) -> None:
     )
 
 
+_STRUCTURAL_RELATIONS = {
+    "caused_by",
+    "causes",
+    "leads_to",
+    "because_of",
+    "blocks",
+    "blocked_by",
+    "fixed_by",
+    "resolved_by",
+    "step_after",
+    "step_before",
+    "workflow_depends_on",
+}
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+        return data if isinstance(data, dict) else {}
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            data = json.loads(text[start:end + 1])
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+
+
+def _parse_structural_edges(raw: str) -> list[dict[str, Any]]:
+    """Parse conservative causal/procedural edges from an Ollama response."""
+    data = _extract_json_object(raw)
+    edges = data.get("edges", [])
+    if not isinstance(edges, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in edges[:5]:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source") or "").strip()
+        target = str(item.get("target") or "").strip()
+        relation_type = str(item.get("relation_type") or "").strip().lower()
+        relation_type = relation_type.replace("-", "_").replace(" ", "_")
+        if not source or not target or relation_type not in _STRUCTURAL_RELATIONS:
+            continue
+        try:
+            confidence = float(item.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            confidence = 0.5
+        confidence = max(0.1, min(1.0, confidence))
+        context = str(item.get("context") or "").strip()
+        out.append({
+            "source": source[:160],
+            "target": target[:160],
+            "relation_type": relation_type,
+            "confidence": confidence,
+            "context": context[:500],
+        })
+    return out
+
+
+def _structural_prompt(task: EnrichmentTask) -> str:
+    content = task.content_snapshot[:2500]
+    return (
+        "Extract at most 3 causal or procedural memory graph edges from this coding-agent memory.\n"
+        "Return only compact JSON with this schema:\n"
+        "{\"edges\":[{\"source\":\"short noun phrase\",\"target\":\"short noun phrase\","
+        "\"relation_type\":\"caused_by|causes|leads_to|because_of|blocks|blocked_by|fixed_by|resolved_by|step_after|step_before|workflow_depends_on\","
+        "\"confidence\":0.0,\"context\":\"brief evidence\"}]}\n"
+        "Use caused_by/fixed_by for failures and fixes. Use step_after/step_before for workflows.\n\n"
+        f"Memory type: {task.ktype}\nProject: {task.project}\nContent:\n{content}"
+    )
+
+
+def _ollama_structural_call(task: EnrichmentTask) -> str:
+    payload = {
+        "model": _structural_model(),
+        "prompt": _structural_prompt(task),
+        "stream": False,
+        "format": "json",
+        "options": {
+            "temperature": 0,
+            "num_predict": 384,
+        },
+    }
+    request = urllib.request.Request(
+        f"{_ollama_url()}/api/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_structural_timeout_sec()) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError(f"ollama structural call failed: {exc}") from exc
+    data = json.loads(body)
+    return str(data.get("response") or "")
+
+
+def _write_structural_edges(db, task: EnrichmentTask, edges: list[dict[str, Any]]) -> int:
+    if not edges:
+        return 0
+    try:
+        from graph.store import GraphStore
+    except Exception as exc:
+        LOG(f"structural graph import failed: {exc}")
+        return 0
+    store = GraphStore(db)
+    written = 0
+    for edge in edges[:_structural_max_per_tick()]:
+        result = store.link_pair(
+            edge["source"],
+            "concept",
+            edge["target"],
+            "concept",
+            edge["relation_type"],
+            weight=edge["confidence"],
+            context=edge.get("context") or f"structural inference for knowledge {task.knowledge_id}",
+        )
+        if result is None:
+            continue
+        source_id, target_id, _edge_id = result
+        store.link_knowledge(task.knowledge_id, source_id, role="structural_source", strength=edge["confidence"])
+        store.link_knowledge(task.knowledge_id, target_id, role="structural_target", strength=edge["confidence"])
+        written += 1
+    return written
+
+
 def _run_structural_consolidation(db, task: EnrichmentTask, store=None) -> None:
-    """Throttled placeholder for MAGMA-style slow structural consolidation.
+    """Run throttled MAGMA-style slow structural consolidation via Ollama.
 
     The stage is opt-in and intentionally conservative for local 3B Ollama:
-    at most one task per tick and a minimum interval between runs.  The first
-    slice records no edges; later slices can add causal/narrative inference
-    behind this throttle.
+    at most one task per tick and a minimum interval between runs.
     """
     global _STRUCTURAL_LAST_RUN
     if not _structural_should_run():
         return
     _STRUCTURAL_LAST_RUN = time.monotonic()
-    limit = _structural_max_per_tick()
-    LOG(
-        f"structural consolidation tick allowed "
-        f"(kid={task.knowledge_id}, max_per_tick={limit}, model={_structural_model_size()})"
-    )
+    raw = _ollama_structural_call(task)
+    edges = _parse_structural_edges(raw)
+    written = _write_structural_edges(db, task, edges)
+    LOG(f"structural consolidation wrote {written} edge(s) for kid={task.knowledge_id}")
 
 
 # Stages run in deterministic order. quality_gate first so a 'drop' is

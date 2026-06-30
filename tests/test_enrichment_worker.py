@@ -131,6 +131,105 @@ def test_structural_throttle_skips_until_interval_elapsed(monkeypatch):
         ew._STRUCTURAL_LAST_RUN = 0.0
 
 
+def test_parse_structural_edges_from_ollama_json():
+    raw = """
+    {"edges": [
+      {"source": "install failure", "target": "missing package", "relation_type": "caused_by", "confidence": 0.82, "context": "Package was absent"},
+      {"source": "missing package", "target": "pip install", "relation_type": "fixed_by", "confidence": 0.76, "context": "Install resolved it"},
+      {"source": "", "target": "ignored", "relation_type": "caused_by"}
+    ]}
+    """
+
+    edges = ew._parse_structural_edges(raw)
+
+    assert edges == [
+        {
+            "source": "install failure",
+            "target": "missing package",
+            "relation_type": "caused_by",
+            "confidence": 0.82,
+            "context": "Package was absent",
+        },
+        {
+            "source": "missing package",
+            "target": "pip install",
+            "relation_type": "fixed_by",
+            "confidence": 0.76,
+            "context": "Install resolved it",
+        },
+    ]
+
+
+def test_structural_consolidation_writes_ollama_edges(db, seed_record, monkeypatch):
+    db.executescript(
+        """
+        CREATE TABLE graph_nodes (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            content TEXT,
+            properties TEXT,
+            source TEXT,
+            importance REAL DEFAULT 0.5,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            mention_count INTEGER DEFAULT 1,
+            status TEXT DEFAULT 'active'
+        );
+        CREATE TABLE graph_edges (
+            id TEXT PRIMARY KEY,
+            source_id TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            relation_type TEXT NOT NULL,
+            weight REAL DEFAULT 1.0,
+            context TEXT,
+            created_at TEXT NOT NULL,
+            last_reinforced_at TEXT,
+            reinforcement_count INTEGER DEFAULT 0,
+            UNIQUE(source_id, target_id, relation_type)
+        );
+        CREATE TABLE knowledge_nodes (
+            knowledge_id INTEGER,
+            node_id TEXT,
+            role TEXT DEFAULT 'related',
+            strength REAL DEFAULT 1.0,
+            PRIMARY KEY (knowledge_id, node_id)
+        );
+        """
+    )
+    monkeypatch.setenv("MEMORY_STRUCTURAL_CONSOLIDATION", "true")
+    monkeypatch.setenv("MEMORY_STRUCTURAL_MIN_INTERVAL_SEC", "0")
+    ew._STRUCTURAL_LAST_RUN = 0.0
+    monkeypatch.setattr(
+        ew,
+        "_ollama_structural_call",
+        lambda task: '{"edges":[{"source":"install failure","target":"missing package","relation_type":"caused_by","confidence":0.8,"context":"missing dependency"}]}',
+    )
+    task = ew.EnrichmentTask(
+        id=1,
+        knowledge_id=seed_record,
+        session_id="s1",
+        project="p",
+        ktype="solution",
+        content_snapshot="Install failed because a package was missing.",
+        tags_snapshot=[],
+        importance="medium",
+        skip_quality=False,
+        attempts=1,
+    )
+
+    try:
+        ew._run_structural_consolidation(db, task)
+    finally:
+        ew._STRUCTURAL_LAST_RUN = 0.0
+
+    edge = db.execute("SELECT relation_type, weight, context FROM graph_edges").fetchone()
+    assert edge["relation_type"] == "caused_by"
+    assert edge["weight"] == 0.8
+    assert "missing dependency" in edge["context"]
+    assert db.execute("SELECT COUNT(*) FROM knowledge_nodes").fetchone()[0] == 2
+
+
 # ──────────────────────────────────────────────
 # Enqueue
 # ──────────────────────────────────────────────
