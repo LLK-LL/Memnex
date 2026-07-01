@@ -5,26 +5,34 @@ Append the block below into your `~/.codex/AGENTS.md` or project
 
 ---
 
-## Memory Protocol (total-agent-memory v10.5)
+## Memory Protocol
 
-A persistent cross-session memory is wired in via the `memory` MCP server.
-The same protocol applies as in Claude Code / Cursor / Cline:
+Use memory only when the task depends on durable local state: prior preferences, rules, decisions, conventions, known bugs, repo history, or user wording like "之前/上次/继续/按我的习惯/记得/沿用".
 
-1. **Session start:** call `self_rules_context(project=..., detail="compact")`,
-   then `memory_recall(query, project)` for the current task.
-2. **Before any non-trivial task:** call `memory_recall` to find the recipe.
-   Do not reinvent conventions you can recall.
-3. **After every significant action:** call `memory_save` immediately with a
-   concise reusable record. Use tags such as `reusable`, the technology, and
-   the project area when applicable.
-4. **On reproducible non-zero shell/tool/API/config errors:** call
-   `self_error_log(description, category, severity, fix, project)`. After 3
-   similar patterns, extract an insight with `self_insight(action="add", ...)`.
-5. **End of significant work:** save a short summary, next steps, or reflection
-   when new reusable knowledge was created.
+Load for local repo/code work, memory/rule/skill/agent workflow changes, or history-dependent tasks:
 
-Cross-project lookup: `analogize(text, exclude_project=<current>)`.
-Time-travel: `kg_at(timestamp)`. Stuck after 3 failures: stop, save a
-`type="lesson"` record, and ask the user for direction.
+1. `self_rules_context(project="<project>", detail="compact", phase="<phase>")`
+2. `memory_recall(query="<specific current task>", project="<project>", mode="rag", limit=5, include_cognitive=false)`
+
+Skip memory for self-contained external tasks: GitHub/web/paper/doc/package/news search, public project lookup, general Q&A, prompt-provided rewrite/translation/summary, casual chat, or trivial deterministic commands.
+
+For external search, use search/research skills directly. If durable user preferences may matter, call only:
+`self_rules_context(project="global", detail="compact", phase="<phase>")`
+Run `memory_recall` only if rules or user wording point to project-specific history.
+
+Save durable knowledge only:
+- decision: architectural decision
+- solution: non-trivial bug fix
+- lesson: gotcha/pitfall
+- fact: infrastructure/config fact
+- convention: project convention
+
+Use `memory_save(type="<kind>", ...)`. Do not save transient search results, obvious code facts, casual comments, or one-off recommendations.
+
+On reproducible command/tool/API/config errors, log them:
+
+`self_error_log(description="...", category="code_error|config_error|api_error|timeout|wrong_assumption|missing_context", severity="low|medium|high|critical", fix="...", project="<project>")`
+
+At the end of significant work, save a brief memory or reflection if new reusable knowledge was created.
 
 Full reference: `skills/memory-protocol/`.

@@ -1,11 +1,8 @@
 {
   "mcpServers": {
-    "total-agent-memory": {
+    "memory": {
       "type": "http",
-      "url": "http://127.0.0.1:3747/mcp/",
-      "headers": {
-        "X-TAM-Agent-Namespace": "reasonix"
-      }
+      "url": "http://127.0.0.1:3747/mcp/"
     }
   }
 }

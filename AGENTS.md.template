@@ -1,306 +1,39 @@
-<!-- Copy to ./AGENTS.md in your project root. Replace "my-project" with your project name. -->
+<!-- Copy to ./AGENTS.md in your project root. Replace <project> with your project name. -->
 
-# Memory System — Project Configuration
+# Skill Selection Command Flow
 
-**CRITICAL: Codex does not have automatic session-start hooks. You MUST call `memory_recall` and `self_rules_context` at the beginning of every session without being prompted.**
+For explicit execution requests, match the current Skills list first. Clear match -> read that `SKILL.md` and follow it.
 
-# Replace "my-project" with your actual project name everywhere below.
+If matching is unclear, complex, or multi-skill, do low-token RAG first, then choose the smallest skill set.
 
----
+Casual chat, pure questions, and requests without execution intent skip this rule. If no skill fits, use the general engineering workflow.
 
-## BEFORE EVERY TASK (MANDATORY — NO HOOKS TO REMIND YOU)
+# Memory Protocol
 
-**There are no automatic hooks in Codex. You MUST perform these steps manually at the start of every session and before every task. Skipping these steps means losing access to all past decisions, solutions, and lessons.**
+Use memory only when the task depends on durable local state: prior preferences, rules, decisions, conventions, known bugs, repo history, or user wording like "之前/上次/继续/按我的习惯/记得/沿用".
 
-### Step 1: Load behavioral rules
+Load for local repo/code work, memory/rule/skill/agent workflow changes, or history-dependent tasks:
 
-```
-self_rules_context(project="my-project")
-```
+1. `self_rules_context(project="<project>", detail="compact", phase="<phase>")`
+2. `memory_recall(query="<specific current task>", project="<project>", mode="rag", limit=5, include_cognitive=false)`
 
-### Step 2: Search for relevant past knowledge
+Skip memory for self-contained external tasks: GitHub/web/paper/doc/package/news search, public project lookup, general Q&A, prompt-provided rewrite/translation/summary, casual chat, or trivial deterministic commands.
 
-```
-memory_recall(query="<description of current task>", project="my-project")
-```
+For external search, use search/research skills directly. If durable user preferences may matter, call only:
+`self_rules_context(project="global", detail="compact", phase="<phase>")`
+Run `memory_recall` only if rules or user wording point to project-specific history.
 
-**Both steps are MANDATORY. Do not skip them. Do not wait to be asked.**
+Save durable knowledge only:
+- decision: architectural decision
+- solution: non-trivial bug fix
+- lesson: gotcha/pitfall
+- fact: infrastructure/config fact
+- convention: project convention
 
-Examples of good recall queries:
-- "docker networking configuration" (before working on Docker)
-- "API authentication approach" (before touching auth code)
-- "database migration patterns" (before creating migrations)
-- "deployment pipeline" (before CI/CD changes)
+Use `memory_save(type="<kind>", project="<project>", tags=[...], ...)`. Do not save transient search results, obvious code facts, casual comments, or one-off recommendations.
 
----
+On reproducible command/tool/API/config errors, log them:
 
-## AUTO-SAVE: Save Knowledge Automatically
+`self_error_log(description="...", category="code_error|config_error|api_error|timeout|wrong_assumption|missing_context", severity="low|medium|high|critical", fix="...", project="<project>")`
 
-You MUST call `memory_save` automatically after significant actions.
-Do NOT ask the user "should I save this?" -- just save it.
-
-### When to save (automatic triggers):
-
-| Trigger | type | What to save |
-|---------|------|--------------|
-| Made an architectural decision | `decision` | The decision + WHY + rejected alternatives |
-| Fixed a non-trivial bug | `solution` | Symptom -> root cause -> fix |
-| Discovered a gotcha/pitfall | `lesson` | Expected vs actual behavior + takeaway |
-| Set up infrastructure/config | `fact` | Configuration details + key parameters |
-| Established a project pattern | `convention` | The rule + code example |
-| Completed a git commit | `fact` | Commit scope + key changes |
-| Ending a session | `fact` | Summary: what was done, what remains |
-
-### When NOT to save (avoid noise):
-
-- Trivial edits (formatting, imports, typo fixes)
-- Intermediate steps (running tests, reading files)
-- Information obvious from the code itself
-- Duplicate of something already saved
-
-### Save format — always include project and tags:
-
-```
-memory_save(
-    content="Brief, actionable description of the knowledge",
-    type="solution",
-    project="my-project",
-    tags=["relevant", "searchable", "tags"],
-    context="Additional context. For decisions: always explain WHY."
-)
-```
-
-### Quality rules:
-
-1. **One knowledge = one save** (do not mix different topics)
-2. **`project` is required** (enables filtered recall)
-3. **`tags` are required** (enables tag-based browsing)
-4. **`context` for decisions** — always include WHY and rejected alternatives
-5. **Be concise** — future recall should be fast to scan
-6. **Duplicates are OK** — the server auto-deduplicates (Jaccard + fuzzy)
-
-## Knowledge Types
-
-| Type | When | Example |
-|------|------|---------|
-| `decision` | Architectural choice (**must include WHY**) | "Chose PostgreSQL over MySQL because of JSONB support and temporal queries" |
-| `solution` | Bug fix or workaround | "Fixed timeout by chunking batch requests to 50 items with 200ms delay" |
-| `lesson` | Gotcha or pitfall discovered | "Docker Compose v2 requires depends_on.condition: service_healthy -- silent failure without it" |
-| `fact` | Config, version, endpoint | "Production DB: PostgreSQL 18 on port 5433, max_connections=200" |
-| `convention` | Project pattern or rule | "All DTOs must be final readonly classes with constructor promotion" |
-
-## Browse and Maintain
-
-```
-memory_timeline(sessions_ago=1)                     # What happened last session
-memory_timeline(query="docker")                     # Find sessions about docker
-memory_stats()                                      # Health metrics and storage
-memory_search_by_tag(tag="api", project="my-project") # Browse by tag
-memory_consolidate(dry_run=true)                    # Preview duplicate merges
-memory_forget(dry_run=true)                         # Preview retention cleanup
-memory_update(find="old fact", new_content="new")   # Update existing knowledge
-```
-
-## Advanced
-
-```
-memory_recall(query="topic", detail="summary")           # Token-saving mode (150 chars)
-memory_history(id=42)                                    # Version chain for a record
-memory_delete(id=42)                                     # Soft-delete a record
-memory_relate(from_id=1, to_id=2, type="solution")      # Link related records
-memory_extract_session(action="list")                    # Pending transcript extractions
-```
-
-## Knowledge Graph
-
-Build and explore a concept graph across your knowledge base.
-
-```
-memory_graph(id=42, depth=2)                             # Expand relations from a record (N hops)
-memory_concepts(query="authentication")                  # Find concept clusters related to a topic
-memory_graph_index()                                     # Rebuild the graph index
-memory_graph_stats()                                     # Graph metrics: nodes, edges, density
-```
-
-## Episodic Memory
-
-Save and recall rich session episodes with temporal context.
-
-```
-memory_episode_save(
-    title="Migrated database to PostgreSQL 18",
-    content="Steps taken, issues encountered, final state",
-    tags=["migration", "database"],
-    project="my-project"
-)
-
-memory_episode_recall(query="database migration", project="my-project")
-```
-
-## Skills & Competencies
-
-Track and assess the agent's skill levels across domains.
-
-```
-memory_skill_get(skill="docker")                         # Get current skill level and history
-memory_skill_update(skill="docker", delta=1, reason="Solved complex networking issue")
-memory_self_assess()                                     # Self-assessment across all tracked skills
-```
-
-## Associative Search & Context Building
-
-```
-memory_associate(query="API rate limiting")              # Find associatively linked knowledge
-memory_context_build(task="implement caching layer", project="my-project")
-    # Build a full context bundle: related knowledge, recent episodes, active rules, relevant skills
-```
-
-## Reflection
-
-```
-memory_reflect_now(topic="session progress", project="my-project")
-    # Trigger an on-demand reflection: synthesize recent activity into actionable insights
-```
-
-## Self-Improvement (Automatic Error Learning)
-
-The agent learns from mistakes across sessions via a 3-level pipeline.
-
-### On any error (bash failure, wrong assumption, API error) — log it automatically:
-```
-self_error_log(
-    description="What went wrong",
-    category="code_error",
-    fix="How it was fixed",
-    project="my-project"
-)
-```
-
-Categories: `code_error`, `logic_error`, `config_error`, `api_error`, `timeout`, `loop_detected`, `wrong_assumption`, `missing_context`
-
-### When patterns emerge (3+ similar errors) — extract insight:
-```
-self_insight(action="add", content="Lesson learned", category="code_error")
-```
-
----
-
-## AT SESSION END (MANDATORY — NO HOOKS TO REMIND YOU)
-
-**There are no automatic hooks in Codex to trigger end-of-session actions. You MUST perform these steps before the session ends. Failing to do so means losing all knowledge gained during this session.**
-
-### Step 1: Reflect on the session
-
-```
-self_reflect(reflection="What went well, what to improve", task_summary="What was done", project="my-project")
-```
-
-### Step 2: Save a session summary
-
-```
-memory_save(
-    content="Session summary: <what was accomplished, what remains>",
-    type="fact",
-    project="my-project",
-    tags=["session-summary"]
-)
-```
-
-**Both steps are MANDATORY. Do not skip them. Do not wait to be asked.**
-
----
-
-### Analyze improvement:
-```
-self_patterns(view="full_report", project="my-project")
-```
-
-## Privacy & Security
-
-### Automatic Redaction
-
-The server automatically strips sensitive data before storing knowledge:
-- API keys (sk-*, key-*, Bearer tokens)
-- JWTs, passwords, credit card numbers, emails
-- IP addresses with ports
-
-You can also use `<private>` tags to explicitly exclude content:
-
-```
-memory_save(
-    content="Connected to <private>prod-db.internal:5432</private> using connection pooling",
-    type="fact",
-    project="my-project"
-)
-```
-
-Everything inside `<private>...</private>` tags is replaced with `[REDACTED]` before storage.
-
-### What is NOT stored
-
-- File contents (only metadata about changes via observations)
-- Environment variables or .env file contents
-- Raw credentials or tokens
-
-## Auto-Capture (Observations)
-
-The `memory_observe` tool provides lightweight tracking of file changes and discoveries
-without the overhead of full knowledge storage (no dedup, no vector embeddings).
-
-```
-memory_observe(
-    tool_name="Write",
-    summary="Created user authentication middleware",
-    observation_type="feature",
-    files_affected=["/src/middleware/auth.py"],
-    project="my-project"
-)
-```
-
-Observation types: `bugfix`, `feature`, `refactor`, `change`, `discovery`, `decision`
-
-Observations are automatically cleaned up after 30 days. Use them for:
-- Tracking what files were modified and why
-- Recording quick discoveries during exploration
-- Building a timeline of changes within a session
-
-For important, long-lived knowledge, use `memory_save` instead.
-
-## Web Dashboard
-
-Open http://localhost:37737 to browse knowledge, sessions, the knowledge graph, and live activity feed.
-
----
-
-## v11.0 — fast hot path & new tools
-
-The default mode in v11.0 is **`MEMORY_MODE=fast`**: zero LLM, zero Ollama, zero network in the save/search/recall hot path. Use it as-is for normal coding-agent loops.
-
-**New tools you should know about:**
-
-- `memory_save_fast(...)` — same surface as `memory_save`, but always uses the fast deterministic path regardless of mode. Use when latency matters more than enrichment.
-- `memory_search_fast(query, ...)` — same as `memory_recall`, fast path only.
-- `memory_explain_search(query, ...)` — returns per-stage timings + candidate counts + which `embedding_space` filter was applied. Use to debug ranking surprises.
-- `memory_warmup()` — pre-loads FastEmbed model and caches into RAM. Call once at session start to remove cold-start variance.
-- `memory_rebuild_fts()` — rebuild SQLite FTS5 index after a bulk import.
-- `memory_rebuild_embeddings(space="code")` — re-encode a single embedding space. Run after swapping `MEMORY_CODE_EMBED_MODEL` / `MEMORY_LOG_EMBED_MODEL` / `MEMORY_CONFIG_EMBED_MODEL`.
-- `memory_perf_report()` — current p50/p95/p99 + `llm_calls` + `network_calls` counters.
-- `memory_eval_locomo`, `memory_eval_recall`, `memory_eval_temporal`, `memory_eval_entity_consistency`, `memory_eval_contradictions`, `memory_eval_long_context` — wired-in evaluator tools, no external scripts needed.
-
-**Multi-embedding-space contract:**
-
-Every vector row records `embedding_space` = `text` | `code` | `log` | `config`. When you save code or logs, the classifier picks the correct space automatically — no extra parameter required. If you want to scope a search to a single space:
-
-```
-memory_recall(query="auth middleware", embedding_space="code", project="my-project")
-```
-
-If `MEMORY_CODE_EMBED_MODEL` / `MEMORY_LOG_EMBED_MODEL` / `MEMORY_CONFIG_EMBED_MODEL` are empty (default), the row still records the space but is encoded with the TEXT model. A future model swap is one env-var change plus a `memory_rebuild_embeddings(space=...)` call — no code changes needed.
-
-If you depended on v10.5 synchronous LLM behaviour (quality gate / contradiction detector / coref) before INSERT, restore it via:
-
-```bash
-export MEMORY_MODE=deep
-```
-
-Migration from v10: see `docs/v11/MIGRATION-FROM-V10.md` in the server repo.
+At the end of significant work, save a brief memory or reflection if new reusable knowledge was created.
