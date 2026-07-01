@@ -172,6 +172,21 @@ def test_ps1_hook_is_nonempty(ps1_name: str):
     )
 
 
+def test_windows_user_prompt_hook_defaults_to_tam_dir():
+    text = (HOOKS_DIR / "user-prompt-submit.ps1").read_text(encoding="utf-8")
+    assert "$env:TAM_MEMORY_DIR" in text
+    assert 'Join-Path $env:USERPROFILE ".tam"' in text
+    assert 'Join-Path $env:USERPROFILE ".claude-memory"' not in text
+
+
+def test_windows_bash_error_hook_uses_self_error_log_and_auto_writer():
+    text = (HOOKS_DIR / "on-bash-error.ps1").read_text(encoding="utf-8")
+    assert "self_error_log" in text
+    assert "auto_self_improve.py" in text
+    assert '"error"' in text
+    assert "learn_error" not in text
+
+
 # ------------------------------------------------------------------
 # Hook registration in settings.json
 # ------------------------------------------------------------------

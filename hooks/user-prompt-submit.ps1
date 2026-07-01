@@ -8,7 +8,8 @@
 #
 # Env:
 #   CLAUDE_MEMORY_INSTALL_DIR — install root (auto-resolved)
-#   CLAUDE_MEMORY_DIR         — memory storage (%USERPROFILE%\.claude-memory)
+#   TAM_MEMORY_DIR            — memory storage (%USERPROFILE%\.tam)
+#   CLAUDE_MEMORY_DIR         — legacy memory storage alias
 #
 # Hook: UserPromptSubmit (matcher: "")
 # ===========================================
@@ -21,7 +22,13 @@ $InstallDir = if ($env:CLAUDE_MEMORY_INSTALL_DIR) {
 } else {
     Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 }
-$MemoryDir = if ($env:CLAUDE_MEMORY_DIR) { $env:CLAUDE_MEMORY_DIR } else { Join-Path $env:USERPROFILE ".claude-memory" }
+$MemoryDir = if ($env:TAM_MEMORY_DIR) {
+    $env:TAM_MEMORY_DIR
+} elseif ($env:CLAUDE_MEMORY_DIR) {
+    $env:CLAUDE_MEMORY_DIR
+} else {
+    Join-Path $env:USERPROFILE ".tam"
+}
 
 $HookPython = [System.IO.Path]::Combine($InstallDir, ".venv", "Scripts", "python.exe")
 if (-not (Test-Path $HookPython)) {
@@ -50,6 +57,7 @@ from pathlib import Path
 src_dir = sys.argv[1]
 db_path = sys.argv[2]
 tmp = sys.argv[3]
+payload_path = Path(__file__)
 
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
@@ -84,6 +92,8 @@ if not prompt:
 session_id = data.get("session_id") or os.environ.get("CLAUDE_SESSION_ID") or "unknown"
 cwd = data.get("cwd") or os.getcwd()
 project = os.path.basename(cwd) or "unknown"
+os.environ.setdefault("TAM_MEMORY_DIR", str(Path(db_path).parent))
+os.environ.setdefault("CLAUDE_MEMORY_DIR", str(Path(db_path).parent))
 
 if not Path(db_path).exists():
     sys.exit(0)
@@ -94,18 +104,26 @@ try:
 except Exception:
     # Hook must never crash the user session.
     pass
+finally:
+    try:
+        payload_path.unlink()
+    except Exception:
+        pass
 '@
 
 # Fire-and-forget - Start-Process detaches so main hook returns immediately.
-# WindowStyle Hidden keeps the python console off-screen; no -NoNewWindow
-# (they are mutually exclusive in Start-Process).
-$arguments = @("-c", $PyScript, $SrcDir, $DbPath, $TmpInput)
+# Write the Python payload to a temp file first; Start-Process flattens
+# -ArgumentList arrays on Windows, which is brittle for multi-line -c code.
 try {
+    $PayloadPy = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "cmm-uprompt-$(New-Guid).py")
+    [System.IO.File]::WriteAllText($PayloadPy, $PyScript)
+    $arguments = @($PayloadPy, $SrcDir, $DbPath, $TmpInput)
     Start-Process -FilePath $HookPython `
         -ArgumentList $arguments `
         -WindowStyle Hidden `
         -ErrorAction SilentlyContinue | Out-Null
 } catch {
+    if ($PayloadPy) { Remove-Item -Path $PayloadPy -ErrorAction SilentlyContinue }
     # Never fail the user session.
 }
 
