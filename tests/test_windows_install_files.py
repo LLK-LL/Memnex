@@ -234,6 +234,7 @@ def test_three_background_tasks_registered(install_text: str):
 
 def test_reflection_task_uses_local_ollama_3b(run_reflection_task_text: str):
     """Scheduled reflection should not depend on Codex remote API credentials."""
+    assert '$env:FASTEMBED_CACHE_DIR = "D:\\CodexCache\\fastembed"' in run_reflection_task_text
     assert '$env:MEMORY_LLM_PROVIDER = "ollama"' in run_reflection_task_text
     assert '$env:MEMORY_LLM_MODEL = "qwen2.5:3b"' in run_reflection_task_text
     assert '$env:MEMORY_TRIPLE_PROVIDER = "ollama"' in run_reflection_task_text

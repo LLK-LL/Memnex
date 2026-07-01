@@ -150,6 +150,7 @@ class FastEmbedProvider:
 
     def __init__(self, model: str | None = None) -> None:
         self._model_name = model or config.get_embed_model("fastembed")
+        self._cache_dir = config.get_fastembed_cache_dir()
         self._model: object | None = None  # TextEmbedding instance or False
         self._dim_cache: int = _FASTEMBED_DIM.get(self._model_name, 0)
 
@@ -168,7 +169,8 @@ class FastEmbedProvider:
             self._model = False
             return None
         try:
-            self._model = TextEmbedding(self._model_name)
+            kwargs = {"cache_dir": self._cache_dir} if self._cache_dir else {}
+            self._model = TextEmbedding(self._model_name, **kwargs)
         except Exception as exc:  # noqa: BLE001
             LOG(f"FastEmbed init failed: {exc}")
             self._model = False

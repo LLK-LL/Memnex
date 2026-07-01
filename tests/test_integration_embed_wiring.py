@@ -141,6 +141,45 @@ def test_fast_mode_does_not_fallback_to_st_when_fastembed_unavailable(monkeypatc
             pass
 
 
+def test_server_fastembed_uses_configured_cache_dir(monkeypatch, tmp_path):
+    import importlib
+
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", r"D:\CodexCache\fastembed")
+    monkeypatch.setenv("MEMORY_MODE", "fast")
+    monkeypatch.setenv("MEMORY_EMBED_PROVIDER", "fastembed")
+    monkeypatch.delenv("MEMORY_MODE_RESOLVED", raising=False)
+    for mod in ("server", "embed_provider", "reranker", "config"):
+        sys.modules.pop(mod, None)
+
+    import server  # noqa: E402
+    importlib.reload(server)
+    monkeypatch.setattr(server, "MEMORY_DIR", tmp_path)
+
+    captured = {}
+
+    class _FakeTextEmbedding:
+        def __init__(self, model_name, **kwargs):
+            captured["model_name"] = model_name
+            captured["kwargs"] = kwargs
+
+        def embed(self, texts):
+            for _ in texts:
+                yield [0.1, 0.2, 0.3]
+
+    monkeypatch.setattr(server, "HAS_FASTEMBED", True)
+    monkeypatch.setattr(server, "TextEmbedding", _FakeTextEmbedding)
+
+    store = server.Store()
+    try:
+        assert store._embed_mode == "fastembed"
+        assert captured["kwargs"]["cache_dir"] == r"D:\CodexCache\fastembed"
+    finally:
+        try:
+            store.db.close()
+        except Exception:
+            pass
+
+
 def test_embed_wiring_uses_configured_provider(monkeypatch, tmp_path):
     """MEMORY_EMBED_PROVIDER=openai must reroute Store.embed() to the
     OpenAI /embeddings endpoint (no fastembed call)."""

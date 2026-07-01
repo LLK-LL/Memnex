@@ -256,6 +256,16 @@ def test_get_embed_model_defaults(monkeypatch):
     assert config.get_embed_model("cohere") == "embed-multilingual-v3.0"
 
 
+def test_get_fastembed_cache_dir(monkeypatch):
+    import config
+
+    monkeypatch.delenv("FASTEMBED_CACHE_DIR", raising=False)
+    assert config.get_fastembed_cache_dir() is None
+
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", r"D:\CodexCache\fastembed")
+    assert config.get_fastembed_cache_dir() == r"D:\CodexCache\fastembed"
+
+
 def test_get_embed_api_key_provider_specific(monkeypatch):
     import config
 

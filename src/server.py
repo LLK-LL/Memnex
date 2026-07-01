@@ -38,6 +38,20 @@ try:
 except Exception as _v11_exc:  # pragma: no cover — never block startup
     sys.stderr.write(f"[memory-mcp] v11 mode resolver skipped: {_v11_exc}\n")
 
+def _allow_hf_download_hot_path() -> bool:
+    return (
+        os.environ.get("MEMORY_ALLOW_HF_DOWNLOAD_IN_HOT_PATH", "false")
+        .strip()
+        .lower()
+        in ("1", "true", "yes", "on")
+    )
+
+
+if not _allow_hf_download_hot_path():
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "1")
+
 from paths import memory_dir as _resolve_memory_dir  # noqa: E402
 from memory_mcp_single_instance import (  # noqa: E402
     claim_single_instance_lock,
@@ -123,6 +137,7 @@ except ImportError:
 
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 FASTEMBED_MODEL = os.environ.get("FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+FASTEMBED_CACHE_DIR = os.environ.get("FASTEMBED_CACHE_DIR")
 OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 USE_OLLAMA_EMBED = os.environ.get("USE_OLLAMA_EMBED", "auto")  # auto|true|false
@@ -374,9 +389,17 @@ class Store:
     def embedder(self):
         if self._embedder is None and HAS_ST:
             try:
-                self._embedder = SentenceTransformer(EMBEDDING_MODEL)
-            except Exception:
-                pass
+                kwargs = (
+                    {}
+                    if _allow_hf_download_hot_path()
+                    else {"local_files_only": True}
+                )
+                self._embedder = SentenceTransformer(EMBEDDING_MODEL, **kwargs)
+            except Exception as e:
+                LOG(f"SentenceTransformers unavailable for {EMBEDDING_MODEL}: {e}")
+                self._embedder = False
+        if self._embedder is False:
+            return None
         return self._embedder
 
     @property
@@ -384,7 +407,8 @@ class Store:
         """Lazy-init FastEmbed model."""
         if self._fastembed_model is None and HAS_FASTEMBED:
             try:
-                self._fastembed_model = TextEmbedding(FASTEMBED_MODEL)
+                kwargs = {"cache_dir": FASTEMBED_CACHE_DIR} if FASTEMBED_CACHE_DIR else {}
+                self._fastembed_model = TextEmbedding(FASTEMBED_MODEL, **kwargs)
                 LOG(f"FastEmbed: loaded {FASTEMBED_MODEL}")
             except Exception as e:
                 LOG(f"FastEmbed: init failed ({e})")

@@ -10,6 +10,7 @@ if %ERRORLEVEL% EQU 1 exit /b 0
 echo Starting TAM HTTP server... >> %LOG%
 set MEMORY_MODE=fast
 set MEMORY_EMBED_PROVIDER=fastembed
+set FASTEMBED_CACHE_DIR=D:/CodexCache/fastembed
 set MEMORY_MCP_SINGLE_INSTANCE=0
 set TAM_MEMORY_DIR=C:/Users/Administrator/.tam
 set TAM_AGENT_NAMESPACE=codex

@@ -89,6 +89,30 @@ def test_fastembed_provider_extracts_existing_logic(monkeypatch):
     assert p_known.dim() == 384
 
 
+def test_fastembed_provider_uses_configured_cache_dir(monkeypatch):
+    import embed_provider
+
+    captured = {}
+
+    class _FakeModel:
+        def __init__(self, model_name: str, **kwargs) -> None:
+            captured["model_name"] = model_name
+            captured["kwargs"] = kwargs
+
+        def embed(self, texts):
+            for _ in texts:
+                yield [0.1, 0.2, 0.3]
+
+    fake_module = type(sys)("fastembed")
+    fake_module.TextEmbedding = _FakeModel  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_module)
+    monkeypatch.setenv("FASTEMBED_CACHE_DIR", r"D:\CodexCache\fastembed")
+
+    p = embed_provider.FastEmbedProvider(model="BAAI/bge-small-en-v1.5")
+    assert p.available() is True
+    assert captured["kwargs"]["cache_dir"] == r"D:\CodexCache\fastembed"
+
+
 def test_fastembed_provider_returns_unavailable_when_missing(monkeypatch):
     import embed_provider
 

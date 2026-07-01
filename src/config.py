@@ -560,6 +560,10 @@ def get_embed_model(provider: str | None = None) -> str:
     return _DEFAULT_EMBED_MODEL_BY_PROVIDER.get(p, "")
 
 
+def get_fastembed_cache_dir() -> str | None:
+    return os.environ.get("FASTEMBED_CACHE_DIR") or None
+
+
 def _normalize_phase(phase: str) -> str:
     p = (phase or "").strip().lower()
     if p not in _SUPPORTED_PHASES:

@@ -6,6 +6,7 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $env:TAM_MEMORY_DIR = "C:\Users\Administrator\.tam"
 $env:PYTHONIOENCODING = "utf-8"
+$env:FASTEMBED_CACHE_DIR = "D:\CodexCache\fastembed"
 $env:MEMORY_LLM_PROVIDER = "ollama"
 $env:MEMORY_LLM_API_BASE = "http://localhost:11434"
 $env:MEMORY_LLM_MODEL = "qwen2.5:3b"
