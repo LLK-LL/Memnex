@@ -16,12 +16,19 @@ import pytest
 ROOT = Path(__file__).parent.parent
 INSTALL_PS1 = ROOT / "install.ps1"
 HOOKS_DIR = ROOT / "hooks"
+RUN_REFLECTION_TASK_PS1 = ROOT / "scripts" / "run_reflection_task.ps1"
 
 
 @pytest.fixture(scope="module")
 def install_text() -> str:
     assert INSTALL_PS1.exists(), "install.ps1 must exist at repo root"
     return INSTALL_PS1.read_text(encoding="utf-8")
+
+
+@pytest.fixture(scope="module")
+def run_reflection_task_text() -> str:
+    assert RUN_REFLECTION_TASK_PS1.exists(), "run_reflection_task.ps1 must exist"
+    return RUN_REFLECTION_TASK_PS1.read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------------
@@ -208,6 +215,17 @@ def test_three_background_tasks_registered(install_text: str):
         "total-agent-memory-check-updates",
     ):
         assert task in install_text, f"missing scheduled task '{task}'"
+
+
+def test_reflection_task_uses_local_ollama_3b(run_reflection_task_text: str):
+    """Scheduled reflection should not depend on Codex remote API credentials."""
+    assert '$env:MEMORY_LLM_PROVIDER = "ollama"' in run_reflection_task_text
+    assert '$env:MEMORY_LLM_MODEL = "qwen2.5:3b"' in run_reflection_task_text
+    assert '$env:MEMORY_TRIPLE_PROVIDER = "ollama"' in run_reflection_task_text
+    assert '$env:MEMORY_ENRICH_PROVIDER = "ollama"' in run_reflection_task_text
+    assert "auth.json" not in run_reflection_task_text
+    assert "OPENAI_API_KEY" not in run_reflection_task_text
+    assert "gpt-5.4-mini" not in run_reflection_task_text
 
 
 def test_uninstall_removes_all_tasks(install_text: str):

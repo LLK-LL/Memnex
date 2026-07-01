@@ -6,21 +6,14 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $env:TAM_MEMORY_DIR = "C:\Users\Administrator\.tam"
 $env:PYTHONIOENCODING = "utf-8"
-$authPath = "C:\Users\Administrator\.codex\auth.json"
-if (Test-Path -LiteralPath $authPath) {
-    $auth = Get-Content -LiteralPath $authPath -Raw | ConvertFrom-Json
-    if ($auth.OPENAI_API_KEY) {
-        $env:MEMORY_LLM_PROVIDER = "openai"
-        $env:MEMORY_LLM_API_BASE = "https://api.0029.org/v1"
-        $env:MEMORY_LLM_API_KEY = [string]$auth.OPENAI_API_KEY
-        $env:MEMORY_LLM_MODEL = "gpt-5.4-mini"
-        $env:MEMORY_TRIPLE_PROVIDER = "openai"
-        $env:MEMORY_ENRICH_PROVIDER = "openai"
-        $env:MEMORY_REPR_PROVIDER = "openai"
-        $env:MEMORY_TRIPLE_DRAIN_LIMIT = "5"
-        $env:MEMORY_ENRICH_DRAIN_LIMIT = "5"
-    }
-}
+$env:MEMORY_LLM_PROVIDER = "ollama"
+$env:MEMORY_LLM_API_BASE = "http://localhost:11434"
+$env:MEMORY_LLM_MODEL = "qwen2.5:3b"
+$env:MEMORY_TRIPLE_PROVIDER = "ollama"
+$env:MEMORY_ENRICH_PROVIDER = "ollama"
+$env:MEMORY_REPR_PROVIDER = "ollama"
+$env:MEMORY_TRIPLE_DRAIN_LIMIT = "5"
+$env:MEMORY_ENRICH_DRAIN_LIMIT = "5"
 
 $python = Join-Path $root ".venv\Scripts\python.exe"
 $script = Join-Path $root "src\tools\run_reflection.py"
