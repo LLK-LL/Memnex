@@ -564,6 +564,78 @@ def test_memory_recall_include_cognitive_false_skips_cognitive(monkeypatch, tmp_
         pass
 
 
+def test_graph_expand_scores_compete_with_seed_budget(monkeypatch, tmp_path):
+    (tmp_path / "blobs").mkdir(exist_ok=True)
+    (tmp_path / "chroma").mkdir(exist_ok=True)
+
+    import server
+    monkeypatch.setattr(server, "MEMORY_DIR", tmp_path)
+    monkeypatch.setattr(server, "HAS_GRAPH_EXPAND", True)
+    monkeypatch.setenv("MEMORY_GRAPH_EXPAND", "1")
+
+    s = server.Store()
+    recall = server.Recall(s)
+    sid = "sess-graph-budget-1"
+    s.db.execute(
+        "INSERT INTO sessions (id, started_at, project, status) VALUES (?, ?, ?, ?)",
+        (sid, "2026-04-14T00:00:00Z", "demo", "open"),
+    )
+    s.db.commit()
+
+    seed_a, *_ = s.save_knowledge(
+        sid=sid, content="alpha seed one for hybrid recall", ktype="fact",
+        project="demo", skip_dedup=True,
+    )
+    seed_b, *_ = s.save_knowledge(
+        sid=sid, content="alpha seed two for hybrid recall", ktype="fact",
+        project="demo", skip_dedup=True,
+    )
+    graph_id, *_ = s.save_knowledge(
+        sid=sid, content="structural neighbour chosen by magma graph", ktype="fact",
+        project="demo", skip_dedup=True,
+    )
+
+    seen_seed_ids = []
+
+    def fake_expand(_db, seed_ids, **kwargs):
+        seen_seed_ids.extend(seed_ids)
+        assert kwargs["budget"] == 2
+        return [(graph_id, 10.0)]
+
+    def fake_fetch(_db, ids):
+        assert ids == [graph_id]
+        return [{
+            "id": graph_id,
+            "type": "fact",
+            "content": "structural neighbour chosen by magma graph",
+            "context": "",
+            "project": "demo",
+            "tags": [],
+            "status": "active",
+            "confidence": 1.0,
+            "source": "",
+            "created_at": "2026-04-14T00:00:00Z",
+            "last_confirmed": "2026-04-14T00:00:00Z",
+            "recall_count": 0,
+            "session_id": sid,
+        }]
+
+    monkeypatch.setattr(server, "_graph_expand", fake_expand)
+    monkeypatch.setattr(server, "_graph_fetch", fake_fetch)
+
+    out = recall.search("alpha", project="demo", limit=2, detail="summary")
+    ids = [item["id"] for group in out["results"].values() for item in group]
+
+    assert seen_seed_ids == [seed_a, seed_b]
+    assert len(ids) == 2
+    assert graph_id in ids
+
+    try:
+        s.db.close()
+    except Exception:
+        pass
+
+
 def test_literal_identifier_match_survives_rrf_importance_boosts(monkeypatch, tmp_path):
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     (tmp_path / "blobs").mkdir(exist_ok=True)

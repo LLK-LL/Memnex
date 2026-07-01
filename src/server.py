@@ -3589,28 +3589,47 @@ class Recall:
                 and os.environ.get("MEMORY_GRAPH_EXPAND", "0") == "1"
                 and len(ranked) > 0):
             try:
-                seed_ids = [item["r"]["id"] for item in ranked[:3]]
+                seed_ids = [item["r"]["id"] for item in ranked[:limit]]
                 existing_ids = {item["r"]["id"] for item in ranked}
                 neighbours = _graph_expand(
                     self.s.db,
                     seed_ids,
-                    budget=10,
+                    budget=max(1, limit),
                     agent_namespace=agent_namespace,
                     agent_namespaces=agent_namespaces,
                     scope=scope,
                 )
-                new_kids = [kid for kid, _ in neighbours if kid not in existing_ids][:5]
+                new_kids = [kid for kid, _ in neighbours if kid not in existing_ids]
                 if new_kids:
+                    new_id_set = set(new_kids)
                     rows = _graph_fetch(self.s.db, new_kids)
                     if rows and ranked:
-                        base_score = min(it["score"] for it in ranked) * 0.5
+                        max_primary = max(
+                            it.get("rrf_score", it.get("score", 0.0))
+                            for it in ranked
+                        )
+                        graph_scores = {
+                            kid: float(score)
+                            for kid, score in neighbours
+                            if kid in new_id_set
+                        }
+                        max_graph = max(graph_scores.values(), default=1.0) or 1.0
+                        boost = float(os.environ.get("MEMORY_GRAPH_EXPAND_BOOST", "1.1"))
                         for row in rows:
+                            graph_score = graph_scores.get(row.get("id"), 0.0)
+                            fused_score = max_primary * (graph_score / max_graph) * boost
                             ranked.append({
                                 "r": row,
-                                "score": base_score,
+                                "score": fused_score,
                                 "via": ["graph_expand"],
-                                "rrf_score": 0.0,
+                                "rrf_score": fused_score,
+                                "graph_score": graph_score,
                             })
+                        ranked.sort(
+                            key=lambda x: x.get("rrf_score", x.get("score", 0.0)),
+                            reverse=True,
+                        )
+                        ranked = ranked[:limit]
             except Exception as e:
                 LOG(f"graph_expand failed, keeping original ranked: {e}")
 
