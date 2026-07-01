@@ -17,6 +17,12 @@ if "TAM_MEMORY_DIR" not in os.environ and "CLAUDE_MEMORY_DIR" not in os.environ:
     _safe_tam_root = tempfile.mkdtemp(prefix="tam-test-root-")
     os.environ["TAM_MEMORY_DIR"] = _safe_tam_root
 
+# Keep local Windows test runs on the same FastEmbed cache as the TAM
+# launcher. ``server.py`` snapshots this env var at import time.
+_local_fastembed_cache = Path(r"D:\CodexCache\fastembed")
+if "FASTEMBED_CACHE_DIR" not in os.environ and _local_fastembed_cache.exists():
+    os.environ["FASTEMBED_CACHE_DIR"] = str(_local_fastembed_cache)
+
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
