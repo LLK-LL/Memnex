@@ -59,18 +59,17 @@ foreach ($pat in $noisePatterns) {
 
 $reminder = @"
 <system-reminder>
-v7.0 learn_error trigger: bash exited $exitCode. If the root cause is
+Memory self_error_log trigger: bash exited $exitCode. If the root cause is
 reproducible and fixable, call:
-  learn_error(
-      file="<path if relevant>",
-      error="<short stderr>",
-      root_cause="<what actually failed>",
-      fix="<what resolves it>",
-      pattern="<short slug, e.g. sqlite-locked-during-ddl>"
+  self_error_log(
+      description="Bash failed: <short stderr>; command: $commandStr",
+      category="code_error|config_error|api_error|timeout|wrong_assumption|missing_context",
+      severity="medium",
+      fix="<what resolves it, or empty if unresolved>",
+      project="<project>"
   )
-Skip if this is user-aborted, interactive, or benign. After N>=3 same patterns
-it auto-consolidates into a rule - do not re-log if you just fixed it and the
-root cause is identical to an earlier call this turn.
+Skip if this is user-aborted, interactive, or benign. Do not re-log if you
+just fixed it and the root cause is identical to an earlier call this turn.
 </system-reminder>
 "@
 

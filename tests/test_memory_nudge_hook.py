@@ -47,6 +47,7 @@ def _hook_command() -> list[str]:
 def run_hook(payload: dict, env_extra: dict | None = None, memory_dir: Path = None):
     """Invoke the bash hook in a clean env and capture stdout."""
     env = os.environ.copy()
+    env["TAM_MEMORY_DIR"] = str(memory_dir)
     env["CLAUDE_MEMORY_DIR"] = str(memory_dir)
     env["CLAUDE_MEMORY_INSTALL_DIR"] = str(HOOK_PATH.parent.parent)
     env["HOOK_PYTHON"] = sys.executable
@@ -206,6 +207,7 @@ class TestNudgeSummary:
             if not pwsh:
                 pytest.skip("requires bash or PowerShell to run nudge summary")
             env = os.environ.copy()
+            env["TAM_MEMORY_DIR"] = str(tmp_path)
             env["CLAUDE_MEMORY_DIR"] = str(tmp_path)
             env["CLAUDE_MEMORY_INSTALL_DIR"] = str(ON_STOP_PS1.parent.parent)
             env["HOOK_PYTHON"] = sys.executable
@@ -220,6 +222,7 @@ class TestNudgeSummary:
             return "\n".join(line for line in lines if line.startswith("MEMORY_FINAL_")).strip()
         wrapper = f"""
             export CLAUDE_MEMORY_DIR={tmp_path}
+            export TAM_MEMORY_DIR={tmp_path}
             export HOOK_PYTHON={sys.executable}
             source {NUDGE_LIB}
             nudge_summary "{session_id}" "{project}"

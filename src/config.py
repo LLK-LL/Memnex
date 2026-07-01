@@ -305,6 +305,27 @@ def has_model(name: str) -> bool:
 # ──────────────────────────────────────────────
 
 
+def resolve_ollama_model(name: str | None = None) -> str:
+    """Return an installed Ollama model tag compatible with ``name``."""
+    requested = name or get_llm_model_for_provider("ollama")
+    if not requested:
+        return requested
+    installed = list_ollama_models()
+    if not installed:
+        return requested
+    requested_lower = requested.lower()
+    for model in installed:
+        if model.lower() == requested_lower:
+            return model
+    requested_base = requested_lower.split(":", 1)[0]
+    for model in installed:
+        if model.lower().split(":", 1)[0] == requested_base:
+            return model
+    if "MEMORY_LLM_MODEL" not in os.environ and len(installed) == 1:
+        return installed[0]
+    return requested
+
+
 def has_llm(phase: str | None = None) -> bool:
     """One-line check used by LLM-calling code paths.
 
@@ -338,7 +359,8 @@ def has_llm(phase: str | None = None) -> bool:
     if provider_name == "ollama":
         if not detect_ollama():
             return False
-        return has_model(get_llm_model_for_provider("ollama"))
+        model = get_llm_model_for_provider("ollama")
+        return has_model(model) or resolve_ollama_model(model) != model
 
     # Cloud provider — lazy import to avoid circular deps at module load.
     try:

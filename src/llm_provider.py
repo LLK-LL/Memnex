@@ -183,6 +183,8 @@ class OllamaProvider:
         timeout: float = 60.0,
     ) -> str:
         chosen_model = model or self._default_model or config.get_llm_model()
+        if model is None:
+            chosen_model = config.resolve_ollama_model(chosen_model)
         body = {
             "model": chosen_model,
             "prompt": prompt,

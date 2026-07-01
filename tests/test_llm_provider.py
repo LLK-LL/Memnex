@@ -94,6 +94,22 @@ def test_ollama_provider_model_override(monkeypatch):
 # ──────────────────────────────────────────────
 
 
+def test_ollama_provider_uses_installed_same_base_model(monkeypatch):
+    import llm_provider
+    import config
+
+    sink: dict = {}
+    fake = _capture_urlopen({"response": "ok"}, sink)
+    monkeypatch.setattr(llm_provider.urllib.request, "urlopen", fake)
+    monkeypatch.setattr(config, "resolve_ollama_model", lambda name=None: "qwen2.5-coder:3b")
+
+    provider = llm_provider.OllamaProvider(
+        api_base="http://localhost:11434", model="qwen2.5-coder:7b"
+    )
+    provider.complete("p")
+    assert sink["body"]["model"] == "qwen2.5-coder:3b"
+
+
 def test_openai_provider_roundtrip(monkeypatch):
     import llm_provider
 

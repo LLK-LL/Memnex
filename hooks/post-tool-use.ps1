@@ -27,7 +27,13 @@ $InstallDir = if ($env:CLAUDE_MEMORY_INSTALL_DIR) {
 } else {
     Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 }
-$MemoryDir = if ($env:CLAUDE_MEMORY_DIR) { $env:CLAUDE_MEMORY_DIR } else { Join-Path $env:USERPROFILE ".claude-memory" }
+$MemoryDir = if ($env:TAM_MEMORY_DIR) {
+    $env:TAM_MEMORY_DIR
+} elseif ($env:CLAUDE_MEMORY_DIR) {
+    $env:CLAUDE_MEMORY_DIR
+} else {
+    Join-Path $env:USERPROFILE ".tam"
+}
 
 $HookPython = if ($env:HOOK_PYTHON) { $env:HOOK_PYTHON } else { [System.IO.Path]::Combine($InstallDir, ".venv", "Scripts", "python.exe") }
 if (-not (Test-Path $HookPython)) {
@@ -148,6 +154,7 @@ tmp = sys.argv[3]
 if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
+os.environ.setdefault("TAM_MEMORY_DIR", memory_dir)
 os.environ.setdefault("CLAUDE_MEMORY_DIR", memory_dir)
 
 try:

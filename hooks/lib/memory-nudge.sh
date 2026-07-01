@@ -23,7 +23,7 @@
 #     source "$(dirname "$0")/lib/memory-nudge.sh"
 # ===========================================
 
-NUDGE_STATE_DIR="${CLAUDE_MEMORY_DIR:-$HOME/.claude-memory}/state"
+NUDGE_STATE_DIR="${CLAUDE_MEMORY_DIR:-${TAM_MEMORY_DIR:-$HOME/.tam}}/state"
 mkdir -p "$NUDGE_STATE_DIR" 2>/dev/null
 
 # nudge_path SESSION_ID -> echoes the counter file path.

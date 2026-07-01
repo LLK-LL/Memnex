@@ -23,11 +23,18 @@
 # ===========================================
 
 CLAUDE_MEMORY_INSTALL_DIR="${CLAUDE_MEMORY_INSTALL_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)}"
-CLAUDE_MEMORY_DIR="${CLAUDE_MEMORY_DIR:-$HOME/.claude-memory}"
+CLAUDE_MEMORY_DIR="${CLAUDE_MEMORY_DIR:-${TAM_MEMORY_DIR:-$HOME/.tam}}"
+TAM_MEMORY_DIR="${TAM_MEMORY_DIR:-$CLAUDE_MEMORY_DIR}"
 
-HOOK_PYTHON="${CLAUDE_MEMORY_INSTALL_DIR}/.venv/bin/python"
+HOOK_PYTHON="${HOOK_PYTHON:-${CLAUDE_MEMORY_INSTALL_DIR}/.venv/bin/python}"
 if [ ! -x "$HOOK_PYTHON" ]; then
-    HOOK_PYTHON="python3"
+    if command -v python3 >/dev/null 2>&1; then
+        HOOK_PYTHON="python3"
+    elif command -v python >/dev/null 2>&1; then
+        HOOK_PYTHON="python"
+    else
+        HOOK_PYTHON="py"
+    fi
 fi
 
 SRC_DIR="${CLAUDE_MEMORY_INSTALL_DIR}/src"

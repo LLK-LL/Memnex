@@ -417,7 +417,7 @@ Content:
         # Legacy Ollama path — preserves behavior on backward-compat default.
         payload = json.dumps(
             {
-                "model": self.OLLAMA_MODEL,
+                "model": config.resolve_ollama_model(self.OLLAMA_MODEL),
                 "prompt": prompt,
                 "stream": False,
                 "options": {

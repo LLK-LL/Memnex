@@ -119,6 +119,38 @@ def test_has_model_matches_exact_or_prefix(monkeypatch):
     assert has_model("gpt-4") is False
 
 
+def test_resolve_ollama_model_uses_installed_same_base_tag(monkeypatch):
+    import config
+
+    class _R:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self):
+            return b'{"models":[{"name":"qwen2.5-coder:3b"}]}'
+
+    monkeypatch.setattr(config.urllib.request, "urlopen", lambda r, timeout=2: _R())
+    config._cache_clear()
+
+    assert config.resolve_ollama_model("qwen2.5-coder:7b") == "qwen2.5-coder:3b"
+
+
+def test_default_ollama_model_uses_only_installed_model_when_unconfigured(monkeypatch):
+    import config
+
+    class _R:
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def read(self):
+            return b'{"models":[{"name":"qwen2.5:3b"}]}'
+
+    monkeypatch.delenv("MEMORY_LLM_MODEL", raising=False)
+    monkeypatch.setattr(config.urllib.request, "urlopen", lambda r, timeout=2: _R())
+    config._cache_clear()
+
+    assert config.has_llm("triple") is True
+    assert config.resolve_ollama_model("qwen2.5-coder:7b") == "qwen2.5:3b"
+
+
 def test_has_model_returns_false_when_ollama_down(monkeypatch):
     from config import has_model
     import config
