@@ -112,12 +112,21 @@ class DigestPhase:
         Uses content similarity (SequenceMatcher).
         Returns number of merged records.
         """
+        knowledge_cols = {
+            row["name"]
+            for row in self.db.execute("PRAGMA table_info(knowledge)").fetchall()
+        }
+        namespace_select = (
+            "agent_namespace"
+            if "agent_namespace" in knowledge_cols
+            else "'codex' AS agent_namespace"
+        )
         rows = self.db.execute(
-            """SELECT id, type, content, project, tags, confidence,
-                      recall_count, created_at
+            f"""SELECT id, type, content, project, tags, confidence,
+                      recall_count, created_at, {namespace_select}
                FROM knowledge
                WHERE status = 'active'
-               ORDER BY project, type, created_at DESC"""
+               ORDER BY project, type, agent_namespace, created_at DESC"""
         ).fetchall()
 
         if len(rows) < 2:
@@ -126,10 +135,14 @@ class DigestPhase:
         merged = 0
         merged_ids: set[int] = set()
 
-        # Group by (project, type) for efficient comparison
-        groups: dict[tuple[str, str], list[dict]] = {}
+        # Group by namespace too; agent memories are isolated even when content matches.
+        groups: dict[tuple[str, str, str], list[dict]] = {}
         for row in rows:
-            key = (row["project"] or "general", row["type"])
+            key = (
+                row["project"] or "general",
+                row["type"],
+                row["agent_namespace"] or "codex",
+            )
             entry = dict(row)
             groups.setdefault(key, []).append(entry)
 

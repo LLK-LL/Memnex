@@ -34,6 +34,34 @@ class TestDigestPhase:
         statuses = [r[0] for r in rows]
         assert "superseded" in statuses
 
+    def test_merge_duplicates_keeps_agent_namespaces_isolated(self, db):
+        from reflection.digest import DigestPhase
+        digest = DigestPhase(db)
+
+        db.execute("ALTER TABLE knowledge ADD COLUMN agent_namespace TEXT DEFAULT 'codex'")
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        content = "MAGMA-style event graph backfill completed for Total Agent Memory"
+        for namespace in ("codex", "doubao"):
+            db.execute(
+                "INSERT INTO knowledge "
+                "(type, content, project, status, confidence, recall_count, created_at, updated_at, agent_namespace) "
+                "VALUES ('fact', ?, 'total-agent-memory', 'active', 1.0, 0, ?, ?, ?)",
+                (content, now, now, namespace),
+            )
+        db.commit()
+
+        merged = digest.merge_duplicates()
+        assert merged == 0
+
+        rows = db.execute(
+            "SELECT agent_namespace, status, superseded_by FROM knowledge ORDER BY agent_namespace"
+        ).fetchall()
+        assert [(r[0], r[1], r[2]) for r in rows] == [
+            ("codex", "active", None),
+            ("doubao", "active", None),
+        ]
+
     def test_intelligent_decay_preserves_failures(self, db):
         from reflection.digest import DigestPhase
         digest = DigestPhase(db)
