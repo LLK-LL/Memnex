@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import sqlite3
+import sys
+import types
 
 import pytest
 
@@ -14,7 +17,7 @@ def drain_db():
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     root = Path(__file__).parent.parent
-    conn.executescript((root / "migrations" / "001_v5_schema.sql").read_text())
+    conn.executescript((root / "migrations" / "001_v5_schema.sql").read_text(encoding="utf-8"))
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS sessions (
@@ -43,7 +46,7 @@ def drain_db():
     )
     for m in ("002_multi_representation", "003_triple_extraction_queue",
               "004_deep_enrichment", "005_representations_queue"):
-        conn.executescript((root / "migrations" / f"{m}.sql").read_text())
+        conn.executescript((root / "migrations" / f"{m}.sql").read_text(encoding="utf-8"))
     yield conn
     conn.close()
 
@@ -102,3 +105,38 @@ def test_pick_scope_auto_prefers_drain():
     assert pick_scope({"a": 100, "b": 100, "c": 100}) == "drain"  # always drain
     assert pick_scope({"a": 0}, override="full") == "full"
     assert pick_scope({"a": 99}, override="quick") == "quick"
+
+
+def test_run_representations_skips_embedder_when_no_pending(drain_db, monkeypatch):
+    from reflection.agent import ReflectionAgent
+
+    agent = ReflectionAgent(drain_db)
+    monkeypatch.setattr(
+        agent,
+        "_make_embedder",
+        lambda: pytest.fail("embedder should not initialize without pending repr work"),
+    )
+
+    assert agent._run_representations() == {"processed": 0, "failed": 0, "skipped": 0}
+
+
+def test_run_reflection_quick_does_not_eager_init_store(tmp_path, monkeypatch):
+    from tools import run_reflection
+
+    sqlite3.connect(tmp_path / "memory.db").close()
+
+    async def fake_run(agent, scope):
+        return {"scope": scope}
+
+    logs = []
+    fake_server = types.SimpleNamespace(
+        Store=lambda: pytest.fail("Store should not initialize for quick/no-pending run")
+    )
+
+    monkeypatch.setattr(run_reflection, "_resolve_memory_dir", lambda: tmp_path)
+    monkeypatch.setattr(run_reflection, "_run", fake_run)
+    monkeypatch.setattr(run_reflection, "_log", logs.append)
+    monkeypatch.setitem(sys.modules, "server", fake_server)
+
+    assert run_reflection.main() == 0
+    assert not any("embedder init failed" in line for line in logs)

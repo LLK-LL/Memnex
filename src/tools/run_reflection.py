@@ -157,22 +157,9 @@ def main() -> int:
     scope = pick_scope(depth, scope_override)
     _log(f"pending={depth} → scope={scope}")
 
-    # Build embedder bound to Store (shares FastEmbed / Ollama)
-    embedder = None
-    try:
-        import server as _srv  # noqa: E402
-        _srv.MEMORY_DIR = memory_dir
-        store = _srv.Store()
-        def embed(text: str) -> list[float]:
-            embs = store.embed([text])
-            return embs[0] if embs else []
-        embedder = embed
-    except Exception as e:  # noqa: BLE001
-        _log(f"embedder init failed (repr generation will skip): {e}")
-
     from reflection.agent import ReflectionAgent  # noqa: E402
 
-    agent = ReflectionAgent(db, embedder=embedder)
+    agent = ReflectionAgent(db)
 
     t0 = time.time()
     try:

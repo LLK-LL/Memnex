@@ -459,6 +459,8 @@ class Store:
         if configured == "fastembed":
             if HAS_FASTEMBED and self.fastembed:
                 return "fastembed"
+            if os.environ.get("MEMORY_MODE", "fast").strip().lower() in ("ultrafast", "fast"):
+                return "none"
         elif configured in ("openai", "cohere"):
             provider = self.embed_provider
             if provider is not None and provider.available():

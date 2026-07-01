@@ -83,8 +83,9 @@ def _llm_complete(
             timeout=get_repr_timeout_sec(),
         )
 
+    chosen_model = config.get_phase_model("repr") if model == OLLAMA_MODEL else model
     payload = {
-        "model": model,
+        "model": config.resolve_ollama_model(chosen_model),
         "prompt": prompt,
         "stream": False,
         "options": {"num_predict": num_predict, "temperature": 0.2},

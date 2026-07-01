@@ -288,6 +288,9 @@ class ReflectionAgent:
             return {"processed": 0, "failed": 0, "skipped": 0, "error": str(e)}
 
         q = RepresentationsQueue(self.db)
+        q.reclaim_stale()
+        if q.stats().get("pending", 0) == 0:
+            return {"processed": 0, "failed": 0, "skipped": 0}
 
         embedder = self._make_embedder()
         if embedder is None:

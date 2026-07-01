@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,34 @@ def store(monkeypatch, tmp_path):
 def _fake_embedder(text: str) -> list[float]:
     h = hashlib.md5(text.encode()).digest()
     return [b / 255.0 for b in h[:8]]
+
+
+def test_ollama_representation_completion_uses_resolved_model(monkeypatch):
+    import representations
+
+    captured = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self):
+            return b'{"response":"ok"}'
+
+    def fake_urlopen(req, timeout):
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return _Response()
+
+    monkeypatch.setattr(representations.config, "get_phase_provider", lambda phase: "ollama")
+    monkeypatch.setattr(representations.config, "get_phase_model", lambda phase: "qwen2.5-coder:7b")
+    monkeypatch.setattr(representations.config, "resolve_ollama_model", lambda name=None: "qwen2.5:3b")
+    monkeypatch.setattr(representations.urllib.request, "urlopen", fake_urlopen)
+
+    assert representations._llm_complete("prompt") == "ok"
+    assert captured["body"]["model"] == "qwen2.5:3b"
 
 
 def test_save_generates_representations_immediately(store, monkeypatch):
