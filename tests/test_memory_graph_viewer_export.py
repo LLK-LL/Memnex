@@ -83,6 +83,7 @@ def _make_db(path):
         "INSERT INTO graph_edges VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             ("e1", "n1", "n2", "related_to", 2.5, "ctx", "2026-01-01", "2026-01-02", 3),
+            ("e3", "n2", "n1", "fixed_by", 1.5, "fix ctx", "2026-01-01", "2026-01-02", 1),
             ("e2", "n1", "missing", "orphan", 9.0, "", "2026-01-01", "2026-01-02", 1),
         ],
     )
@@ -103,7 +104,7 @@ def test_load_graph_filters_orphan_edges_and_links_knowledge(tmp_path):
         graph = load_graph(conn)
 
     assert graph["metadata"]["node_count"] == 2
-    assert graph["metadata"]["edge_count"] == 1
+    assert graph["metadata"]["edge_count"] == 2
     assert graph["metadata"]["max_nodes"] is None
     assert graph["metadata"]["max_edges"] is None
     assert "timeline" in graph["metadata"]
@@ -116,7 +117,9 @@ def test_load_graph_filters_orphan_edges_and_links_knowledge(tmp_path):
     assert graph["metadata"]["graph_identity"]["node_ids_hash"]
     assert graph["metadata"]["graph_identity"]["edge_ids_hash"]
     assert graph["metadata"]["layout_seed"] == graph["metadata"]["graph_identity"]["node_ids_hash"][:16]
-    assert graph["elements"]["edges"][0]["data"]["id"] == "e1"
+    edges = {edge["data"]["id"]: edge["data"] for edge in graph["elements"]["edges"]}
+    assert edges["e1"]["edge_family"] == "semantic"
+    assert edges["e3"]["edge_family"] == "procedural"
     rag = next(node for node in graph["elements"]["nodes"] if node["data"]["id"] == "codex:n1")
     assert rag["data"]["source_id"] == "n1"
     assert rag["data"]["agent_namespace"] == "codex"
@@ -129,7 +132,7 @@ def test_load_graph_filters_orphan_edges_and_links_knowledge(tmp_path):
     assert 0.0 <= rag["data"]["activity"] <= 1.0
     assert rag["data"]["layout_seed"]
     assert "relation_counts" in rag["data"]
-    assert rag["data"]["relation_counts"]["total"] == 1
+    assert rag["data"]["relation_counts"]["total"] == 2
     assert rag["data"]["provenance"]["source"] == "test"
     assert rag["data"]["provenance"]["first_seen_at"] == "2026-01-01"
     assert rag["data"]["provenance"]["last_seen_at"] == "2026-01-02"

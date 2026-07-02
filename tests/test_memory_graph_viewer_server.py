@@ -73,7 +73,7 @@ def _make_db(path):
         INSERT INTO graph_nodes VALUES
           ('n1', 'concept', 'RAG', 'retrieval augmented memory', '{}', 'test', 0.8, '2026-01-01', '2026-01-02', 4, 'active', 'rag'),
           ('n2', 'project', 'Hermes', NULL, '{}', 'test', 0.6, '2026-01-01', '2026-01-02', 2, 'active', 'hermes');
-        INSERT INTO graph_edges VALUES ('e1', 'n1', 'n2', 'related_to', 2.5, 'ctx', '2026-01-01', '2026-01-02', 3);
+        INSERT INTO graph_edges VALUES ('e1', 'n1', 'n2', 'fixed_by', 2.5, 'ctx', '2026-01-01', '2026-01-02', 3);
         """
     )
     conn.commit()
@@ -110,6 +110,7 @@ def test_viewer_backend_serves_live_graph_and_system_performance(tmp_path):
         graph = _get_json(f"{base_url}/api/graph")
         assert graph["metadata"]["node_count"] == 2
         assert graph["metadata"]["edge_count"] == 1
+        assert graph["elements"]["edges"][0]["data"]["edge_family"] == "procedural"
 
         perf = _get_json(f"{base_url}/api/system/performance")
         assert perf["source"] == "backend"

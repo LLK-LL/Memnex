@@ -9,9 +9,16 @@ import os
 import re
 import shutil
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+SRC_DIR = Path(__file__).resolve().parents[1]
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from graph.edge_taxonomy import edge_family_for_relation
 
 
 DEFAULT_DB = Path.home() / ".tam" / "memory.db"
@@ -190,6 +197,7 @@ def load_graph(
                     "source_id": row["source_id"],
                     "target_id": row["target_id"],
                     "relation": row["relation_type"],
+                    "edge_family": edge_family_for_relation(row["relation_type"]),
                     "weight": float(row["weight"] or 0.0),
                     "context": row["context"] or "",
                     "created_at": row["created_at"],
