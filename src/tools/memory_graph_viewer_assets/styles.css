@@ -1014,8 +1014,21 @@ button:hover,
 }
 
 .relation-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-1);
   font-weight: 700;
+}
+
+.relation-group-title span {
+  min-width: 0;
+}
+
+.relation-group-title strong {
+  margin-left: auto;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .relation-item {
@@ -1090,6 +1103,64 @@ button:hover,
 .connection-weight {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;
+}
+
+.magma-connection-summary {
+  display: grid;
+  gap: 9px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.magma-summary-meta,
+.connection-family-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.magma-summary-meta strong {
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.magma-family-row {
+  display: grid;
+  grid-template-columns: 12px 76px minmax(0, 1fr) 52px;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.magma-family-row strong {
+  overflow: hidden;
+  color: var(--text-1);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.magma-family-row span:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.magma-family-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--family-color) 42%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--family-color) 16%, transparent);
+  color: var(--text-1);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .weight-value {

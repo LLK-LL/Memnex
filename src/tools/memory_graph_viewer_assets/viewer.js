@@ -37,6 +37,13 @@ let filteredNodeIndex = null;
 const PERF_SAMPLE_LIMIT = 36;
 const PERF_SAMPLE_INTERVAL_MS = 1000;
 const BACKEND_PERF_SAMPLE_INTERVAL_MS = 3000;
+const magmaFamilies = [
+  { key: "semantic", label: "Semantic", color: "#5eead4" },
+  { key: "entity", label: "Entity", color: "#38bdf8" },
+  { key: "temporal", label: "Temporal", color: "#a78bfa" },
+  { key: "causal", label: "Causal", color: "#facc15" },
+  { key: "procedural", label: "Procedural", color: "#fb7185" },
+];
 const perfState = {
   frames: 0,
   frameTimeTotal: 0,
@@ -1107,20 +1114,32 @@ function renderNodeListItem(node) {
 
 function renderRelationsForNode(node) {
   const groups = groupNeighborRelations(filteredGraph, node.id);
-  const relationTypes = Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  document.getElementById("relationsPanel").innerHTML = relationTypes.length
-    ? relationTypes.map(([relation, items]) => `
-      <div class="relation-group">
-        <div class="relation-group-title">${escapeHtml(relation)} (${items.length})</div>
-        ${items.slice(0, 12).map(item => renderConnectionItem(item.link, node, item.neighbor, relation)).join("")}
-      </div>
-    `).join("")
+  const items = Object.entries(groups)
+    .flatMap(([relation, entries]) => entries.map(item => ({ ...item, relation })));
+  const familyGroups = groupConnectionItemsByFamily(items);
+  document.getElementById("relationsPanel").innerHTML = items.length
+    ? `
+      ${renderMagmaConnectionSummary(items.map(item => item.link))}
+      ${renderFamilyConnectionGroups(familyGroups, group => group.items.length, item => renderConnectionItem(item.link, node, item.neighbor, item.relation))}
+    `
     : formatNodeDetails(node.raw || node);
 }
 
 function renderRelationsForSystem(systemKey) {
-  const groups = groupSystemRelations(systemKey);
-  const entries = Object.entries(groups).sort((a, b) => b[1].items.length - a[1].items.length);
+  const groups = groupSystemConnectionsByFamily(systemKey);
+  const entries = Object.values(groups)
+    .filter(group => group.items.length)
+    .sort((a, b) => b.weight - a.weight);
+  const links = crossSystemLinksForSystem(systemKey);
+  if (entries.length) {
+    document.getElementById("relationsPanel").innerHTML = `
+      ${renderMagmaConnectionSummary(links)}
+      ${renderFamilyConnectionGroups(entries, group => group.items.length, item => renderSystemConnectionItem(systemKey, item))}
+    `;
+    return;
+  }
+  document.getElementById("relationsPanel").innerHTML = '<div class="empty-state">No cross-system relations are visible in the current scope.</div>';
+  return;
   document.getElementById("relationsPanel").innerHTML = entries.length
     ? entries.map(([relation, group]) => `
       <div class="relation-group">
@@ -1144,18 +1163,40 @@ function renderRelationsForSystem(systemKey) {
     : '<div class="empty-state">No cross-system relations are visible in the current scope.</div>';
 }
 
+function renderSystemConnectionItem(systemKey, item) {
+  return `
+    <div class="connection-item">
+      <div class="connection-line">
+        <strong>${escapeHtml(systemLabel(systemKey))}</strong>
+        <span>&rarr;</span>
+        <strong>${escapeHtml(systemLabel(item.system))}</strong>
+      </div>
+      <div class="meta">
+        ${renderFamilyPill(item.family)}
+        ${escapeHtml(item.relation)} 路 ${escapeHtml(formatCompactNumber(item.count))} links
+      </div>
+      <div class="connection-weight">
+        <div class="progress-track"><span style="--bar:${Math.min(100, item.weight * 10).toFixed(1)}%;background:${escapeHtml(magmaFamilyColor(item.family))}"></span></div>
+        <span class="weight-value">${item.weight.toFixed(2)}</span>
+      </div>
+    </div>
+  `;
+}
+
 function renderConnectionItem(link, sourceNode, targetNode, relation) {
   const source = filteredNodeById(link.source?.id || link.source) || sourceNode;
   const target = filteredNodeById(link.target?.id || link.target) || targetNode;
   const sourceLabel = source.label || source.raw?.label || source.id;
   const targetLabel = target.label || target.raw?.label || target.id;
   const weight = Number(link.weight || 0);
+  const family = magmaFamilyForLink(link);
   return `
     <div class="connection-item">
       <div class="connection-line">
         <strong>${escapeHtml(sourceLabel)}</strong>
         <span>→</span>
         <strong>${escapeHtml(targetLabel)}</strong>
+        ${renderFamilyPill(family)}
       </div>
       <div class="meta">${escapeHtml(systemLabel(visibleNodeSystem(source)))} → ${escapeHtml(systemLabel(visibleNodeSystem(target)))} · ${escapeHtml(relation || link.relation || "related")}</div>
       <div class="connection-weight">
@@ -1216,6 +1257,124 @@ function linksForNodes(nodeIds) {
   return filteredGraph.links.filter(link =>
     nodeIds.has(String(link.source.id || link.source)) || nodeIds.has(String(link.target.id || link.target))
   );
+}
+
+function magmaFamilyForLink(link) {
+  const family = String(link?.edgeFamily || link?.raw?.edge_family || link?.raw?.edgeFamily || "semantic").toLowerCase();
+  return magmaFamilies.some(item => item.key === family) ? family : "semantic";
+}
+
+function magmaFamilyMeta(family) {
+  return magmaFamilies.find(item => item.key === family) || magmaFamilies[0];
+}
+
+function magmaFamilyColor(family) {
+  return magmaFamilyMeta(family).color;
+}
+
+function renderFamilyPill(family) {
+  const meta = magmaFamilyMeta(family);
+  return `<span class="magma-family-pill" style="--family-color:${escapeHtml(meta.color)}">${escapeHtml(meta.label)}</span>`;
+}
+
+function summarizeMagmaConnections(links) {
+  const summary = new Map(magmaFamilies.map(item => [item.key, { ...item, count: 0, weight: 0 }]));
+  for (const link of links) {
+    const family = magmaFamilyForLink(link);
+    const item = summary.get(family) || summary.get("semantic");
+    item.count += 1;
+    item.weight += Number(link.weight || 0);
+  }
+  return [...summary.values()].sort((a, b) => b.weight - a.weight);
+}
+
+function renderMagmaConnectionSummary(links) {
+  const families = summarizeMagmaConnections(links);
+  const totalWeight = families.reduce((sum, item) => sum + item.weight, 0);
+  const activeFamilies = families.filter(item => item.count > 0).length;
+  const primary = families.find(item => item.count > 0) || families[0];
+  const maxWeight = Math.max(1, ...families.map(item => item.weight));
+  return `
+    <section class="magma-connection-summary">
+      <div class="breakdown-head"><span>MAGMA FAMILY WEIGHTS</span><span>${activeFamilies}/${magmaFamilies.length} families</span></div>
+      <div class="magma-summary-meta">
+        <span>Total Weight <strong>${totalWeight.toFixed(2)}</strong></span>
+        <span>Primary <strong>${escapeHtml(primary.label)}</strong></span>
+      </div>
+      ${families.map(item => `
+        <div class="magma-family-row">
+          <span class="breakdown-dot" style="background:${escapeHtml(item.color)}"></span>
+          <strong>${escapeHtml(item.label)}</strong>
+          <div class="progress-track"><span style="--bar:${Math.min(100, item.weight / maxWeight * 100).toFixed(1)}%;background:${escapeHtml(item.color)}"></span></div>
+          <span>${item.weight.toFixed(2)}</span>
+        </div>
+      `).join("")}
+    </section>
+  `;
+}
+
+function groupConnectionItemsByFamily(items) {
+  const groups = new Map(magmaFamilies.map(item => [item.key, { ...item, weight: 0, items: [] }]));
+  for (const item of items) {
+    const family = magmaFamilyForLink(item.link);
+    const group = groups.get(family) || groups.get("semantic");
+    group.weight += Number(item.link?.weight || 0);
+    group.items.push(item);
+  }
+  return [...groups.values()]
+    .filter(group => group.items.length)
+    .sort((a, b) => b.weight - a.weight);
+}
+
+function renderFamilyConnectionGroups(groups, countForGroup, renderItem) {
+  return groups.map(group => `
+    <div class="relation-group magma-relation-group">
+      <div class="relation-group-title">
+        ${renderFamilyPill(group.key)}
+        <span>${escapeHtml(group.label)} (${escapeHtml(formatCompactNumber(countForGroup(group)))})</span>
+        <strong>${group.weight.toFixed(2)}</strong>
+      </div>
+      ${group.items.slice(0, 12).map(renderItem).join("")}
+    </div>
+  `).join("");
+}
+
+function crossSystemLinksForSystem(systemKey) {
+  const memberIds = new Set(filteredGraph.nodes.filter(node => matchesSystem(node, systemKey)).map(node => node.id));
+  return filteredGraph.links.filter(link => {
+    const sourceId = String(link.source.id || link.source);
+    const targetId = String(link.target.id || link.target);
+    const sourceIn = memberIds.has(sourceId);
+    const targetIn = memberIds.has(targetId);
+    return sourceIn !== targetIn;
+  });
+}
+
+function groupSystemConnectionsByFamily(systemKey) {
+  const grouped = new Map(magmaFamilies.map(item => [item.key, { ...item, weight: 0, items: [], byRelationSystem: new Map() }]));
+  for (const link of crossSystemLinksForSystem(systemKey)) {
+    const sourceId = String(link.source.id || link.source);
+    const targetId = String(link.target.id || link.target);
+    const source = filteredNodeById(sourceId);
+    const target = filteredNodeById(targetId);
+    if (!source || !target) continue;
+    const sourceIn = matchesSystem(source, systemKey);
+    const neighbor = sourceIn ? target : source;
+    const family = magmaFamilyForLink(link);
+    const relation = link.relation || "related";
+    const neighborSystem = visibleNodeSystem(neighbor);
+    const group = grouped.get(family) || grouped.get("semantic");
+    const key = `${relation}:${neighborSystem}`;
+    const current = group.byRelationSystem.get(key) || { family, relation, system: neighborSystem, weight: 0, count: 0 };
+    current.weight += Number(link.weight || 0);
+    current.count += 1;
+    group.weight += Number(link.weight || 0);
+    group.byRelationSystem.set(key, current);
+  }
+  for (const group of grouped.values()) {
+    group.items = [...group.byRelationSystem.values()].sort((a, b) => b.weight - a.weight);
+  }
+  return Object.fromEntries(grouped);
 }
 
 function groupSystemRelations(systemKey) {
