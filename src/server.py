@@ -2506,7 +2506,16 @@ class Store:
 
         return {"error": f"Unknown action: {action}"}
 
-    def get_rules_for_context(self, project="general", categories=None, phase=None, detail="full"):
+    def get_rules_for_context(
+        self,
+        project="general",
+        categories=None,
+        phase=None,
+        detail="full",
+        query=None,
+        top_k=None,
+        include_always_on=True,
+    ):
         """Get active rules relevant to current context.
 
         Args:
@@ -2517,6 +2526,10 @@ class Store:
                 Expected values: van|plan|creative|build|reflect|archive.
             detail: "full" preserves the legacy payload; "compact" returns
                 only fields needed in prompt context.
+            query: optional current task text. When set, rules are ranked by
+                relevance and only a small top-K context set is returned.
+            top_k: contextual rule count when query-aware ranking is enabled.
+            include_always_on: include hard baseline rules before top-K context.
         """
         VALID_PHASES = {"van", "plan", "creative", "build", "reflect", "archive"}
         if phase is not None and phase not in VALID_PHASES:
@@ -2552,6 +2565,17 @@ class Store:
                 # else: rule is scoped to a different phase — skip
             rows = filtered
 
+        relevance_meta = None
+        if query:
+            rows, relevance_meta = self._rank_rules_for_query(
+                rows,
+                query=query,
+                categories=categories,
+                phase=phase,
+                top_k=top_k,
+                include_always_on=include_always_on,
+            )
+
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         for r in rows:
             self.db.execute(
@@ -2577,6 +2601,8 @@ class Store:
             result["detail"] = "compact"
         if phase is not None:
             result["phase_filter"] = phase
+        if relevance_meta is not None:
+            result["query_filter"] = relevance_meta
         return result
 
     @staticmethod
@@ -2585,6 +2611,165 @@ class Store:
         if len(text) <= limit:
             return text
         return text[:limit].rstrip() + "..."
+
+    def _rank_rules_for_query(
+        self,
+        rows,
+        query,
+        categories=None,
+        phase=None,
+        top_k=None,
+        include_always_on=True,
+    ):
+        try:
+            contextual_limit = int(top_k) if top_k is not None else 5
+        except (TypeError, ValueError):
+            contextual_limit = 5
+        contextual_limit = max(0, min(contextual_limit, 12))
+        always_limit = 3
+
+        always_on, contextual = [], []
+        for r in rows:
+            if self._rule_is_always_on(r):
+                always_on.append(r)
+            else:
+                contextual.append(r)
+
+        always_on.sort(
+            key=lambda r: (
+                int(r.get("priority") or 0),
+                float(r.get("success_rate") or 0.0),
+            ),
+            reverse=True,
+        )
+        selected_always = always_on[:always_limit] if include_always_on else []
+
+        semantic_scores = self._rule_semantic_scores(query, contextual)
+        category_set = {str(c).strip().lower() for c in (categories or []) if str(c).strip()}
+        scored = []
+        for r in contextual:
+            tags = self._rule_tags(r)
+            semantic_score = semantic_scores.get(r["id"], 0.0)
+            phase_match = 1.0 if phase and f"phase:{phase}" in tags else 0.0
+            category_hint = 1.0 if self._rule_category_matches(r, category_set) else 0.0
+            priority_weight = min(max(float(r.get("priority") or 0.0) / 10.0, 0.0), 1.0)
+            final_score = (
+                semantic_score * 0.65
+                + phase_match * 0.15
+                + category_hint * 0.10
+                + priority_weight * 0.10
+            )
+            ranked = dict(r)
+            ranked["_rule_relevance_score"] = round(final_score, 6)
+            ranked["_rule_semantic_score"] = round(semantic_score, 6)
+            scored.append(ranked)
+
+        scored.sort(
+            key=lambda r: (
+                r.get("_rule_relevance_score", 0.0),
+                int(r.get("priority") or 0),
+                float(r.get("success_rate") or 0.0),
+            ),
+            reverse=True,
+        )
+        selected_contextual = scored[:contextual_limit]
+        selected = [dict(r, _rule_always_on=True) for r in selected_always]
+        selected.extend(dict(r, _rule_always_on=False) for r in selected_contextual)
+        selected = selected[:12]
+
+        meta = {
+            "query": str(query),
+            "strategy": "always_on_plus_query_top_k",
+            "always_on_count": len(selected_always),
+            "contextual_count": len(selected_contextual),
+            "candidate_count": len(rows),
+            "contextual_limit": contextual_limit,
+            "always_on_tags": ["always_on", "hard", "security-critical"],
+        }
+        return selected, meta
+
+    def _rule_semantic_scores(self, query, rows):
+        if not rows:
+            return {}
+
+        texts = [self._rule_scoring_text(r) for r in rows]
+        embeddings = None
+        try:
+            embeddings = self.embed([str(query)] + texts)
+        except Exception as e:  # noqa: BLE001
+            LOG(f"rule semantic embedding failed: {e}")
+
+        if embeddings and len(embeddings) == len(rows) + 1 and embeddings[0]:
+            q_vec = embeddings[0]
+            scores = {}
+            for r, vec in zip(rows, embeddings[1:]):
+                scores[r["id"]] = self._cosine01(q_vec, vec) if vec else 0.0
+            return scores
+
+        return {
+            r["id"]: self._lexical_similarity(str(query), self._rule_scoring_text(r))
+            for r in rows
+        }
+
+    @staticmethod
+    def _rule_scoring_text(rule):
+        return " ".join(
+            str(rule.get(k) or "")
+            for k in ("content", "context", "category", "tags")
+        )
+
+    @staticmethod
+    def _rule_tags(rule):
+        try:
+            tags = json.loads(rule.get("tags") or "[]")
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+        return {str(t).strip().lower() for t in tags if str(t).strip()}
+
+    def _rule_is_always_on(self, rule):
+        return bool(
+            self._rule_tags(rule)
+            & {"always_on", "hard", "security-critical"}
+        )
+
+    @staticmethod
+    def _rule_category_matches(rule, category_set):
+        if not category_set:
+            return False
+        category = str(rule.get("category") or "").strip().lower()
+        if category in category_set:
+            return True
+        try:
+            tags = json.loads(rule.get("tags") or "[]")
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+        return any(str(t).strip().lower() in category_set for t in tags)
+
+    @staticmethod
+    def _cosine01(a, b):
+        if not a or not b or len(a) != len(b):
+            return 0.0
+        dot = sum(float(x) * float(y) for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(float(x) * float(x) for x in a))
+        norm_b = math.sqrt(sum(float(y) * float(y) for y in b))
+        if not norm_a or not norm_b:
+            return 0.0
+        return max(0.0, min(1.0, (dot / (norm_a * norm_b) + 1.0) / 2.0))
+
+    @staticmethod
+    def _lexical_similarity(query, text):
+        query_tokens = {
+            t for t in re.findall(r"[\w\u4e00-\u9fff]+", query.lower())
+            if len(t) > 1
+        }
+        text_tokens = {
+            t for t in re.findall(r"[\w\u4e00-\u9fff]+", text.lower())
+            if len(t) > 1
+        }
+        if not query_tokens or not text_tokens:
+            return 0.0
+        overlap = len(query_tokens & text_tokens)
+        return overlap / math.sqrt(len(query_tokens) * len(text_tokens))
 
     def _process_single_representation_now(self, knowledge_id):
         """Generate cached RAG views for one saved record immediately.
@@ -4506,6 +4691,12 @@ async def list_tools():
                                              "(core + phase-specific). Omit to get all rules."},
                     "detail": {"type": "string", "enum": ["full", "compact"], "default": "full",
                                "description": "Use compact to return only id/content/category/priority and reduce prompt tokens."},
+                    "query": {"type": "string",
+                              "description": "Optional current task text. Enables query-aware rule ranking."},
+                    "top_k": {"type": "integer", "default": 5,
+                              "description": "Number of contextual rules to return when query is provided."},
+                    "include_always_on": {"type": "boolean", "default": True,
+                                          "description": "Include hard baseline rules tagged always_on, hard, or security-critical."},
                 },
             },
         ),
@@ -6220,7 +6411,8 @@ async def _do(name, a):
     elif name == "self_rules_context":
         return J(store.get_rules_for_context(
             a.get("project", "general"), a.get("categories"), a.get("phase"),
-            a.get("detail", "full")))
+            a.get("detail", "full"), a.get("query"), a.get("top_k"),
+            a.get("include_always_on", True)))
 
     elif name == "rule_set_phase":
         return J(store.set_rule_phase(a["rule_id"], a.get("phase")))

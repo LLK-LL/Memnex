@@ -41,7 +41,7 @@ def store(monkeypatch, tmp_path):
 
 
 def _add_rule(store, content, project="myproj", scope=None,
-              priority=5, tags=None):
+              priority=5, tags=None, category="manual", context=""):
     """Helper: insert a rule, return rule_id."""
     if scope is None:
         scope = f"project:{project}" if project != "general" else "global"
@@ -49,8 +49,8 @@ def _add_rule(store, content, project="myproj", scope=None,
     cur = store.db.execute(
         """INSERT INTO rules (session_id, content, context, category, scope,
                               priority, project, tags, status, created_at, updated_at)
-           VALUES ('sess-phase-test', ?, '', 'manual', ?, ?, ?, ?, 'active', ?, ?)""",
-        (content, scope, priority, project, json.dumps(tags or []), now, now),
+           VALUES ('sess-phase-test', ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
+        (content, context, category, scope, priority, project, json.dumps(tags or []), now, now),
     )
     store.db.commit()
     return cur.lastrowid
@@ -158,6 +158,83 @@ def test_phase_filter_returns_expected_count(store):
 # ──────────────────────────────────────────────
 # rule_set_phase
 # ──────────────────────────────────────────────
+
+def test_query_aware_rules_context_returns_always_on_plus_relevant_top_k(monkeypatch, store):
+    monkeypatch.setattr(store, "embed", lambda texts: None)
+    _add_rule(
+        store,
+        "Before public publishing or pushing, remove secrets and tokens.",
+        priority=10,
+        tags=["always_on", "security-critical"],
+        category="security",
+    )
+    _add_rule(
+        store,
+        "Memory iteration must use the layered chain RAG memory preference layer rule layer routing layer.",
+        priority=10,
+        category="iteration",
+    )
+    _add_rule(
+        store,
+        "Rule layer recall should rank rules by current query and reduce unrelated core rules.",
+        priority=9,
+        category="memory_governance",
+    )
+    _add_rule(
+        store,
+        "When the user asks for a QR code, provide command-line output by default.",
+        priority=9,
+        category="output_format",
+    )
+    _add_rule(
+        store,
+        "When the user says banana for slides, route to banana-ppt-workflow.",
+        priority=9,
+        category="skill_routing",
+    )
+    _add_rule(
+        store,
+        "When the user mentions Igor, use the igor-remote-codex skill.",
+        priority=9,
+        category="skill_routing",
+    )
+
+    r = store.get_rules_for_context(
+        project="myproj",
+        phase="plan",
+        detail="compact",
+        query="规则层召回为什么包含很多用不上的内容 rule layer memory routing",
+        top_k=2,
+    )
+
+    contents = [x["content"] for x in r["rules"]]
+    joined = "\n".join(contents)
+    assert r["rules_count"] == 3
+    assert r["query_filter"]["strategy"] == "always_on_plus_query_top_k"
+    assert "remove secrets and tokens" in joined
+    assert "Rule layer recall" in joined
+    assert "Memory iteration" in joined
+    assert "QR code" not in joined
+    assert "banana" not in joined
+    assert "Igor" not in joined
+
+
+def test_query_aware_rules_context_can_skip_always_on(monkeypatch, store):
+    monkeypatch.setattr(store, "embed", lambda texts: None)
+    _add_rule(store, "Always remove secrets before publishing.", tags=["always_on"], priority=10)
+    _add_rule(store, "Rule layer recall ranks memory governance rules by query.", priority=9)
+
+    r = store.get_rules_for_context(
+        project="myproj",
+        query="memory governance rule layer recall",
+        top_k=1,
+        include_always_on=False,
+    )
+
+    contents = [x["content"] for x in r["rules"]]
+    assert contents == ["Rule layer recall ranks memory governance rules by query."]
+    assert r["query_filter"]["always_on_count"] == 0
+
 
 def test_rule_set_phase_adds_tag_or_column(store):
     """set_rule_phase('build') attaches 'phase:build' tag."""
