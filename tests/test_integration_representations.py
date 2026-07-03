@@ -59,7 +59,31 @@ def test_ollama_representation_completion_uses_resolved_model(monkeypatch):
     assert captured["body"]["model"] == "qwen2.5:3b"
 
 
-def test_save_generates_representations_immediately(store, monkeypatch):
+def test_save_enqueues_representations_by_default(store, monkeypatch):
+    monkeypatch.setattr(store, "embed", lambda texts: [_fake_embedder(t) for t in texts])
+    store.db.execute(
+        "INSERT INTO sessions (id, started_at, project, status) VALUES ('s1', '2026-04-14T00:00:00Z', 'demo', 'open')"
+    )
+    store.db.commit()
+    rid, *_save = store.save_knowledge(
+        sid="s1", content="content", ktype="fact", project="demo"
+    )
+
+    row = store.db.execute(
+        "SELECT status FROM representations_queue WHERE knowledge_id=?", (rid,)
+    ).fetchone()
+    assert row is not None
+    assert row["status"] == "pending"
+    count = store.db.execute(
+        "SELECT COUNT(*) FROM knowledge_representations WHERE knowledge_id=?",
+        (rid,),
+    ).fetchone()[0]
+    assert count == 0
+
+
+def test_save_generates_representations_when_immediate_enabled(store, monkeypatch):
+    monkeypatch.setenv("MEMORY_IMMEDIATE_REPRESENTATIONS", "true")
+    monkeypatch.setattr("config.has_llm", lambda phase=None: False)
     monkeypatch.setattr(store, "embed", lambda texts: [_fake_embedder(t) for t in texts])
     store.db.execute(
         "INSERT INTO sessions (id, started_at, project, status) VALUES ('s1', '2026-04-14T00:00:00Z', 'demo', 'open')"
@@ -84,6 +108,45 @@ def test_save_generates_representations_immediately(store, monkeypatch):
     assert {"raw", "summary", "keywords", "compressed"}.issubset(kinds)
 
 
+def test_background_worker_processes_pending_representations(store, monkeypatch):
+    import representations
+    from representation_worker import RepresentationWorker
+
+    monkeypatch.setattr(store, "embed", lambda texts: [_fake_embedder(t) for t in texts])
+    monkeypatch.setattr("config.has_llm", lambda phase=None: True)
+    monkeypatch.setattr(
+        representations,
+        "_llm_complete",
+        lambda prompt, **_: "generated representation",
+    )
+    store.db.execute(
+        "INSERT INTO sessions (id, started_at, project, status) VALUES ('s1', '2026-04-14T00:00:00Z', 'demo', 'open')"
+    )
+    store.db.commit()
+    rid, *_save = store.save_knowledge(
+        sid="s1",
+        content="background representation worker content " * 40,
+        ktype="fact",
+        project="demo",
+    )
+
+    stats = RepresentationWorker(store, limit=1).drain_once()
+
+    assert stats["processed"] == 1
+    row = store.db.execute(
+        "SELECT status FROM representations_queue WHERE knowledge_id=?", (rid,)
+    ).fetchone()
+    assert row["status"] == "done"
+    kinds = {
+        r["representation"]
+        for r in store.db.execute(
+            "SELECT representation FROM knowledge_representations WHERE knowledge_id=?",
+            (rid,),
+        ).fetchall()
+    }
+    assert {"raw", "summary", "keywords", "questions", "compressed"}.issubset(kinds)
+
+
 def test_reflection_generates_representations(store, monkeypatch):
     from reflection.agent import ReflectionAgent
     import representations
@@ -101,7 +164,7 @@ def test_reflection_generates_representations(store, monkeypatch):
         "tracing, Docker Compose v2 orchestration, GitHub Actions pipelines, "
         "and safe database migrations with concurrent index creation. "
         "Additional sections discuss auth via JWT, rate limiting, and caching."
-    )
+    ) * 5
     rid, *_save = store.save_knowledge(
         sid="s1", content=long_content, ktype="fact", project="demo"
     )
@@ -115,7 +178,7 @@ def test_reflection_generates_representations(store, monkeypatch):
             return "go, grpc, postgres, microservices"
         if "question" in p:
             return "What services does this cover?\nHow does auth work?"
-        return ""
+        return "Compressed Go microservices guide with observability and migrations."
 
     monkeypatch.setattr(representations, "_llm_complete", fake_llm)
     monkeypatch.setattr("config.has_llm", lambda phase=None: True)
@@ -132,9 +195,9 @@ def test_reflection_generates_representations(store, monkeypatch):
     agent = ReflectionAgent(store.db, embedder=_fake_embedder)
     report = asyncio.run(agent.run_full())
 
-    assert report["representations"]["processed"] >= 0
+    assert report["representations"]["processed"] >= 1
 
-    # Immediate no-LLM fallback generates RAG-ready views before reflection.
+    # The background reflection drain generates RAG-ready views after save.
     kinds = {
         r["representation"]
         for r in store.db.execute(

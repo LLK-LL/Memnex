@@ -1826,9 +1826,14 @@ class Store:
         except Exception as e:
             LOG(f"Repr-enqueue error: {e}")
         else:
-            repr_stats = self._process_single_representation_now(rid)
-            if repr_stats.get("processed"):
-                LOG(f"Immediate repr generation complete for knowledge_id={rid}")
+            try:
+                from representation_worker import immediate_representations_enabled
+                if immediate_representations_enabled():
+                    repr_stats = self._process_single_representation_now(rid)
+                    if repr_stats.get("processed"):
+                        LOG(f"Immediate repr generation complete for knowledge_id={rid}")
+            except Exception as e:
+                LOG(f"Immediate repr generation skipped for knowledge_id={rid}: {e}")
 
         # Ping the reflection runner (watched by LaunchAgent). The runner
         # debounces: within the debounce window, multiple saves coalesce into
@@ -3945,6 +3950,13 @@ class Recall:
             "deep_enrichment": _queue_counts("deep_enrichment_queue"),
             "representations": _queue_counts("representations_queue"),
         }
+        try:
+            from representation_worker import representation_queue_snapshot
+            queues["representations"] = representation_queue_snapshot(
+                s.db, globals().get("repr_worker")
+            )
+        except Exception:
+            pass
         # v6.0 storage
         try:
             repr_count = s.db.execute(
@@ -4057,6 +4069,7 @@ class Recall:
 app = Server("claude-total-memory")
 store: Store = None
 recall: Recall = None
+repr_worker = None
 SID: str = None
 BRANCH: str = ""
 
@@ -4207,6 +4220,13 @@ async def list_tools():
             name="memory_stats",
             description="Memory statistics with health metrics: sessions, knowledge by type/project, "
                         "retention zones (active/archived/consolidated), stale records, storage size, config.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="memory_queue_stats",
+            description="Queue health for background memory derivation workers. "
+                        "Shows representations pending/processing/done/failed counts, "
+                        "oldest item age, last processed time, and worker heartbeat.",
             inputSchema={"type": "object", "properties": {}},
         ),
         Tool(
@@ -5885,6 +5905,17 @@ async def _do(name, a):
     elif name == "memory_stats":
         return J(recall.stats())
 
+    elif name == "memory_queue_stats":
+        from representation_worker import (
+            representation_queue_health,
+            representation_queue_snapshot,
+        )
+        snapshot = representation_queue_snapshot(store.db, repr_worker)
+        return J({
+            "status": representation_queue_health(snapshot),
+            "representations_queue": snapshot,
+        })
+
     elif name == "memory_consolidate":
         threshold = a.get("threshold", 0.75)
         dry_run = a.get("dry_run", True)
@@ -7409,7 +7440,7 @@ def _detect_git_branch():
 async def _bootstrap_session():
     """Common setup: build Store/Recall, start session, cleanup. Called
     by every transport. Populates module globals."""
-    global store, recall, SID, BRANCH
+    global store, recall, repr_worker, SID, BRANCH
     store = Store()
     recall = Recall(store)
     SID = f"mcp_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
@@ -7418,6 +7449,20 @@ async def _bootstrap_session():
     cleaned = store.cleanup_old_observations()
     if cleaned:
         LOG(f"Cleaned {cleaned} old observations (>{OBSERVATION_RETENTION_DAYS}d)")
+    try:
+        from representation_worker import (
+            RepresentationWorker,
+            representation_worker_enabled,
+        )
+        if representation_worker_enabled():
+            repr_worker = RepresentationWorker(store)
+            repr_worker.start()
+        else:
+            repr_worker = None
+            LOG("representation worker disabled by MEMORY_REPRESENTATION_WORKER_ENABLED")
+    except Exception as e:
+        repr_worker = None
+        LOG(f"representation worker init skipped: {e}")
     LOG(f"Session: {SID} | Branch: {BRANCH or '(none)'} | Memory: {MEMORY_DIR} | Sessions: {store.total_sessions()}")
     LOG(f"Config: decay={DECAY_HALF_LIFE}d archive={ARCHIVE_AFTER_DAYS}d purge={PURGE_AFTER_DAYS}d")
 
@@ -7467,11 +7512,38 @@ async def _run_streamable_http(host: str, port: int):
     mcp_http_app = MCPHttpApp()
 
     async def healthz(request: Request) -> Response:
+        queue_status = {}
+        status = "ok"
+        try:
+            from representation_worker import (
+                representation_queue_health,
+                representation_queue_snapshot,
+            )
+            repr_snapshot = representation_queue_snapshot(store.db, repr_worker)
+            queue_status = {
+                "representations": {
+                    "pending": repr_snapshot.get("pending", 0),
+                    "processing": repr_snapshot.get("processing", 0),
+                    "failed": repr_snapshot.get("failed", 0),
+                    "oldest_pending_age_sec": repr_snapshot.get("oldest_pending_age_sec"),
+                }
+            }
+            status = representation_queue_health(repr_snapshot)
+        except Exception as e:
+            status = "degraded"
+            queue_status = {"representations": {"error": str(e)}}
         return JSONResponse({
-            "status": "ok",
+            "status": status,
             "transport": "streamable-http",
             "session_id": SID,
             "memory_dir": str(MEMORY_DIR),
+            "worker": {
+                "representations": (
+                    repr_worker.status().get("status")
+                    if repr_worker is not None else "not_started"
+                ),
+            },
+            "queues": queue_status,
         })
 
     @asynccontextmanager

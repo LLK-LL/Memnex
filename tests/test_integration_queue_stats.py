@@ -57,10 +57,33 @@ def test_stats_counts_grow_after_save(store):
     recall = _srv.Recall(store)
     stats = recall.stats()
 
-    # Triple/deep enrichment remain queued for background processing. The
-    # lightweight representation view is generated synchronously on save and
-    # its queue item is immediately marked done.
+    # Triple/deep enrichment and representations remain queued for background
+    # processing. memory_save no longer drains representation work inline.
     assert stats["v6_queues"]["triple_extraction"]["pending"] == 2
     assert stats["v6_queues"]["deep_enrichment"]["pending"] == 2
-    assert stats["v6_queues"]["representations"]["pending"] == 0
-    assert stats["v6_queues"]["representations"]["done"] == 2
+    assert stats["v6_queues"]["representations"]["pending"] == 2
+    assert stats["v6_queues"]["representations"]["done"] == 0
+
+
+def test_memory_queue_stats_tool_reports_representation_queue(store, monkeypatch):
+    import asyncio
+    import json
+    import server as _srv
+
+    store.db.execute(
+        "INSERT INTO sessions (id, started_at, project, status) "
+        "VALUES ('s1', '2026-04-14T00:00:00Z', 'demo', 'open')"
+    )
+    store.db.commit()
+    store.save_knowledge(sid="s1", content="seed", ktype="fact", project="demo")
+
+    monkeypatch.setattr(_srv, "store", store)
+    monkeypatch.setattr(_srv, "recall", _srv.Recall(store))
+    monkeypatch.setattr(_srv, "repr_worker", None, raising=False)
+
+    payload = json.loads(asyncio.run(_srv._do("memory_queue_stats", {})))
+
+    assert payload["representations_queue"]["pending"] == 1
+    assert payload["representations_queue"]["processing"] == 0
+    assert payload["representations_queue"]["done"] == 0
+    assert "oldest_pending_age_sec" in payload["representations_queue"]
