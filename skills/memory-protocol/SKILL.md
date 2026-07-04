@@ -17,6 +17,7 @@ keywords:
   - session_end
   - kg_add_fact
   - workflow_predict
+  - rule_context_refresh
   - self_rules_context
 ---
 
@@ -34,7 +35,7 @@ and sub-agents are environment-specific and documented separately
 
 ## The five non-negotiables
 
-1. **Session start → `session_init` first, then `memory_recall`.** Always.
+1. **Session start → `session_init` first, then `rule_context_refresh`, then `memory_recall`.** Always.
    Skip only if you have already called `session_init` in this session.
 2. **Before any non-trivial task → `memory_recall(query, project)`.** Use
    the recipe instead of guessing the convention.
@@ -53,6 +54,7 @@ work → `memory_save` → `session_end`.**
 | Event | Tool | Why |
 |---|---|---|
 | Session opens | `session_init(project)` | Returns previous summary + next_steps + pitfalls and marks them consumed. **Call first.** |
+| Task starts / phase changes / target changes / qualifying errors | `rule_context_refresh(...)` | Keeps active behavioral rules current without recalling rules before every tool call. |
 | Any task starts | `memory_recall(query, project)` | Recipe-first; never invent a convention twice. |
 | Before edit/write to a file | `file_context(path)` | Returns risk_score + warnings (past errors on this path, hot spots). |
 | Before architecture choice | `memory_recall` + `analogize(query, exclude_project)` | Cross-project analogy. |

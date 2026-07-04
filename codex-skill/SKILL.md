@@ -18,11 +18,12 @@ Knowledge survives between sessions and is shared across agents working on the s
 Always run these two calls before any work:
 
 ```
-self_rules_context(project="<project>", detail="compact", query="<current task description>", top_k=5, include_always_on=true)
+rule_context_refresh(project="<project>", detail="compact", phase="<phase>", event="task_start", latest_user_instruction="<current task description>")
 memory_recall(query="<current task description>", project="<project>", mode="rag", limit=5, include_cognitive=false)
 ```
 
 If relevant knowledge is found, mention it briefly and apply it.
+Refresh rules again with `rule_context_refresh` on phase changes into `plan`, `build`, or `reflect`, target changes, and qualifying errors.
 
 ### Auto-Save Rules
 
@@ -76,7 +77,7 @@ self_insight(action="add", content="Generalized lesson", category="<error_catego
 Errors -> Insights -> Rules (SOUL).
 
 - Insights with importance >= 5 and confidence >= 0.8 can be promoted to rules
-- Rules are loaded at session start via `self_rules_context`
+- Rules are refreshed at session start and event boundaries via `rule_context_refresh`
 - Rate rules after task completion: `self_rules(action="rate", id=N, success=true/false)`
 - At session end, reflect: `self_reflect(reflection="...", task_summary="...", outcome="success|partial|failure")`
 
@@ -108,7 +109,7 @@ memory_save(content="Connected to <private>prod-host:5432</private>", type="fact
 | `memory_relate` | Create typed relations between records |
 | `memory_search_by_tag` | Browse knowledge by tag |
 
-**Self-Improvement (6):**
+**Self-Improvement (7):**
 
 | Tool | Purpose |
 |------|---------|
@@ -117,7 +118,8 @@ memory_save(content="Connected to <private>prod-host:5432</private>", type="fact
 | `self_rules` | Manage behavioral rules (list/fire/rate/suspend) |
 | `self_patterns` | Analyze error patterns and improvement trends |
 | `self_reflect` | Save session reflections |
-| `self_rules_context` | Load active rules at session start |
+| `rule_context_refresh` | Refresh active rules at task and phase/error boundaries |
+| `self_rules_context` | Low-level rule retrieval for debugging and direct recall |
 
 **Knowledge Graph (4):**
 

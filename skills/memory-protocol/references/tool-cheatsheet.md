@@ -287,13 +287,22 @@ quick audit.
 Manage behavioural rules. Auto-populated by `learn_error`
 consolidation.
 
+### `rule_context_refresh(project, phase, event, latest_user_instruction, tool_context?, error_category?, previous_query?, detail?)`
+
+**Refresh behavioural rules at event boundaries.** Use this at task start,
+when entering `plan`/`build`/`reflect`, when the user's target changes, and
+after qualifying errors. It builds a short query, applies cooldown, keeps all
+always-on rules, and returns diagnostics (`refreshed`, `skip_reason`,
+`cooldown_key`, `counts`, `conflict_hints`).
+
 ### `self_rules_context(project?, categories?, phase?, query?, top_k?, include_always_on?)`
 
-**Load behavioural rules at session start.** Pass `query` with the current
-task description so the rules layer returns always-on rules plus query-ranked
-top-K contextual rules. Without `query`, the server keeps the legacy
-project/phase/priority bulk-loading path for compatibility. The `phase`
-filter uses `phase:X` tags (zero-migration mechanic).
+**Low-level behavioural rule retrieval.** Prefer `rule_context_refresh` during
+normal execution. Use this directly for debugging or manual one-off recall.
+Pass `query` with the current task description so the rules layer returns
+always-on rules plus query-ranked top-K contextual rules. Without `query`, the
+server keeps the legacy project/phase/priority bulk-loading path for
+compatibility. The `phase` filter uses `phase:X` tags (zero-migration mechanic).
 
 ### `self_patterns(view?, project?, days?)`
 
@@ -458,7 +467,7 @@ JSON dump for backup or migration (see Knowledge CRUD).
 
 ```
 session_init(project='X')                       # session opens
-self_rules_context(project='X', query='...', top_k=5, include_always_on=True)  # load query-ranked rules
+rule_context_refresh(project='X', phase='build', event='task_start', latest_user_instruction='...')  # refresh rules
 memory_recall(query='...', project='X')         # before any task
 file_context(path='/abs/path')                  # before Edit/Write
 memory_save(type='solution', content='...', tags=['reusable','tech'])  # after work

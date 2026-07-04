@@ -295,7 +295,7 @@ def test_rule_set_phase_missing_rule(store):
 # ──────────────────────────────────────────────
 
 def test_phase_transition_adds_rules_preview_in_response():
-    """phase_transition() returns rules_preview pointing at self_rules_context."""
+    """phase_transition() returns rules_preview pointing at rule_context_refresh."""
     from task_phases import TaskPhases
 
     conn = sqlite3.connect(":memory:")
@@ -310,7 +310,7 @@ def test_phase_transition_adds_rules_preview_in_response():
     r = tp.phase_transition("t-preview", "plan")
     assert "rules_preview" in r
     assert "plan" in r["rules_preview"]
-    assert "self_rules_context" in r["rules_preview"]
+    assert "rule_context_refresh" in r["rules_preview"]
 
     # And on build, preview should mention build.
     r2 = tp.phase_transition("t-preview", "build")

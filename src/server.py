@@ -7,7 +7,7 @@ Tools (20): memory_recall, memory_save, memory_update, memory_timeline,
             memory_history, memory_delete, memory_relate, memory_search_by_tag,
             memory_extract_session, memory_observe,
             self_error_log, self_insight, self_rules, self_patterns,
-            self_reflect, self_rules_context
+            self_reflect, self_rules_context, rule_context_refresh
 Storage: SQLite FTS5 + ChromaDB (semantic) + relations (graph)
 Features: BM25 scoring, 3-level progressive disclosure, decay scoring, fuzzy search,
           deduplication, retention zones, consolidation, version history, graph relations,
@@ -24,6 +24,7 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -2541,10 +2542,11 @@ class Store:
         scopes = ["'global'", f"'project:{project}'"]
         if categories:
             scopes.extend(f"'category:{c}'" for c in categories)
+        limit_clause = "" if query else " LIMIT 20"
         rows = self.q(f"""
             SELECT * FROM rules
             WHERE status='active' AND scope IN ({','.join(scopes)})
-            ORDER BY priority DESC, success_rate DESC LIMIT 20
+            ORDER BY priority DESC, success_rate DESC{limit_clause}
         """)
 
         if phase is not None:
@@ -2626,7 +2628,6 @@ class Store:
         except (TypeError, ValueError):
             contextual_limit = 5
         contextual_limit = max(0, min(contextual_limit, 12))
-        always_limit = 3
 
         always_on, contextual = [], []
         for r in rows:
@@ -2642,7 +2643,7 @@ class Store:
             ),
             reverse=True,
         )
-        selected_always = always_on[:always_limit] if include_always_on else []
+        selected_always = always_on if include_always_on else []
 
         semantic_scores = self._rule_semantic_scores(query, contextual)
         category_set = {str(c).strip().lower() for c in (categories or []) if str(c).strip()}
@@ -2675,7 +2676,6 @@ class Store:
         selected_contextual = scored[:contextual_limit]
         selected = [dict(r, _rule_always_on=True) for r in selected_always]
         selected.extend(dict(r, _rule_always_on=False) for r in selected_contextual)
-        selected = selected[:12]
 
         meta = {
             "query": str(query),
@@ -4252,11 +4252,164 @@ class Recall:
 # ═══════════════════════════════════════════════════════════
 
 app = Server("claude-total-memory")
+RULE_CONTEXT_REFRESH_STATE = {
+    "cooldowns": {},
+    "code_errors": {},
+}
+RULE_REFRESH_PHASES = {"plan", "build", "reflect"}
+RULE_REFRESH_IMMEDIATE_ERRORS = {
+    "timeout",
+    "config_error",
+    "api_error",
+    "missing_context",
+    "wrong_assumption",
+}
+RULE_REFRESH_COOLDOWN_SECONDS = 300
 store: Store = None
 recall: Recall = None
 repr_worker = None
 SID: str = None
 BRANCH: str = ""
+
+
+def _short_context(value, limit=240):
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+def _rule_refresh_query(latest_user_instruction, phase, tool_context=None, error_category=None):
+    parts = []
+    latest = _short_context(latest_user_instruction)
+    if latest:
+        parts.append(latest)
+    if phase:
+        parts.append(f"phase:{phase}")
+    tool = _short_context(tool_context)
+    if tool:
+        parts.append(f"context:{tool}")
+    if error_category:
+        parts.append(f"error:{error_category}")
+    return " | ".join(parts)
+
+
+def _zero_rule_counts():
+    return {"always_on": 0, "contextual": 0, "total": 0}
+
+
+def _skipped_rule_refresh(event, phase, query, cooldown_key, reason, cooldown_hit=False):
+    return {
+        "refreshed": False,
+        "skip_reason": reason,
+        "event": event,
+        "phase": phase,
+        "query": query,
+        "cooldown_key": cooldown_key,
+        "cooldown_hit": cooldown_hit,
+        "rules": [],
+        "counts": _zero_rule_counts(),
+        "refresh_reason": None,
+        "conflict_hints": [],
+    }
+
+
+def _rule_refresh_counts(rules_result):
+    meta = rules_result.get("query_filter") or {}
+    return {
+        "always_on": int(meta.get("always_on_count") or 0),
+        "contextual": int(meta.get("contextual_count") or 0),
+        "total": int(rules_result.get("rules_count") or 0),
+    }
+
+
+def _rule_refresh_decision(event, phase, error_category, context_key):
+    if event == "task_start":
+        return True, "task_start"
+    if event == "phase_change":
+        if phase in RULE_REFRESH_PHASES:
+            return True, f"phase_change:{phase}"
+        return False, "phase_not_refreshing"
+    if event == "target_change":
+        return True, "target_change"
+    if event == "error":
+        if error_category in RULE_REFRESH_IMMEDIATE_ERRORS:
+            RULE_CONTEXT_REFRESH_STATE["code_errors"].pop(context_key, None)
+            return True, f"error:{error_category}"
+        if error_category == "code_error":
+            count = RULE_CONTEXT_REFRESH_STATE["code_errors"].get(context_key, 0) + 1
+            RULE_CONTEXT_REFRESH_STATE["code_errors"][context_key] = count
+            if count >= 2:
+                RULE_CONTEXT_REFRESH_STATE["code_errors"][context_key] = 0
+                return True, "error:code_error:threshold"
+            return False, "code_error_threshold"
+        return False, "error_not_refreshing"
+    return False, "event_not_refreshing"
+
+
+def rule_context_refresh(
+    store_obj,
+    *,
+    project="general",
+    phase="build",
+    event="task_start",
+    latest_user_instruction="",
+    tool_context=None,
+    error_category=None,
+    previous_query=None,
+    detail="compact",
+    now=None,
+):
+    valid_events = {"task_start", "phase_change", "target_change", "error"}
+    if event not in valid_events:
+        return {
+            "error": f"Unknown event '{event}'. Expected one of: {sorted(valid_events)}",
+        }
+
+    query = _rule_refresh_query(latest_user_instruction, phase, tool_context, error_category)
+    if not query and previous_query:
+        query = _short_context(previous_query)
+    cooldown_key = f"{phase}|{query}|{error_category or ''}"
+    context_key = f"{project}|{phase}|{previous_query or latest_user_instruction or query}"
+    should_refresh, reason = _rule_refresh_decision(event, phase, error_category, context_key)
+    if not should_refresh:
+        return _skipped_rule_refresh(event, phase, query, cooldown_key, reason)
+
+    now_ts = time.time() if now is None else float(now)
+    cooldowns = RULE_CONTEXT_REFRESH_STATE["cooldowns"]
+    last_refresh = cooldowns.get(cooldown_key)
+    if last_refresh is not None and now_ts - float(last_refresh) < RULE_REFRESH_COOLDOWN_SECONDS:
+        return _skipped_rule_refresh(
+            event, phase, query, cooldown_key, "cooldown_hit", cooldown_hit=True
+        )
+
+    top_k = 5 if event in {"error", "target_change"} else 3
+    rules_result = store_obj.get_rules_for_context(
+        project,
+        None,
+        phase,
+        detail,
+        query,
+        top_k,
+        True,
+    )
+    if "error" in rules_result:
+        return rules_result
+
+    cooldowns[cooldown_key] = now_ts
+    return {
+        "refreshed": True,
+        "skip_reason": None,
+        "event": event,
+        "phase": phase,
+        "query": query,
+        "cooldown_key": cooldown_key,
+        "cooldown_hit": False,
+        "rules": rules_result.get("rules", []),
+        "counts": _rule_refresh_counts(rules_result),
+        "refresh_reason": reason,
+        "conflict_hints": [],
+    }
 
 
 @app.list_tools()
@@ -4698,6 +4851,49 @@ async def list_tools():
                     "include_always_on": {"type": "boolean", "default": True,
                                           "description": "Include hard baseline rules tagged always_on, hard, or security-critical."},
                 },
+            },
+        ),
+        Tool(
+            name="rule_context_refresh",
+            description="Coordinate event-triggered behavioral rule refresh. "
+                        "Wraps self_rules_context with phase/event policy, query construction, "
+                        "cooldown, code_error thresholding, and diagnostics.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project": {"type": "string", "default": "general"},
+                    "phase": {
+                        "type": "string",
+                        "enum": ["van", "plan", "creative", "build", "reflect", "archive"],
+                    },
+                    "event": {
+                        "type": "string",
+                        "enum": ["task_start", "phase_change", "target_change", "error"],
+                    },
+                    "latest_user_instruction": {"type": "string"},
+                    "tool_context": {
+                        "type": "string",
+                        "description": "Short recent tool/error context summary.",
+                    },
+                    "error_category": {
+                        "type": "string",
+                        "enum": [
+                            "timeout",
+                            "config_error",
+                            "api_error",
+                            "missing_context",
+                            "wrong_assumption",
+                            "code_error",
+                            "logic_error",
+                        ],
+                    },
+                    "previous_query": {
+                        "type": "string",
+                        "description": "Previous refresh query, used only as a fallback context hint.",
+                    },
+                    "detail": {"type": "string", "enum": ["full", "compact"], "default": "compact"},
+                },
+                "required": ["project", "phase", "event", "latest_user_instruction"],
             },
         ),
         Tool(
@@ -6413,6 +6609,19 @@ async def _do(name, a):
             a.get("project", "general"), a.get("categories"), a.get("phase"),
             a.get("detail", "full"), a.get("query"), a.get("top_k"),
             a.get("include_always_on", True)))
+
+    elif name == "rule_context_refresh":
+        return J(rule_context_refresh(
+            store,
+            project=a.get("project", "general"),
+            phase=a.get("phase", "build"),
+            event=a.get("event", "task_start"),
+            latest_user_instruction=a.get("latest_user_instruction", ""),
+            tool_context=a.get("tool_context"),
+            error_category=a.get("error_category"),
+            previous_query=a.get("previous_query"),
+            detail=a.get("detail", "compact"),
+        ))
 
     elif name == "rule_set_phase":
         return J(store.set_rule_phase(a["rule_id"], a.get("phase")))

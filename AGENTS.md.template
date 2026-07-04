@@ -14,13 +14,15 @@ Use memory only when the task depends on durable local state: prior preferences,
 
 Load for local repo/code work, memory/rule/skill/agent workflow changes, or history-dependent tasks:
 
-1. `self_rules_context(project="<project>", detail="compact", phase="<phase>", query="<specific current task>", top_k=5, include_always_on=true)`
+1. `rule_context_refresh(project="<project>", detail="compact", phase="<phase>", event="task_start", latest_user_instruction="<specific current task>")`
 2. `memory_recall(query="<specific current task>", project="<project>", mode="rag", limit=5, include_cognitive=false)`
+
+Refresh rules again with `rule_context_refresh` on `phase_change` into `plan`, `build`, or `reflect`; on `target_change`; and on qualifying `error` events.
 
 Skip memory for self-contained external tasks: GitHub/web/paper/doc/package/news search, public project lookup, general Q&A, prompt-provided rewrite/translation/summary, casual chat, or trivial deterministic commands.
 
 For external search, use search/research skills directly. If durable user preferences may matter, call only:
-`self_rules_context(project="global", detail="compact", phase="<phase>", query="<specific current task>", top_k=5, include_always_on=true)`
+`rule_context_refresh(project="global", detail="compact", phase="<phase>", event="task_start", latest_user_instruction="<specific current task>")`
 Run `memory_recall` only if rules or user wording point to project-specific history.
 
 Save durable knowledge only:
