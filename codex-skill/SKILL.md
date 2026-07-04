@@ -18,8 +18,8 @@ Knowledge survives between sessions and is shared across agents working on the s
 Always run these two calls before any work:
 
 ```
-self_rules_context(project="<project>")
-memory_recall(query="<current task description>", project="<project>")
+self_rules_context(project="<project>", detail="compact", query="<current task description>", top_k=5, include_always_on=true)
+memory_recall(query="<current task description>", project="<project>", mode="rag", limit=5, include_cognitive=false)
 ```
 
 If relevant knowledge is found, mention it briefly and apply it.

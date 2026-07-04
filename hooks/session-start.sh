@@ -42,7 +42,7 @@ echo ""
 HINT="MEMORY_HINT: Project: ${PROJECT}"
 [ -n "$BRANCH" ] && HINT="${HINT}, Branch: ${BRANCH}"
 HINT="${HINT}. Use memory_recall(query=\"your task\", project=\"${PROJECT}\") to search past knowledge."
-HINT="${HINT} Also run self_rules_context(project=\"${PROJECT}\") to load behavioral rules."
+HINT="${HINT} Also run self_rules_context(project=\"${PROJECT}\", detail=\"compact\", query=\"your task\", top_k=5, include_always_on=true) to load query-ranked behavioral rules."
 echo "$HINT"
 echo ""
 
@@ -91,7 +91,7 @@ try:
             ).fetchall()
             for p, c in rows:
                 print(f'  - [P{p}] {c}')
-            print(f'  -> Call self_rules_context(project=\"$PROJECT\") at session start')
+            print(f'  -> Call self_rules_context(project=\"$PROJECT\", detail=\"compact\", query=\"<task>\", top_k=5, include_always_on=true) at session start')
 
     # Check error patterns
     if 'errors' in tables:

@@ -19,8 +19,8 @@ Cursor reopen / etc.
 1. session_init(project="<current>")
    → returns previous summary + next_steps + pitfalls (consumed)
 
-2. self_rules_context(project="<current>")
-   → load behavioural rules filtered to this project + phase
+2. self_rules_context(project="<current>", query="<current task>", top_k=5, include_always_on=true)
+   → load always-on rules plus query-ranked behavioural rules for this project
 
 3. (if user references prior work) memory_recall(query=<from prompt>, project=...)
 ```

@@ -32,7 +32,7 @@ memory_recall(query="<what the user is asking about>", project="<project-name>")
 2. Load behavioral rules learned from past mistakes (see Self-Improvement section):
 
 ```
-self_rules_context(project="<project-name>")
+self_rules_context(project="<project-name>", detail="compact", query="<what the user is asking about>", top_k=5, include_always_on=true)
 ```
 
 If you find relevant past knowledge, mention it briefly:
@@ -99,7 +99,7 @@ At session start, load behavioral rules learned from past mistakes.
 Because Codex CLI lacks session-start hooks, you must do this yourself
 as part of the mandatory startup sequence described above:
 ```
-self_rules_context(project="<project-name>")
+self_rules_context(project="<project-name>", detail="compact", query="<what the user is asking about>", top_k=5, include_always_on=true)
 ```
 
 When any error occurs during work (command failure, wrong assumption, timeout),

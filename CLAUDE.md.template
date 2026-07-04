@@ -153,7 +153,7 @@ Claude learns from mistakes across sessions via a 3-level pipeline.
 
 ### At session start — load behavioral rules:
 ```
-self_rules_context(project="my-project")
+self_rules_context(project="my-project", detail="compact", query="<current task description>", top_k=5, include_always_on=true)
 ```
 
 ### On any error (bash failure, wrong assumption, API error) — log it automatically:

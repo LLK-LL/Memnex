@@ -79,7 +79,7 @@ memory_forget(dry_run=true)           # Preview archiving stale records
 
 At session start, load behavioral rules learned from past mistakes:
 ```
-self_rules_context(project="<project-name>")
+self_rules_context(project="<project-name>", detail="compact", query="<what the user is asking about>", top_k=5, include_always_on=true)
 ```
 
 When any error occurs during work (command failure, wrong assumption, timeout),

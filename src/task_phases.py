@@ -195,7 +195,8 @@ class TaskPhases:
             "entered_at": now,
             "rules_preview": (
                 f"Rules for phase '{new_phase}': call "
-                f"self_rules_context(project=..., phase='{new_phase}') to load."
+                f"self_rules_context(project=..., phase='{new_phase}', "
+                f"query='<current task>', top_k=5, include_always_on=True) to load."
             ),
         }
 

@@ -80,7 +80,7 @@ For agents that should learn from their mistakes, add:
 ```markdown
 ## Self-Improvement
 
-At session start: `self_rules_context(project="my-project")`
+At session start: `self_rules_context(project="my-project", detail="compact", query="<current task description>", top_k=5, include_always_on=true)`
 On errors: `self_error_log(description="...", category="code_error", project="my-project")`
 At session end: `self_reflect(reflection="...", task_summary="...", project="my-project")`
 ```

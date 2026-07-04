@@ -287,11 +287,13 @@ quick audit.
 Manage behavioural rules. Auto-populated by `learn_error`
 consolidation.
 
-### `self_rules_context(project?, categories?, phase?)`
+### `self_rules_context(project?, categories?, phase?, query?, top_k?, include_always_on?)`
 
-**Load behavioural rules at session start.** Returns a curated set
-filtered by current project + phase. The `phase` filter uses
-`phase:X` tags (zero-migration mechanic).
+**Load behavioural rules at session start.** Pass `query` with the current
+task description so the rules layer returns always-on rules plus query-ranked
+top-K contextual rules. Without `query`, the server keeps the legacy
+project/phase/priority bulk-loading path for compatibility. The `phase`
+filter uses `phase:X` tags (zero-migration mechanic).
 
 ### `self_patterns(view?, project?, days?)`
 
@@ -456,7 +458,7 @@ JSON dump for backup or migration (see Knowledge CRUD).
 
 ```
 session_init(project='X')                       # session opens
-self_rules_context(project='X')                 # load behavioural rules
+self_rules_context(project='X', query='...', top_k=5, include_always_on=True)  # load query-ranked rules
 memory_recall(query='...', project='X')         # before any task
 file_context(path='/abs/path')                  # before Edit/Write
 memory_save(type='solution', content='...', tags=['reusable','tech'])  # after work
