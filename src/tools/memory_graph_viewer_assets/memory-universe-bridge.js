@@ -1,4 +1,4 @@
-const bundlePath = "./memory-universe-3d/memory-universe-viewer.js?v=20260705-state3-shapes-camera";
+const bundlePath = "./memory-universe-3d/memory-universe-viewer.js?v=20260706-state5-rendering";
 const max3DNodes = 420;
 const max3DEdges = 220;
 const supportedMemoryCategories = new Set([
@@ -48,6 +48,7 @@ export function initMemoryUniverse3DCoexistence(options) {
   let navigationPanel = null;
   let navigationSearchInput = null;
   let navigationResults = null;
+  let renderSettingsPanel = null;
   let minimapPanel = null;
   let minimapDots = null;
   let unavailableReason = null;
@@ -73,6 +74,15 @@ export function initMemoryUniverse3DCoexistence(options) {
   });
 
   syncViewChrome();
+  window.__memoryUniverse3DDebug = {
+    refreshMinimap() {
+      lastMinimapSignature = "";
+      renderProjectedMinimap(true);
+    },
+    getFramingSnapshot() {
+      return viewer?.getFramingSnapshot?.() || null;
+    },
+  };
 
   return {
     updateGraph(galaxyGraph) {
@@ -134,17 +144,19 @@ export function initMemoryUniverse3DCoexistence(options) {
       canvasHost = document.createElement("div");
       canvasHost.className = "memory-universe-canvas-host";
       navigationPanel = createNavigationPanel();
+      renderSettingsPanel = createRenderSettingsPanel();
       minimapPanel = createProjectedMinimap();
       hoverPreview = document.createElement("div");
       hoverPreview.className = "memory-universe-hover";
       hoverPreview.hidden = true;
-      threeDStage.append(canvasHost, navigationPanel, minimapPanel, hoverPreview);
+      threeDStage.append(canvasHost, navigationPanel, renderSettingsPanel, minimapPanel, hoverPreview);
       viewer = viewerModule.createMemoryUniverseViewer({
         container: canvasHost,
         graph: latestGraph,
         options: {
           initialMode: "observatory",
           initialFocus: resolveCurrent2DFocusTarget() || undefined,
+          initialQualityProfile: "Balanced",
         },
         onSelectNode(node) {
           if (suppressSelectionCallback) return;
@@ -153,12 +165,14 @@ export function initMemoryUniverse3DCoexistence(options) {
         onStateChange(state) {
           renderHoverPreview(state.hoverSummary, state.selectedObject);
           renderNavigationPanel(state);
+          renderRenderSettingsPanel();
           renderProjectedMinimap();
           syncModeButtons(state.mode);
         },
       });
       viewer.selectNode(readSelectedNodeId(options.getSelectedNodeId()));
       renderNavigationPanel();
+      renderRenderSettingsPanel();
       renderProjectedMinimap();
       syncModeButtons(viewer.getMode?.() || "observatory");
       unavailableReason = null;
@@ -325,6 +339,64 @@ export function initMemoryUniverse3DCoexistence(options) {
     return panel;
   }
 
+  function createRenderSettingsPanel() {
+    const panel = document.createElement("aside");
+    panel.className = "memory-universe-render-settings";
+    panel.setAttribute("aria-label", "3D render settings");
+    panel.innerHTML = `
+      <button type="button" class="memory-universe-render-toggle" aria-expanded="false">Render</button>
+      <div class="memory-universe-render-body" hidden>
+        <div class="memory-universe-render-profiles" role="group" aria-label="Render quality profile">
+          <button type="button" data-quality-profile="Performance">Performance</button>
+          <button type="button" data-quality-profile="Balanced">Balanced</button>
+          <button type="button" data-quality-profile="Cinematic">Cinematic</button>
+        </div>
+        <dl class="memory-universe-render-metrics">
+          <div><dt>FPS</dt><dd data-render-metric="fps">--</dd></div>
+          <div><dt>Effective</dt><dd data-render-metric="effective">Balanced</dd></div>
+          <div><dt>Status</dt><dd data-render-metric="status">Stable</dd></div>
+        </dl>
+        <div class="memory-universe-render-effects" aria-label="Active effects"></div>
+      </div>
+    `;
+    panel.addEventListener("click", event => {
+      const toggle = event.target.closest(".memory-universe-render-toggle");
+      if (toggle) {
+        const body = panel.querySelector(".memory-universe-render-body");
+        const expanded = body?.hidden;
+        if (body) body.hidden = !expanded;
+        toggle.setAttribute("aria-expanded", String(Boolean(expanded)));
+        return;
+      }
+
+      const profileButton = event.target.closest("button[data-quality-profile]");
+      if (!profileButton) return;
+      viewer?.setRenderQualityProfile?.(profileButton.dataset.qualityProfile);
+      renderRenderSettingsPanel();
+    });
+    return panel;
+  }
+
+  function renderRenderSettingsPanel() {
+    if (!renderSettingsPanel || !viewer?.getVisualPerformanceSnapshot) return;
+    const snapshot = viewer.getVisualPerformanceSnapshot();
+    renderSettingsPanel.querySelectorAll("button[data-quality-profile]").forEach(button => {
+      button.classList.toggle("is-active", button.dataset.qualityProfile === snapshot.preferredProfile);
+    });
+    const fps = renderSettingsPanel.querySelector('[data-render-metric="fps"]');
+    const effective = renderSettingsPanel.querySelector('[data-render-metric="effective"]');
+    const status = renderSettingsPanel.querySelector('[data-render-metric="status"]');
+    if (fps) fps.textContent = snapshot.fps === null ? "--" : String(Math.round(snapshot.fps));
+    if (effective) effective.textContent = snapshot.effectiveProfile;
+    if (status) status.textContent = snapshot.temporaryDegradation ? "Temporary Performance Step-down" : "Stable";
+    const effects = renderSettingsPanel.querySelector(".memory-universe-render-effects");
+    if (effects) {
+      effects.innerHTML = Object.entries(snapshot.effects)
+        .map(([name, enabled]) => `<span class="${enabled ? "is-on" : "is-off"}">${escapeHtml(labelize(name))}</span>`)
+        .join("");
+    }
+  }
+
   function startProjectedMinimapLoop() {
     if (minimapAnimationFrame !== null) return;
     const tick = () => {
@@ -444,13 +516,6 @@ export function initMemoryUniverse3DCoexistence(options) {
     };
     return colors[category] || colors.unknown;
   }
-
-  window.__memoryUniverse3DDebug = {
-    refreshMinimap() {
-      lastMinimapSignature = "";
-      renderProjectedMinimap(true);
-    },
-  };
 
   function renderNavigationPanel() {
     if (!navigationResults || !viewer) return;
