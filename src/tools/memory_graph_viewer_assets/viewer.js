@@ -4,6 +4,7 @@ import { buildCometOverlayLayout, buildGalaxyOverviewLayout, buildPlanetSatellit
 import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js";
 import { memorySystemForData, systemColors } from "./memory-galaxy-systems.js";
 import { createGalaxyViewState, enterGalaxyView, goBackView, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank, selectCometOverlay, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
+import { initMemoryUniverse3DCoexistence } from "./memory-universe-bridge.js?v=20260705-state3-shapes-camera";
 import { copyableInline, escapeHtml, formatNodeDetails, renderInspectorList, renderMetricGrid, renderPromptText, renderTag, timelineCutoffFromPercent } from "./viewer-shared.js";
 
 const viewName = "2d-memory-galaxy";
@@ -33,6 +34,27 @@ let minimapDragActive = false;
 let minimapRefreshPending = false;
 let pendingFitBounds = null;
 let filteredNodeIndex = null;
+let memoryUniverse3d = null;
+let leftSidebarCollapsed = false;
+
+function setLeftSidebarCollapsed(collapsed) {
+  leftSidebarCollapsed = Boolean(collapsed);
+  document.body.classList.toggle("left-sidebar-collapsed", leftSidebarCollapsed);
+  document.getElementById("toggleLeftSidebar")?.setAttribute("aria-expanded", String(!leftSidebarCollapsed));
+}
+
+function setInspectorCollapsed(collapsed) {
+  const shouldCollapse = Boolean(collapsed) && document.body.classList.contains("memory-universe-active");
+  document.body.classList.toggle("inspector-collapsed", shouldCollapse);
+}
+
+function expandInspector() {
+  setInspectorCollapsed(false);
+}
+
+function collapseInspector() {
+  setInspectorCollapsed(true);
+}
 
 const PERF_SAMPLE_LIMIT = 36;
 const PERF_SAMPLE_INTERVAL_MS = 1000;
@@ -126,6 +148,10 @@ window.__tamAgentBridge = {
         return { ok: true, state: this.getState() };
       }
       case "clear-selection":
+        state.selectedNodeId = null;
+        state.selectedCometId = null;
+        state.hoveredNodeId = null;
+        memoryUniverse3d?.selectNode(null);
         resumeGalaxyMotionFromBlank(state);
         syncMotionControls();
         redrawCurrentLayoutState();
@@ -137,6 +163,7 @@ window.__tamAgentBridge = {
         state.hoveredNodeId = null;
         state.selectedSystem = null;
         state.selectedPlanet = null;
+        memoryUniverse3d?.selectNode(null);
         shouldAutoFit = true;
         drawCurrentLayout();
         return { ok: true, state: this.getState() };
@@ -200,6 +227,30 @@ async function init() {
   renderStats(graph.metadata);
   renderOrbitLegend();
   await createPixi();
+  ensureLeftSidebarToggle();
+  memoryUniverse3d = initMemoryUniverse3DCoexistence({
+    getGraph: () => filteredGraph,
+    getSelectedNodeId: () => state.selectedNodeId,
+    getFocusTarget: () => ({
+      view: state.view,
+      selectedSystem: state.selectedSystem,
+      selectedPlanet: state.selectedPlanet,
+      selectedNodeId: state.selectedNodeId,
+    }),
+    onSelectNode: nodeId => {
+      if (!nodeId) {
+        collapseInspector();
+        resumeGalaxyMotionFromBlank(state);
+        syncMotionControls();
+        redrawCurrentLayoutState();
+        return;
+      }
+      const node = filteredNodeById(nodeId) || originalGraph.nodes.find(item => item.id === nodeId);
+      if (node) handleNodeTap(node, { detail: 1 });
+    },
+    onActiveViewChange: () => expandInspector(),
+    onBlankStageClick: collapseInspector,
+  });
   bindControls();
   applyFilters();
 }
@@ -224,9 +275,32 @@ async function createPixi() {
   initPerformancePanel();
   app.ticker.add(ticker => recordPerformanceFrame(Number(ticker.deltaMS || 16.67)));
   app.canvas.addEventListener("dblclick", handleCanvasDoubleClick);
+  app.canvas.addEventListener("pointerdown", event => {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest("button,input,select,.details,.sidebar,.memory-universe-nav-panel")) return;
+    collapseInspector();
+  });
   window.addEventListener("resize", () => {
     if (currentLayout) requestAnimationFrame(() => renderer.fitToBounds(currentLayout.bounds));
   });
+}
+
+function ensureLeftSidebarToggle() {
+  const sidebar = document.querySelector(".sidebar");
+  if (!sidebar || document.getElementById("toggleLeftSidebar")) return;
+  const button = document.createElement("button");
+  button.id = "toggleLeftSidebar";
+  button.type = "button";
+  button.className = "sidebar-collapse-button";
+  button.setAttribute("aria-label", "Collapse left sidebar");
+  button.setAttribute("aria-expanded", "true");
+  button.textContent = "<";
+  button.addEventListener("click", () => {
+    setLeftSidebarCollapsed(!leftSidebarCollapsed);
+    button.textContent = leftSidebarCollapsed ? ">" : "<";
+    button.setAttribute("aria-label", leftSidebarCollapsed ? "Expand left sidebar" : "Collapse left sidebar");
+  });
+  sidebar.prepend(button);
 }
 
 function bindControls() {
@@ -326,6 +400,7 @@ function bindControls() {
     enterGalaxyView(state);
     state.selectedNodeId = null;
     state.selectedCometId = null;
+    memoryUniverse3d?.selectNode(null);
     shouldAutoFit = true;
     drawCurrentLayout();
   });
@@ -343,6 +418,7 @@ function bindControls() {
     state.hoveredNodeId = null;
     state.selectedSystem = null;
     state.selectedPlanet = null;
+    memoryUniverse3d?.selectNode(null);
     shouldAutoFit = true;
     drawCurrentLayout();
   });
@@ -351,6 +427,7 @@ function bindControls() {
     enterGalaxyView(state);
     state.selectedNodeId = null;
     state.selectedCometId = null;
+    memoryUniverse3d?.selectNode(null);
     shouldAutoFit = true;
     drawCurrentLayout();
   });
@@ -361,6 +438,7 @@ function bindControls() {
     state.selectedPlanet = null;
     state.selectedNodeId = null;
     state.selectedCometId = null;
+    memoryUniverse3d?.selectNode(null);
     shouldAutoFit = true;
     drawCurrentLayout();
   });
@@ -408,6 +486,7 @@ function applyFilters() {
     };
   }
   filteredNodeIndex = null;
+  memoryUniverse3d?.updateGraph(filteredGraph);
   shouldAutoFit = true;
   drawCurrentLayout();
   renderStats({
@@ -910,6 +989,8 @@ function renderSelectionFromState() {
 }
 
 function showNodeSelection(node) {
+  expandInspector();
+  memoryUniverse3d?.selectNode(node?.id || null);
   const raw = node.raw || node;
   const system = node.memorySystem || visibleNodeSystem(node);
   const status = raw.galaxy_layer || node.layer || "knowledge";
@@ -944,6 +1025,7 @@ function showNodeSelection(node) {
 }
 
 function showSystemSelection(systemKey) {
+  expandInspector();
   const members = filteredGraph.nodes
     .filter(node => matchesSystem(node, systemKey))
     .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));

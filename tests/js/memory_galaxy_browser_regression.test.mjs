@@ -41,7 +41,7 @@ try {
   assert.equal(await page.locator('button[aria-label="Help"]').count(), 0);
   assert.equal(await page.locator(".focus-button").count(), 0);
   assert.equal(await page.locator('.stage-bottom-toolbar .toolbar-mode', { hasText: "2D" }).count(), 1);
-  assert.equal(await page.locator('.stage-bottom-toolbar a.toolbar-mode[href="viewer-3d.html"]', { hasText: "3D" }).count(), 1);
+  assert.equal(await page.locator('.stage-bottom-toolbar a.toolbar-mode[href="viewer-3d.html"]').count(), 0);
   assert.equal(await page.locator('.stage-bottom-toolbar button').count(), 0);
 
   const shellMetrics = await page.evaluate(() => {

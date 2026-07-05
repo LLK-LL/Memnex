@@ -164,8 +164,8 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     assert (output / "styles.css").exists()
     assert (output / "pixi.min.js").exists()
     assert (output / "viewer.js").exists()
-    assert (output / "viewer-3d.html").exists()
-    assert (output / "viewer-3d.js").exists()
+    assert not (output / "viewer-3d.html").exists()
+    assert not (output / "viewer-3d.js").exists()
     assert (output / "memory-galaxy-core.js").exists()
     assert (output / "memory-galaxy-events.js").exists()
     assert (output / "memory-galaxy-systems.js").exists()
@@ -174,12 +174,8 @@ def test_write_graph_json_and_copy_assets(tmp_path):
     assert (output / "memory-galaxy-view-state.js").exists()
     assert (output / "viewer-shared.js").exists()
     index_html = (output / "index.html").read_text(encoding="utf-8")
-    viewer_3d_html = (output / "viewer-3d.html").read_text(encoding="utf-8")
     assert 'id="graph-data"' in index_html
     assert 'src="pixi.min.js' in index_html
-    assert 'id="graph-data"' in viewer_3d_html
     assert 'src="viewer.js"' not in index_html
-    assert 'src="viewer-3d.js"' not in viewer_3d_html
     assert "type=\"module\">" in index_html
-    assert "type=\"module\">" in viewer_3d_html
     assert index_html.count("function systemColor(") == 1

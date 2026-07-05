@@ -3,14 +3,14 @@ setlocal
 
 cd /d "%~dp0"
 
-set "MAGMA_VIEWER_ROOT=%~dp0.worktrees\magma-memory-galaxy-visualization\"
-if not exist "%MAGMA_VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1" (
-    echo MAGMA Memory Galaxy viewer chain was not found:
-    echo %MAGMA_VIEWER_ROOT%
+set "VIEWER_ROOT=%~dp0"
+if not exist "%VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1" (
+    echo Memory Galaxy viewer launcher was not found:
+    echo %VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1
     exit /b 1
 )
 
-cd /d "%MAGMA_VIEWER_ROOT%"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%MAGMA_VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1"
+cd /d "%VIEWER_ROOT%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1"
 
 endlocal

@@ -7,20 +7,35 @@ $BaseUrl = "http://${HostName}:${Port}"
 $GraphUrl = "${BaseUrl}/api/graph"
 $IndexUrl = "${BaseUrl}/"
 $PixiUrl = "${BaseUrl}/pixi.min.js"
+$MemoryUniverse3dScriptUrl = "${BaseUrl}/memory-universe-3d/memory-universe-viewer.js"
+$MemoryUniverse3dStyleUrl = "${BaseUrl}/memory-universe-3d/memory-universe-viewer.css"
+$MemoryUniverse3dManifestUrl = "${BaseUrl}/memory-universe-3d/manifest.json"
 
 function Test-ViewerHealthy {
     try {
         $index = Invoke-WebRequest -Uri $IndexUrl -UseBasicParsing -TimeoutSec 4
-        if ($index.StatusCode -ne 200 -or $index.Content -notmatch "pixi\.min\.js") { return $false }
+        if (
+            $index.StatusCode -ne 200 -or
+            $index.Content -notmatch "pixi\.min\.js" -or
+            $index.Content -notmatch "memory-universe-3d"
+        ) { return $false }
         $pixi = Invoke-WebRequest -Uri $PixiUrl -UseBasicParsing -TimeoutSec 4 -Method Head
         if ($pixi.StatusCode -ne 200) { return $false }
+        $universeScript = Invoke-WebRequest -Uri $MemoryUniverse3dScriptUrl -UseBasicParsing -TimeoutSec 4 -Method Head
+        if ($universeScript.StatusCode -ne 200) { return $false }
+        $universeStyle = Invoke-WebRequest -Uri $MemoryUniverse3dStyleUrl -UseBasicParsing -TimeoutSec 4 -Method Head
+        if ($universeStyle.StatusCode -ne 200) { return $false }
+        $universeManifest = Invoke-WebRequest -Uri $MemoryUniverse3dManifestUrl -UseBasicParsing -TimeoutSec 4
+        if (
+            $universeManifest.StatusCode -ne 200 -or
+            $universeManifest.Content -notmatch '"publicApiVersion"\s*:\s*"memory-universe-viewer/v1"'
+        ) { return $false }
         $response = Invoke-WebRequest -Uri $GraphUrl -UseBasicParsing -TimeoutSec 8
         if ($response.StatusCode -ne 200) { return $false }
         return (
             $response.Content -match '"elements"\s*:' -and
             $response.Content -match '"nodes"\s*:' -and
             $response.Content -match '"metadata"\s*:' -and
-            $response.Content -match '"magma_families"\s*:' -and
             $response.Content -match '"agent_galaxies"\s*:'
         )
     } catch {

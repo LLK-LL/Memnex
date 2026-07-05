@@ -14,7 +14,6 @@ exports.buildFocusGalaxy = buildFocusGalaxy;
 exports.buildExpandedGalaxy = buildExpandedGalaxy;
 exports.buildEditIntent = buildEditIntent;
 exports.buildGalaxy2DLayout = buildGalaxy2DLayout;
-exports.buildSphereGalaxyLayout = buildSphereGalaxyLayout;
 exports.selectVisibleLabels = selectVisibleLabels;
 exports.buildGalaxyCacheKey = buildGalaxyCacheKey;
 exports.groupNeighborRelations = groupNeighborRelations;
@@ -37,7 +36,6 @@ const {
   buildExpandedGalaxy,
   buildEditIntent,
   buildGalaxy2DLayout,
-  buildSphereGalaxyLayout,
   selectVisibleLabels,
   buildGalaxyCacheKey,
   groupNeighborRelations,
@@ -466,15 +464,6 @@ assert.deepEqual(
 );
 assert.ok(layout2dA.nodes.every(node => Number.isFinite(node.x) && Number.isFinite(node.y)));
 assert.ok(layout2dA.nodes.every(node => node.renderRadius >= 4));
-
-const sphere = buildSphereGalaxyLayout(galaxy, { maxNodes: 3 });
-assert.equal(sphere.nodes.length, 3);
-for (const node of sphere.nodes) {
-  const distance = Math.hypot(node.x, node.y, node.z);
-  assert.ok(distance >= 70 && distance <= 430);
-  assert.ok(Number.isFinite(node.theta));
-  assert.ok(Number.isFinite(node.phi));
-}
 
 const labelsFar = selectVisibleLabels(layout2dA.nodes, {
   zoom: 0.45,

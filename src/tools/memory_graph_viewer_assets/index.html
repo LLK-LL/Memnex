@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Total Agent Memory Galaxy</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="styles.css?v=20260627-13">
+  <link rel="stylesheet" href="styles.css?v=20260705-inspector-overlay-3">
+  <link rel="stylesheet" href="memory-universe-3d/memory-universe-viewer.css?v=20260704-1">
   <script src="pixi.min.js?v=20260627-13"></script>
 </head>
 <body>
@@ -169,6 +170,9 @@
           <input id="stageSearchMirror" type="search" placeholder="Search memory galaxy...">
         </label>
         <div class="stage-toolbar-spacer"></div>
+        <button id="universe3dObservatory" type="button" class="icon-button universe-3d-control is-active" aria-label="Observatory Atlas Mode" title="Observatory Atlas Mode">O</button>
+        <button id="universe3dSpaceship" type="button" class="icon-button universe-3d-control" aria-label="Spaceship Cruise Mode" title="Spaceship Cruise Mode">S</button>
+        <button id="universe3dReset" type="button" class="icon-button universe-3d-control" aria-label="Reset 3D view" title="Reset 3D View">U</button>
         <button id="fitTop" type="button" class="icon-button" aria-label="Fit view">⛶</button>
       </header>
 
@@ -177,15 +181,18 @@
           <div class="live-title"><span class="live-dot"></span><span>Live</span><strong>Graph Scope</strong></div>
           <div id="liveHudRows" class="live-hud-rows"></div>
         </aside>
-        <nav class="stage-bottom-toolbar" aria-label="View mode switch">
-          <span class="toolbar-mode is-active" aria-current="page">2D</span>
-          <a class="toolbar-mode" href="viewer-3d.html">3D</a>
-        </nav>
         <aside class="galaxy-minimap" aria-label="Galaxy minimap">
           <div id="minimapDots" class="minimap-dots"></div>
           <div id="minimapWindow" class="minimap-window"></div>
         </aside>
       </section>
+
+      <section id="memoryUniverse3d" class="galaxy-canvas memory-universe-stage" aria-label="3D memory universe" hidden></section>
+
+      <nav class="stage-bottom-toolbar" aria-label="View mode switch">
+        <button id="viewMode2d" type="button" class="toolbar-mode is-active" aria-current="page">2D</button>
+        <button id="viewMode3d" type="button" class="toolbar-mode" aria-current="false">3D</button>
+      </nav>
 
       <footer class="stage-legend hidden-control">
         <div id="orbitLegend" class="legend-inline"></div>
@@ -208,6 +215,6 @@
       </div>
     </aside>
   </main>
-  <script type="module" src="viewer.js?v=20260627-13"></script>
+  <script type="module" src="viewer.js?v=20260705-inspector-overlay-3"></script>
 </body>
 </html>

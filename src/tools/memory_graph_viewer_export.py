@@ -36,13 +36,6 @@ VIEWER_BUNDLES = {
         "viewer-shared.js",
         "viewer.js",
     ],
-    "viewer-3d.html": [
-        "memory-galaxy-systems.js",
-        "memory-galaxy-core.js",
-        "memory-galaxy-events.js",
-        "viewer-shared.js",
-        "viewer-3d.js",
-    ],
 }
 
 
@@ -371,7 +364,7 @@ def write_graph_json(graph: dict[str, Any], output_dir: Path) -> Path:
 def embed_graph_data(graph: dict[str, Any], output_dir: Path) -> None:
     payload = json.dumps(graph, ensure_ascii=False).replace("<", "\\u003c")
     snippet = f'<script id="graph-data" type="application/json">{payload}</script>'
-    for asset in ("index.html", "viewer-3d.html"):
+    for asset in ("index.html",):
         path = output_dir / asset
         text = path.read_text(encoding="utf-8")
         if 'id="graph-data"' in text:
@@ -482,8 +475,6 @@ def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR, *, version: str |
         "styles.css",
         "pixi.min.js",
         "viewer.js",
-        "viewer-3d.html",
-        "viewer-3d.js",
         "memory-galaxy-core.js",
         "memory-galaxy-events.js",
         "memory-galaxy-systems.js",
@@ -495,7 +486,7 @@ def copy_assets(output_dir: Path, asset_dir: Path = ASSET_DIR, *, version: str |
         shutil.copy2(asset_dir / asset, output_dir / asset)
     if not version:
         return
-    for asset in ("index.html", "viewer.js", "viewer-3d.html", "viewer-3d.js"):
+    for asset in ("index.html", "viewer.js"):
         path = output_dir / asset
         path.write_text(_version_local_asset_refs(path.read_text(encoding="utf-8"), version), encoding="utf-8")
 

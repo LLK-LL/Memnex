@@ -6,14 +6,6 @@
   external: 370,
 };
 
-const sphereShell = {
-  core: 85,
-  active: 155,
-  knowledge: 245,
-  episode: 330,
-  external: 410,
-};
-
 const clusterCenters = {
   project: { x: -360, y: -150 },
   concept: { x: 0, y: -190 },
@@ -361,34 +353,6 @@ export function springBackTarget(node, options = {}) {
     x: Math.round(homeX + (x - homeX) * retainRatio),
     y: Math.round(homeY + (y - homeY) * retainRatio),
   };
-}
-
-export function buildSphereGalaxyLayout(galaxy, options = {}) {
-  const focused = buildFocusGalaxy(galaxy, {
-    maxNodes: Number(options.maxNodes || 650),
-    seedCount: Number(options.seedCount || 36),
-    firstRingLimit: Number(options.firstRingLimit || 380),
-    focusNodeId: options.focusNodeId,
-  });
-  const nodes = focused.nodes.map((node, index) => {
-    const radius = sphereShell[node.layer] || sphereShell.external;
-    const theta = hashAngle(`${node.id}:theta`);
-    const phiSeed = ((hashNumber(`${node.id}:phi`) % 1000) / 1000);
-    const phi = Math.acos(1 - 2 * phiSeed);
-    const shellJitter = ((index % 7) - 3) * 5;
-    const r = radius + shellJitter;
-    return {
-      ...node,
-      theta,
-      phi,
-      x: r * Math.sin(phi) * Math.cos(theta),
-      y: r * Math.cos(phi),
-      z: r * Math.sin(phi) * Math.sin(theta),
-      renderRadius: Math.max(3.5, Math.sqrt(node.val) * 1.45),
-      labelPriority: nodeScore(node),
-    };
-  });
-  return { nodes, links: focused.links, metadata: focused.metadata, agentGalaxies: focused.agentGalaxies };
 }
 
 export function buildExpandedGalaxy(sourceGalaxy, baseGalaxy, expandedNodeIds, options = {}) {

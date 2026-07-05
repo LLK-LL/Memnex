@@ -181,6 +181,16 @@ LITERAL_MATCH_MIN_LEN = int(os.environ.get("MEMORY_LITERAL_MATCH_MIN_LEN", "12")
 LOG = lambda msg: sys.stderr.write(f"[memory-mcp] {msg}\n")
 
 
+def _monitor_recall_event(event_type, request, response):
+    """Best-effort local recall monitor; never change MCP tool behavior."""
+    try:
+        from recall_monitor import record_recall_event
+
+        record_recall_event(event_type, request, response)
+    except Exception as exc:  # noqa: BLE001
+        LOG(f"recall monitor skipped: {exc}")
+
+
 def _normalise_agent_namespace(value: str | None) -> str:
     raw = (value or "").strip().lower()
     if not raw:
@@ -2639,7 +2649,7 @@ class Store:
         always_on.sort(
             key=lambda r: (
                 int(r.get("priority") or 0),
-                float(r.get("success_rate") or 0.0),
+                int(r.get("id") or 0),
             ),
             reverse=True,
         )
@@ -2647,43 +2657,64 @@ class Store:
 
         semantic_scores = self._rule_semantic_scores(query, contextual)
         category_set = {str(c).strip().lower() for c in (categories or []) if str(c).strip()}
+        ranking_weights = {
+            "trigger": 0.45,
+            "semantic": 0.30,
+            "phase": 0.10,
+            "category": 0.10,
+            "priority": 0.05,
+        }
         scored = []
         for r in contextual:
             tags = self._rule_tags(r)
+            trigger_score, trigger_match = self._rule_trigger_match(query, r, tags)
             semantic_score = semantic_scores.get(r["id"], 0.0)
             phase_match = 1.0 if phase and f"phase:{phase}" in tags else 0.0
             category_hint = 1.0 if self._rule_category_matches(r, category_set) else 0.0
             priority_weight = min(max(float(r.get("priority") or 0.0) / 10.0, 0.0), 1.0)
             final_score = (
-                semantic_score * 0.65
-                + phase_match * 0.15
-                + category_hint * 0.10
-                + priority_weight * 0.10
+                trigger_score * ranking_weights["trigger"]
+                + semantic_score * ranking_weights["semantic"]
+                + phase_match * ranking_weights["phase"]
+                + category_hint * ranking_weights["category"]
+                + priority_weight * ranking_weights["priority"]
             )
             ranked = dict(r)
             ranked["_rule_relevance_score"] = round(final_score, 6)
+            ranked["_rule_trigger_score"] = round(trigger_score, 6)
             ranked["_rule_semantic_score"] = round(semantic_score, 6)
+            if trigger_match:
+                ranked["_rule_trigger_match"] = trigger_match
             scored.append(ranked)
 
         scored.sort(
             key=lambda r: (
+                1 if r.get("_rule_trigger_match") else 0,
+                r.get("_rule_trigger_score", 0.0),
                 r.get("_rule_relevance_score", 0.0),
                 int(r.get("priority") or 0),
-                float(r.get("success_rate") or 0.0),
+                int(r.get("id") or 0),
             ),
             reverse=True,
         )
         selected_contextual = scored[:contextual_limit]
         selected = [dict(r, _rule_always_on=True) for r in selected_always]
         selected.extend(dict(r, _rule_always_on=False) for r in selected_contextual)
+        trigger_matches = [
+            r["_rule_trigger_match"]
+            for r in selected_contextual
+            if r.get("_rule_trigger_match")
+        ]
 
         meta = {
             "query": str(query),
-            "strategy": "always_on_plus_query_top_k",
+            "strategy": "always_on_plus_trigger_semantic_top_k",
             "always_on_count": len(selected_always),
             "contextual_count": len(selected_contextual),
             "candidate_count": len(rows),
             "contextual_limit": contextual_limit,
+            "trigger_matches": trigger_matches,
+            "ranking_weights": ranking_weights,
             "always_on_tags": ["always_on", "hard", "security-critical"],
         }
         return selected, meta
@@ -2744,6 +2775,107 @@ class Store:
         except (json.JSONDecodeError, TypeError):
             tags = []
         return any(str(t).strip().lower() in category_set for t in tags)
+
+    def _rule_trigger_match(self, query, rule, tags=None):
+        query_text = str(query or "")
+        query_canonical = self._rule_trigger_canonical(query_text)
+        query_tokens = set(self._rule_trigger_tokens(query_text))
+        if not query_canonical and not query_tokens:
+            return 0.0, None
+
+        tag_matches = []
+        for tag in sorted(tags if tags is not None else self._rule_tags(rule)):
+            if tag.startswith("phase:") or tag in {"always_on", "hard", "security-critical"}:
+                continue
+            canonical = self._rule_trigger_canonical(tag)
+            if not canonical:
+                continue
+            if self._rule_trigger_phrase_matches(canonical, query_canonical, query_tokens):
+                tag_matches.append(tag)
+        if tag_matches:
+            return 1.0, {
+                "rule_id": rule["id"],
+                "matched": tag_matches,
+                "source": "tags",
+            }
+
+        category = str(rule.get("category") or "").strip()
+        category_canonical = self._rule_trigger_canonical(category)
+        if category_canonical and self._rule_trigger_phrase_matches(
+            category_canonical,
+            query_canonical,
+            query_tokens,
+        ):
+            return 0.9, {
+                "rule_id": rule["id"],
+                "matched": [category],
+                "source": "category",
+            }
+
+        content_matches = []
+        content = str(rule.get("content") or "")
+        for phrase in self._rule_content_trigger_phrases(content):
+            canonical = self._rule_trigger_canonical(phrase)
+            if canonical and self._rule_trigger_phrase_matches(
+                canonical,
+                query_canonical,
+                query_tokens,
+            ):
+                content_matches.append(phrase)
+        if content_matches:
+            deduped = list(dict.fromkeys(content_matches))
+            return 0.7, {
+                "rule_id": rule["id"],
+                "matched": deduped,
+                "source": "content",
+            }
+
+        return 0.0, None
+
+    @staticmethod
+    def _rule_trigger_canonical(text):
+        normalized = re.sub(r"[_\-]+", " ", str(text or "").lower())
+        normalized = re.sub(r"[^\w\u4e00-\u9fff]+", " ", normalized)
+        return " ".join(normalized.split())
+
+    @classmethod
+    def _rule_trigger_tokens(cls, text):
+        return [
+            token
+            for token in re.findall(r"[\w\u4e00-\u9fff]+", cls._rule_trigger_canonical(text))
+            if len(token) > 1
+        ]
+
+    @classmethod
+    def _rule_trigger_phrase_matches(cls, phrase, query_canonical, query_tokens):
+        phrase = cls._rule_trigger_canonical(phrase)
+        if not phrase:
+            return False
+        phrase_tokens = cls._rule_trigger_tokens(phrase)
+        if not phrase_tokens:
+            return False
+        if len(phrase_tokens) == 1:
+            return phrase_tokens[0] in query_tokens
+        return f" {phrase} " in f" {query_canonical} "
+
+    @staticmethod
+    def _rule_content_trigger_phrases(content):
+        stopwords = {
+            "after", "always", "before", "current", "never", "rule", "rules",
+            "then", "user", "when", "where", "with",
+        }
+        phrases = []
+        text = str(content or "")
+        explicit_name_pattern = (
+            r"\b[A-Z]{2,}\b|"
+            r"\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b|"
+            r"\b[A-Z][a-z]{2,}\b"
+        )
+        for token in re.findall(explicit_name_pattern, text):
+            if token.lower() not in stopwords:
+                phrases.append(token)
+        phrases.extend(re.findall(r"[\u4e00-\u9fff]{2,}", text))
+        return phrases
 
     @staticmethod
     def _cosine01(a, b):
@@ -4906,9 +5038,12 @@ async def list_tools():
                 "type": "object",
                 "properties": {
                     "rule_id": {"type": "integer"},
-                    "phase": {"type": ["string", "null"],
-                              "enum": ["van", "plan", "creative", "build",
-                                       "reflect", "archive", None],
+                    "phase": {"anyOf": [
+                                  {"type": "string",
+                                   "enum": ["van", "plan", "creative", "build",
+                                            "reflect", "archive"]},
+                                  {"type": "null"},
+                              ],
                               "description": "Phase name or null to clear."},
                 },
                 "required": ["rule_id"],
@@ -5379,7 +5514,10 @@ async def list_tools():
                     "branch": {"type": "string"},
                     "fusion": {"type": "string", "enum": ["rrf", "legacy"], "default": "rrf"},
                     "embedding_space": {
-                        "type": ["string", "array"],
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "array", "items": {"type": "string"}},
+                        ],
                         "description": "Filter to one or more embedding spaces (text|code|log|config).",
                     },
                     "agent_namespace": {"type": "string", "description": "Search one agent namespace. Defaults to current namespace."},
@@ -5402,7 +5540,12 @@ async def list_tools():
                     "project": {"type": "string"},
                     "type": {"type": "string", "enum": ["decision", "fact", "solution", "lesson", "convention", "all"], "default": "all"},
                     "limit": {"type": "integer", "default": 10},
-                    "embedding_space": {"type": ["string", "array"]},
+                    "embedding_space": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "array", "items": {"type": "string"}},
+                        ],
+                    },
                     "agent_namespace": {"type": "string", "description": "Search one agent namespace. Defaults to current namespace."},
                     "agent_namespaces": {"type": "array", "items": {"type": "string"}, "description": "Explicit list of agent namespaces for cross-agent search."},
                     "scope": {"type": "string", "enum": ["default", "all_agents"], "description": "Use all_agents only when the user explicitly requests cross-agent search."},
@@ -5440,7 +5583,10 @@ async def list_tools():
                 "type": "object",
                 "properties": {
                     "embedding_space": {
-                        "type": ["string", "array"],
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "array", "items": {"type": "string"}},
+                        ],
                         "description": "Optional: only re-encode rows in these spaces.",
                     },
                     "project": {"type": "string"},
@@ -6173,6 +6319,7 @@ async def _do(name, a):
                     LOG(f"rag fallback index_response error: {fallback_e}")
                     result["rag_error"] = str(e)
 
+        _monitor_recall_event("memory_recall", {**a, "_tool": name}, result)
         return J(result)
 
     elif name == "memory_timeline":
@@ -6605,13 +6752,15 @@ async def _do(name, a):
         return J({"saved": True, "id": rid, "type": "reflection"})
 
     elif name == "self_rules_context":
-        return J(store.get_rules_for_context(
+        result = store.get_rules_for_context(
             a.get("project", "general"), a.get("categories"), a.get("phase"),
             a.get("detail", "full"), a.get("query"), a.get("top_k"),
-            a.get("include_always_on", True)))
+            a.get("include_always_on", True))
+        _monitor_recall_event("self_rules_context", {**a, "_tool": name}, result)
+        return J(result)
 
     elif name == "rule_context_refresh":
-        return J(rule_context_refresh(
+        result = rule_context_refresh(
             store,
             project=a.get("project", "general"),
             phase=a.get("phase", "build"),
@@ -6621,7 +6770,9 @@ async def _do(name, a):
             error_category=a.get("error_category"),
             previous_query=a.get("previous_query"),
             detail=a.get("detail", "compact"),
-        ))
+        )
+        _monitor_recall_event("rule_context_refresh", {**a, "_tool": name}, result)
+        return J(result)
 
     elif name == "rule_set_phase":
         return J(store.set_rule_phase(a["rule_id"], a.get("phase")))
