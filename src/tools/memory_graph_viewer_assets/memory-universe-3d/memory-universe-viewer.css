@@ -1,2 +1,2 @@
-.memory-universe-canvas{width:100%;height:100%;display:block}
+.memory-universe-viewer-root{position:relative;overflow:hidden}.memory-universe-canvas{width:100%;height:100%;display:block}.memory-universe-spatial-label-layer{pointer-events:none;position:absolute;inset:0;overflow:hidden}.memory-universe-spatial-label{color:#ecf8ffeb;letter-spacing:0;text-align:center;text-shadow:0 0 8px #65b8ffb8;white-space:nowrap;transform-origin:50%;will-change:transform, opacity;background:#0509158f;border:1px solid #b0dbff47;border-radius:6px;max-width:min(180px,36vw);padding:3px 7px;font:500 11px/1.2 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;position:absolute;top:0;left:0}.memory-universe-spatial-label-galaxy{color:#fff5daf0;border-color:#ffe7b057}
 /*$vite$:1*/
