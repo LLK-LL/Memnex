@@ -10817,30 +10817,30 @@ function $s(e, t) {
 }
 //#endregion
 //#region src/lib/layout.ts
-var ec = 64, tc = 23, nc = 11, rc = .46;
-function ic(e) {
+var ec = 108, tc = 48, nc = 28, rc = .46, ic = 6;
+function ac(e) {
 	let t = /* @__PURE__ */ new Map(), n = /* @__PURE__ */ new Map(), r = /* @__PURE__ */ new Map(), i = /* @__PURE__ */ new Map();
 	e.hierarchy.galaxies.forEach((n, r) => {
-		let i = mc(r, e.hierarchy.galaxies.length, e.seed, n.id);
+		let i = hc(r, e.hierarchy.galaxies.length, e.seed, n.id);
 		t.set(n.id, {
 			id: n.id,
 			position: i,
 			radius: ec,
-			morphology: sc(e.seed, n.id, ec)
+			morphology: cc(e.seed, n.id, ec)
 		});
 	});
-	let a = Sc(e.hierarchy.solarSystems, (e) => e.galaxyId), o = Sc(e.hierarchy.planetarySystems, (e) => e.solarSystemId), s = Sc(e.nodes, (e) => e.solarSystemId), c = fc(e.nodes, e.edges);
+	let a = Cc(e.hierarchy.solarSystems, (e) => e.galaxyId), o = Cc(e.hierarchy.planetarySystems, (e) => e.solarSystemId), s = Cc(e.nodes, (e) => e.solarSystemId), c = pc(e.nodes, e.edges);
 	for (let [r, i] of a) {
-		let a = Cc(t.get(r), `Missing galaxy layout ${r}.`);
+		let a = wc(t.get(r), `Missing galaxy layout ${r}.`);
 		i.map((e) => ({
 			system: e,
-			structuralWeight: dc(o.get(e.id)?.length ?? 0, s.get(e.id) ?? [], c.get(e.id) ?? 0)
+			structuralWeight: fc(o.get(e.id)?.length ?? 0, s.get(e.id) ?? [], c.get(e.id) ?? 0)
 		})).sort((e, t) => t.structuralWeight - e.structuralWeight || e.system.id.localeCompare(t.system.id)).forEach(({ system: t, structuralWeight: o }, s) => {
-			let c = cc(a.morphology, e.seed, r, t.id, s, i.length);
+			let c = lc(a.morphology, e.seed, r, t.id, s, i.length);
 			n.set(t.id, {
 				id: t.id,
 				galaxyId: r,
-				position: vc(a.position, c.offset),
+				position: yc(a.position, c.offset),
 				radius: tc,
 				structuralWeight: o,
 				morphologyRegion: c.region,
@@ -10851,39 +10851,39 @@ function ic(e) {
 		});
 	}
 	for (let [t, i] of o) {
-		let a = Cc(n.get(t), `Missing solar system layout ${t}.`);
+		let a = wc(n.get(t), `Missing solar system layout ${t}.`);
 		i.forEach((n, o) => {
-			let s = hc(o, i.length, a.radius, e.seed, t, {
-				inner: .34,
-				outer: .7,
-				vertical: .08,
-				tilt: _c(`${e.seed}:${t}:planetary-tilt`) * .16
+			let s = gc(o, i.length, a.radius, e.seed, t, {
+				inner: .22,
+				outer: .9,
+				vertical: .13,
+				tilt: vc(`${e.seed}:${t}:planetary-tilt`) * .22
 			});
 			r.set(n.id, {
 				id: n.id,
 				galaxyId: n.galaxyId,
 				solarSystemId: t,
-				position: vc(a.position, s),
+				position: yc(a.position, s),
 				radius: nc
 			});
 		});
 	}
-	let l = Sc(e.nodes, (e) => e.planetarySystemId);
+	let l = Cc(e.nodes, (e) => e.planetarySystemId);
 	for (let [t, n] of l) {
-		let a = Cc(r.get(t), `Missing planetary system layout ${t}.`);
+		let a = wc(r.get(t), `Missing planetary system layout ${t}.`);
 		n.forEach((r, o) => {
-			let s = hc(o, n.length, a.radius, e.seed, t, {
-				inner: .36,
-				outer: .74,
-				vertical: .08,
-				tilt: _c(`${e.seed}:${t}:node-tilt`) * .12
+			let s = gc(o, n.length, a.radius, e.seed, t, {
+				inner: .32,
+				outer: .94,
+				vertical: .16,
+				tilt: vc(`${e.seed}:${t}:node-tilt`) * .18
 			});
 			i.set(r.id, {
 				id: r.id,
 				galaxyId: r.galaxyId,
 				solarSystemId: r.solarSystemId,
 				planetarySystemId: t,
-				position: vc(a.position, s),
+				position: yc(a.position, s),
 				radius: rc + r.importance * .38
 			});
 		});
@@ -10895,18 +10895,18 @@ function ic(e) {
 		nodes: i
 	};
 }
-function ac(e, t) {
+function oc(e, t) {
 	let n = e.x - t.x, r = e.y - t.y, i = e.z - t.z;
 	return Math.sqrt(n * n + r * r + i * i);
 }
-function oc(e, t, n = {}) {
+function sc(e, t, n = {}) {
 	let r = Math.max(1, n.foregroundLimit ?? 5), i = Array.from(t.solarSystems.values()).filter((e) => !n.galaxyId || e.galaxyId === n.galaxyId).sort((e, t) => t.structuralWeight - e.structuralWeight || e.id.localeCompare(t.id)), a = new Set(i.slice(0, r).map((e) => e.id)), o = /* @__PURE__ */ new Set();
 	for (let t of [
 		n.focusTarget,
 		n.hoveredTarget,
 		n.selectedTarget
 	]) {
-		let n = t ? pc(e, t) : null;
+		let n = t ? mc(e, t) : null;
 		n && i.some((e) => e.id === n) && (o.add(n), a.add(n));
 	}
 	let s = n.searchQuery?.trim().toLowerCase();
@@ -10928,13 +10928,13 @@ function oc(e, t, n = {}) {
 	}
 	return c;
 }
-function sc(e, t, n) {
-	let r = gc(`${e}:${t}:arm-count`) > .58 ? 3 : 2, i = $(n * .88), a = $(n * .18), o = $(n * .74), s = gc(`${e}:${t}:arm-phase`) * Math.PI * 2, c = $(1.05 + gc(`${e}:${t}:arm-turns`) * .42);
+function cc(e, t, n) {
+	let r = _c(`${e}:${t}:arm-count`) > .58 ? 3 : 2, i = $(n * .88), a = $(n * .18), o = $(n * .74), s = _c(`${e}:${t}:arm-phase`) * Math.PI * 2, c = $(1.05 + _c(`${e}:${t}:arm-turns`) * .42);
 	return {
 		kind: "galaxy-region-focus",
 		diskRadius: i,
 		diskThickness: $(n * .18),
-		inclinationRadians: $(.43 + gc(`${e}:${t}:inclination`) * .34),
+		inclinationRadians: $(.43 + _c(`${e}:${t}:inclination`) * .34),
 		coreRadius: a,
 		sparseEdgeStartRadius: o,
 		arms: Array.from({ length: r }, (e, o) => ({
@@ -10948,8 +10948,8 @@ function sc(e, t, n) {
 		}))
 	};
 }
-function cc(e, t, n, r, i, a) {
-	let o = lc(i, a), s = o === "primaryArm" || o === "secondaryArm" ? i % e.arms.length : null, c = s === null ? null : e.arms[s], l = a <= 1 ? 0 : i / (a - 1), u = _c(`${t}:${n}:${r}:morphology-jitter`), d = uc(e, o, l, u), f = $((c ? c.phaseRadians + d / e.diskRadius * Math.PI * 2 * c.turns : gc(`${t}:${n}:${r}:disk-theta`) * Math.PI * 2) + u * .16), p = c ? _c(`${t}:${r}:arm-width`) * c.width * .34 : 0, m = _c(`${t}:${r}:disk-height`) * e.diskThickness * .16, h = bc({
+function lc(e, t, n, r, i, a) {
+	let o = uc(i, a), s = o === "primaryArm" || o === "secondaryArm" ? i % e.arms.length : null, c = s === null ? null : e.arms[s], l = a <= 1 ? 0 : i / (a - 1), u = vc(`${t}:${n}:${r}:morphology-jitter`), d = dc(e, o, l, u), f = $((c ? c.phaseRadians + d / e.diskRadius * Math.PI * 2 * c.turns : _c(`${t}:${n}:${r}:disk-theta`) * Math.PI * 2) + u * .16), p = c ? vc(`${t}:${r}:arm-width`) * c.width * .34 : 0, m = vc(`${t}:${r}:disk-height`) * e.diskThickness * .16, h = xc({
 		x: Math.cos(f) * (d + p),
 		y: m,
 		z: Math.sin(f) * d * .72
@@ -10966,26 +10966,26 @@ function cc(e, t, n, r, i, a) {
 		armIndex: s
 	};
 }
-function lc(e, t) {
+function uc(e, t) {
 	if (t === 1) return "primaryArm";
 	let n = e / Math.max(1, t - 1);
 	return e === 0 && t >= 5 ? "core" : n <= .34 ? "primaryArm" : n <= .62 ? "secondaryArm" : n <= .82 ? "outerDisk" : "sparseEdge";
 }
-function uc(e, t, n, r) {
+function dc(e, t, n, r) {
 	let i = e.diskRadius, [a, o] = {
 		core: [e.coreRadius, i * .3],
 		primaryArm: [i * .34, i * .55],
 		secondaryArm: [i * .48, i * .7],
 		outerDisk: [i * .62, i * .81],
 		sparseEdge: [e.sparseEdgeStartRadius, i * .94]
-	}[t], s = yc((n + .21 + r * .08) % 1, 0, 1);
+	}[t], s = bc((n + .21 + r * .08) % 1, 0, 1);
 	return $(a + (o - a) * s);
 }
-function dc(e, t, n) {
-	let r = t.reduce((e, t) => e + yc(t.importance, 0, 1), 0);
+function fc(e, t, n) {
+	let r = t.reduce((e, t) => e + bc(t.importance, 0, 1), 0);
 	return $(1 + e * 2.4 + t.length * .9 + n * .28 + r * 1.8);
 }
-function fc(e, t) {
+function pc(e, t) {
 	let n = new Map(e.map((e) => [e.id, e.solarSystemId])), r = /* @__PURE__ */ new Map();
 	for (let e of t) {
 		let t = n.get(e.sourceNodeId), i = n.get(e.targetNodeId);
@@ -10993,64 +10993,64 @@ function fc(e, t) {
 	}
 	return r;
 }
-function pc(e, t) {
+function mc(e, t) {
 	return t.type === "solarSystem" ? e.hierarchy.solarSystems.some((e) => e.id === t.id) ? t.id : null : t.type === "planetarySystem" ? e.hierarchy.planetarySystems.find((e) => e.id === t.id)?.solarSystemId ?? null : t.type === "node" ? e.nodes.find((e) => e.id === t.id)?.solarSystemId ?? null : null;
 }
-function mc(e, t, n, r) {
-	if (t <= 1) return wc();
+function hc(e, t, n, r) {
+	if (t <= 1) return Tc();
 	if (t === 2) {
 		let t = e === 0 ? -1 : 1;
 		return {
-			x: $(t * 78),
-			y: $(_c(`${n}:${r}:galaxy-depth`) * 18),
-			z: $(t * -42)
+			x: $(t * 132),
+			y: $(vc(`${n}:${r}:galaxy-depth`) * 26),
+			z: $(t * -74)
 		};
 	}
 	if (t === 3) return [
 		{
-			x: -34,
-			y: 8,
-			z: -8
+			x: -72,
+			y: 10,
+			z: -20
 		},
 		{
-			x: 108,
-			y: -6,
-			z: -58
+			x: 170,
+			y: -8,
+			z: -92
 		},
 		{
-			x: 46,
-			y: -18,
-			z: 112
+			x: 74,
+			y: -26,
+			z: 180
 		}
-	][e] ?? wc();
-	let i = gc(`${n}:galaxy-atlas`) * Math.PI * 2, a = Math.floor(e / 8), o = a === 0 ? 0 : 8 + (a - 1) * 12, s = a === 0 ? Math.min(t, 8) : 12, c = e - o, l = Math.min(s, t - o), u = 132 + a * 92 + Math.min(16, t * 2), d = i + c / Math.max(1, l) * Math.PI * 2, f = _c(`${n}:${r}:galaxy-depth`) * 34;
+	][e] ?? Tc();
+	let i = _c(`${n}:galaxy-atlas`) * Math.PI * 2, a = Math.floor(e / 8), o = a === 0 ? 0 : 8 + (a - 1) * 12, s = a === 0 ? Math.min(t, 8) : 12, c = e - o, l = Math.min(s, t - o), u = 240 + a * 150 + Math.min(28, t * 3), d = i + c / Math.max(1, l) * Math.PI * 2, f = vc(`${n}:${r}:galaxy-depth`) * 42;
 	return {
 		x: $(Math.cos(d) * u),
 		y: $(f),
-		z: $(Math.sin(d) * u * .9)
+		z: $(Math.sin(d) * u * .92)
 	};
 }
-function hc(e, t, n, r, i, a) {
-	let o = gc(`${r}:${i}:orbit`) * Math.PI * 2, s = Math.min(4, Math.max(1, Math.ceil(Math.sqrt(Math.max(1, t))))), c = e % s, l = s === 1 ? .5 : c / (s - 1), u = n * (a.inner + (a.outer - a.inner) * l), d = o + e * Math.PI * (3 - Math.sqrt(5)), f = Math.sin(d * 1.7 + o) * n * a.vertical, p = yc(.28 + gc(`${r}:${i}:inclination`) * .54 + (l - .5) * .26 + a.tilt, .18, 1.08), m = gc(`${r}:${i}:ascending-node`) * Math.PI * 2 + c * .47, h = xc(bc({
-		x: Math.cos(d) * u,
-		y: f,
-		z: Math.sin(d) * u * (.88 + l * .12)
-	}, p), m);
+function gc(e, t, n, r, i, a) {
+	let o = _c(`${r}:${i}:orbit`) * Math.PI * 2, s = Math.max(1, t), c = Math.min(s, Math.min(ic, Math.max(1, s <= 2 ? s : Math.ceil(Math.sqrt(s) * 1.35)))), l = e % c, u = c === 1 ? .5 : l / (c - 1), d = n * (a.inner + (a.outer - a.inner) * u), f = Math.floor(e / c), p = Math.ceil(s / c), m = o + l * (Math.PI * 2 / Math.max(1, c)) * .72 + f / Math.max(1, p) * Math.PI * 2, h = Math.sin(m * 1.7 + o) * n * a.vertical, g = bc(.28 + _c(`${r}:${i}:inclination`) * .54 + a.tilt + (u - .5) * .04, .18, 1.08), _ = _c(`${r}:${i}:ascending-node`) * Math.PI * 2, v = Sc(xc({
+		x: Math.cos(m) * d,
+		y: h,
+		z: Math.sin(m) * d * (.88 + u * .12)
+	}, g), _);
 	return {
-		x: $(h.x),
-		y: $(h.y),
-		z: $(h.z)
+		x: $(v.x),
+		y: $(v.y),
+		z: $(v.z)
 	};
 }
-function gc(e) {
+function _c(e) {
 	let t = 2166136261;
 	for (let n = 0; n < e.length; n += 1) t ^= e.charCodeAt(n), t = Math.imul(t, 16777619);
 	return (t >>> 0) / 4294967295;
 }
-function _c(e) {
-	return gc(e) * 2 - 1;
+function vc(e) {
+	return _c(e) * 2 - 1;
 }
-function vc(e, t) {
+function yc(e, t) {
 	return {
 		x: $(e.x + t.x),
 		y: $(e.y + t.y),
@@ -11060,10 +11060,10 @@ function vc(e, t) {
 function $(e) {
 	return Number(e.toFixed(5));
 }
-function yc(e, t, n) {
+function bc(e, t, n) {
 	return Math.min(n, Math.max(t, e));
 }
-function bc(e, t) {
+function xc(e, t) {
 	let n = Math.cos(t), r = Math.sin(t);
 	return {
 		x: e.x,
@@ -11071,7 +11071,7 @@ function bc(e, t) {
 		z: e.y * r + e.z * n
 	};
 }
-function xc(e, t) {
+function Sc(e, t) {
 	let n = Math.cos(t), r = Math.sin(t);
 	return {
 		x: e.x * n - e.z * r,
@@ -11079,7 +11079,7 @@ function xc(e, t) {
 		z: e.x * r + e.z * n
 	};
 }
-function Sc(e, t) {
+function Cc(e, t) {
 	let n = /* @__PURE__ */ new Map();
 	for (let r of e) {
 		let e = t(r), i = n.get(e) ?? [];
@@ -11087,11 +11087,11 @@ function Sc(e, t) {
 	}
 	return n;
 }
-function Cc(e, t) {
+function wc(e, t) {
 	if (!e) throw Error(t);
 	return e;
 }
-function wc() {
+function Tc() {
 	return {
 		x: 0,
 		y: 0,
@@ -11100,27 +11100,27 @@ function wc() {
 }
 //#endregion
 //#region src/lib/motion.ts
-function Tc(e, t, n, r = .35) {
+function Ec(e, t, n, r = .35) {
 	return t === "none" ? e : t === "orbit" || t === "cometTail" ? {
-		x: Ec(e.x + Math.cos(n) * r),
-		y: Ec(e.y + Math.sin(n * .7) * r * .35),
-		z: Ec(e.z + Math.sin(n) * r)
+		x: Dc(e.x + Math.cos(n) * r),
+		y: Dc(e.y + Math.sin(n * .7) * r * .35),
+		z: Dc(e.z + Math.sin(n) * r)
 	} : t === "drift" ? {
-		x: Ec(e.x + Math.sin(n * .5) * r * .45),
-		y: Ec(e.y + Math.cos(n * .4) * r * .35),
-		z: Ec(e.z + Math.sin(n * .3) * r * .3)
+		x: Dc(e.x + Math.sin(n * .5) * r * .45),
+		y: Dc(e.y + Math.cos(n * .4) * r * .35),
+		z: Dc(e.z + Math.sin(n * .3) * r * .3)
 	} : {
 		x: e.x,
-		y: Ec(e.y + Math.sin(n * 1.6) * r * .25),
+		y: Dc(e.y + Math.sin(n * 1.6) * r * .25),
 		z: e.z
 	};
 }
-function Ec(e) {
+function Dc(e) {
 	return Number(e.toFixed(5));
 }
 //#endregion
 //#region src/lib/navigation.ts
-function Dc(e, t) {
+function Oc(e, t) {
 	if (t.type === "universe") return {
 		id: "universe",
 		type: "universe",
@@ -11130,25 +11130,25 @@ function Dc(e, t) {
 		childCount: e.hierarchy.galaxies.length,
 		relationshipCount: e.edges.length
 	};
-	let n = Oc(e, t), r = n.at(-1)?.label ?? t.id;
+	let n = kc(e, t), r = n.at(-1)?.label ?? t.id;
 	return {
 		id: t.id,
 		type: t.type,
 		label: r,
 		hierarchyPath: n.map((e) => e.label).filter((e) => e !== "Universe"),
-		importance: Mc(e, t),
-		childCount: Nc(e, t),
-		relationshipCount: Pc(e, t)
+		importance: Nc(e, t),
+		childCount: Pc(e, t),
+		relationshipCount: Fc(e, t)
 	};
 }
-function Oc(e, t) {
+function kc(e, t) {
 	let n = {
 		type: "universe",
 		label: "Universe"
 	};
 	if (t.type === "universe") return [n];
 	if (t.type === "galaxy") {
-		let r = Fc(e, t.id);
+		let r = Ic(e, t.id);
 		return [n, {
 			type: "galaxy",
 			id: r.id,
@@ -11156,7 +11156,7 @@ function Oc(e, t) {
 		}];
 	}
 	if (t.type === "solarSystem") {
-		let r = Ic(e, t.id), i = Fc(e, r.galaxyId);
+		let r = Lc(e, t.id), i = Ic(e, r.galaxyId);
 		return [
 			n,
 			{
@@ -11172,7 +11172,7 @@ function Oc(e, t) {
 		];
 	}
 	if (t.type === "planetarySystem") {
-		let r = Lc(e, t.id), i = Fc(e, r.galaxyId), a = Ic(e, r.solarSystemId);
+		let r = Rc(e, t.id), i = Ic(e, r.galaxyId), a = Lc(e, r.solarSystemId);
 		return [
 			n,
 			{
@@ -11194,7 +11194,7 @@ function Oc(e, t) {
 	}
 	let r = e.nodes.find((e) => e.id === t.id);
 	if (!r) throw Error(`Node ${t.id} does not exist.`);
-	return [...Oc(e, {
+	return [...kc(e, {
 		type: "planetarySystem",
 		id: r.planetarySystemId
 	}), {
@@ -11203,27 +11203,27 @@ function Oc(e, t) {
 		label: r.label
 	}];
 }
-function kc(e, t) {
+function Ac(e, t) {
 	let n = t.trim().toLowerCase();
-	return n ? jc(e).filter((t) => {
-		let r = Dc(e, t);
+	return n ? Mc(e).filter((t) => {
+		let r = Oc(e, t);
 		return [
 			r.label,
 			r.type,
 			r.hierarchyPath.join(" / ")
 		].join(" ").toLowerCase().includes(n);
-	}).map((t) => Dc(e, t)).sort((e, t) => !e.label.toLowerCase().startsWith(n) - +!t.label.toLowerCase().startsWith(n) || e.hierarchyPath.length - t.hierarchyPath.length) : [];
+	}).map((t) => Oc(e, t)).sort((e, t) => !e.label.toLowerCase().startsWith(n) - +!t.label.toLowerCase().startsWith(n) || e.hierarchyPath.length - t.hierarchyPath.length) : [];
 }
-function Ac(e, t) {
+function jc(e, t) {
 	if (t.type === "universe") return t;
 	if (t.type === "galaxy") return { type: "universe" };
 	if (t.type === "solarSystem") return {
 		type: "galaxy",
-		id: Ic(e, t.id).galaxyId
+		id: Lc(e, t.id).galaxyId
 	};
 	if (t.type === "planetarySystem") return {
 		type: "solarSystem",
-		id: Lc(e, t.id).solarSystemId
+		id: Rc(e, t.id).solarSystemId
 	};
 	let n = e.nodes.find((e) => e.id === t.id);
 	return n ? {
@@ -11231,7 +11231,7 @@ function Ac(e, t) {
 		id: n.planetarySystemId
 	} : { type: "universe" };
 }
-function jc(e) {
+function Mc(e) {
 	return [
 		...e.hierarchy.galaxies.map((e) => ({
 			type: "galaxy",
@@ -11251,39 +11251,39 @@ function jc(e) {
 		}))
 	];
 }
-function Mc(e, t) {
+function Nc(e, t) {
 	if (t.type === "node") return e.nodes.find((e) => e.id === t.id)?.importance ?? null;
 	let n = e.nodes.filter((e) => t.type === "galaxy" ? e.galaxyId === t.id : t.type === "solarSystem" ? e.solarSystemId === t.id : t.type === "planetarySystem" ? e.planetarySystemId === t.id : !1);
 	if (n.length === 0) return null;
 	let r = n.reduce((e, t) => e + t.importance, 0) / n.length;
 	return Number(r.toFixed(2));
 }
-function Nc(e, t) {
+function Pc(e, t) {
 	return t.type === "universe" ? e.hierarchy.galaxies.length : t.type === "galaxy" ? e.hierarchy.solarSystems.filter((e) => e.galaxyId === t.id).length : t.type === "solarSystem" ? e.hierarchy.planetarySystems.filter((e) => e.solarSystemId === t.id).length : t.type === "planetarySystem" ? e.nodes.filter((e) => e.planetarySystemId === t.id).length : 0;
 }
-function Pc(e, t) {
+function Fc(e, t) {
 	if (t.type === "node") return e.edges.filter((e) => e.sourceNodeId === t.id || e.targetNodeId === t.id).length;
 	let n = new Set(e.nodes.filter((e) => t.type === "universe" ? !0 : t.type === "galaxy" ? e.galaxyId === t.id : t.type === "solarSystem" ? e.solarSystemId === t.id : t.type === "planetarySystem" ? e.planetarySystemId === t.id : !1).map((e) => e.id));
 	return e.edges.filter((e) => n.has(e.sourceNodeId) || n.has(e.targetNodeId)).length;
 }
-function Fc(e, t) {
+function Ic(e, t) {
 	let n = e.hierarchy.galaxies.find((e) => e.id === t);
 	if (!n) throw Error(`Galaxy ${t} does not exist.`);
 	return n;
 }
-function Ic(e, t) {
+function Lc(e, t) {
 	let n = e.hierarchy.solarSystems.find((e) => e.id === t);
 	if (!n) throw Error(`Solar System ${t} does not exist.`);
 	return n;
 }
-function Lc(e, t) {
+function Rc(e, t) {
 	let n = e.hierarchy.planetarySystems.find((e) => e.id === t);
 	if (!n) throw Error(`Planetary System ${t} does not exist.`);
 	return n;
 }
 //#endregion
 //#region src/lib/state.ts
-var Rc = class {
+var zc = class {
 	graph;
 	mode;
 	focusTarget;
@@ -11294,7 +11294,7 @@ var Rc = class {
 		this.graph = e, this.mode = t, this.focusTarget = n;
 	}
 	updateGraph(e) {
-		this.graph = e, this.selectedNodeId && !this.graph.nodes.some((e) => e.id === this.selectedNodeId) && (this.selectedNodeId = null), this.selectedTarget && !zc(this.selectedTarget, e) && (this.selectedTarget = null), this.hoveredTarget && !zc(this.hoveredTarget, e) && (this.hoveredTarget = null), zc(this.focusTarget, e) || (this.focusTarget = { type: "universe" });
+		this.graph = e, this.selectedNodeId && !this.graph.nodes.some((e) => e.id === this.selectedNodeId) && (this.selectedNodeId = null), this.selectedTarget && !Bc(this.selectedTarget, e) && (this.selectedTarget = null), this.hoveredTarget && !Bc(this.hoveredTarget, e) && (this.hoveredTarget = null), Bc(this.focusTarget, e) || (this.focusTarget = { type: "universe" });
 	}
 	setMode(e) {
 		this.mode = e;
@@ -11303,14 +11303,14 @@ var Rc = class {
 		return this.mode;
 	}
 	setFocusTarget(e) {
-		if (!zc(e, this.graph)) throw Error(`Focus target does not exist: ${JSON.stringify(e)}`);
+		if (!Bc(e, this.graph)) throw Error(`Focus target does not exist: ${JSON.stringify(e)}`);
 		this.focusTarget = e;
 	}
 	getFocusTarget() {
 		return this.focusTarget;
 	}
 	setHoveredTarget(e) {
-		if (e && !zc(e, this.graph)) throw Error(`Hover target does not exist: ${JSON.stringify(e)}`);
+		if (e && !Bc(e, this.graph)) throw Error(`Hover target does not exist: ${JSON.stringify(e)}`);
 		this.hoveredTarget = e;
 	}
 	getHoveredTarget() {
@@ -11318,7 +11318,7 @@ var Rc = class {
 	}
 	selectTarget(e) {
 		if (e === null) return this.selectedTarget = null, this.selectedNodeId = null, null;
-		if (!zc(e, this.graph)) throw Error(`Selection target does not exist: ${JSON.stringify(e)}`);
+		if (!Bc(e, this.graph)) throw Error(`Selection target does not exist: ${JSON.stringify(e)}`);
 		return this.selectedTarget = e, this.selectedNodeId = e.type === "node" ? e.id : null, this.getSelectedNode();
 	}
 	getSelectedTarget() {
@@ -11337,12 +11337,12 @@ var Rc = class {
 		return this.selectedNodeId ? this.graph.nodes.find((e) => e.id === this.selectedNodeId) ?? null : null;
 	}
 };
-function zc(e, t) {
+function Bc(e, t) {
 	return e.type === "universe" ? !0 : e.type === "galaxy" ? t.hierarchy.galaxies.some((t) => t.id === e.id) : e.type === "solarSystem" ? t.hierarchy.solarSystems.some((t) => t.id === e.id) : e.type === "planetarySystem" ? t.hierarchy.planetarySystems.some((t) => t.id === e.id) : t.nodes.some((t) => t.id === e.id);
 }
 //#endregion
 //#region src/lib/viewer.ts
-var Bc = class {
+var Vc = 30, Hc = 10, Uc = class {
 	params;
 	graph;
 	layout;
@@ -11371,7 +11371,7 @@ var Bc = class {
 	spaceshipYaw = 0;
 	spaceshipPitch = 0;
 	constructor(e) {
-		this.params = e, this.graph = Xs(e.graph ?? Us), this.layout = ic(this.graph), this.state = new Rc(this.graph, e.options?.initialMode, e.options?.initialFocus), this.renderer = Hc(), this.renderer.domElement.className = "memory-universe-canvas", this.renderer.domElement.setAttribute("aria-label", "Memory Universe 3D canvas"), this.labelLayer.className = "memory-universe-spatial-label-layer", this.params.container.classList.add("memory-universe-viewer-root"), this.params.container.append(this.renderer.domElement), this.params.container.append(this.labelLayer), this.scene.background = new q("#050713"), this.camera.position.set(0, 38, 145), this.camera.lookAt(0, 0, 0), this.buildScene(), this.buildSpatialLabels(), this.bindEvents(), this.resize(), this.frameObservatoryTarget(this.state.getFocusTarget(), !1), this.focusCameraOn(this.state.getFocusTarget()), this.animate(), "ResizeObserver" in window && (this.resizeObserver = new ResizeObserver(() => this.resize()), this.resizeObserver.observe(this.params.container));
+		this.params = e, this.graph = Xs(e.graph ?? Us), this.layout = ac(this.graph), this.state = new zc(this.graph, e.options?.initialMode, e.options?.initialFocus), this.renderer = Gc(), this.renderer.domElement.className = "memory-universe-canvas", this.renderer.domElement.setAttribute("aria-label", "Memory Universe 3D canvas"), this.labelLayer.className = "memory-universe-spatial-label-layer", this.params.container.classList.add("memory-universe-viewer-root"), this.params.container.append(this.renderer.domElement), this.params.container.append(this.labelLayer), this.scene.background = new q("#050713"), this.camera.position.set(0, 38, 145), this.camera.lookAt(0, 0, 0), this.buildScene(), this.buildSpatialLabels(), this.bindEvents(), this.resize(), this.frameObservatoryTarget(this.state.getFocusTarget(), !1), this.focusCameraOn(this.state.getFocusTarget()), this.animate(), "ResizeObserver" in window && (this.resizeObserver = new ResizeObserver(() => this.resize()), this.resizeObserver.observe(this.params.container));
 	}
 	destroy() {
 		this.destroyed = !0, this.animationFrame !== null && cancelAnimationFrame(this.animationFrame), this.resizeObserver?.disconnect(), this.renderer.domElement.removeEventListener("click", this.handleClick), this.renderer.domElement.removeEventListener("pointerdown", this.handlePointerDown), this.renderer.domElement.removeEventListener("pointermove", this.handlePointerMove), this.renderer.domElement.removeEventListener("pointerup", this.handlePointerUp), this.renderer.domElement.removeEventListener("pointercancel", this.handlePointerUp), this.renderer.domElement.removeEventListener("wheel", this.handleWheel), window.removeEventListener("keydown", this.handleKeyDown), this.scene.traverse((e) => {
@@ -11382,7 +11382,7 @@ var Bc = class {
 		}), this.renderer.dispose(), this.labelLayer.remove(), this.renderer.domElement.remove();
 	}
 	updateGraph(e) {
-		this.graph = Xs(e), this.layout = ic(this.graph), this.state.updateGraph(this.graph), this.buildScene(), this.buildSpatialLabels(), this.frameObservatoryTarget(this.state.getFocusTarget()), this.focusCameraOn(this.state.getFocusTarget()), this.notifyStateChange();
+		this.graph = Xs(e), this.layout = ac(this.graph), this.state.updateGraph(this.graph), this.buildScene(), this.buildSpatialLabels(), this.frameObservatoryTarget(this.state.getFocusTarget()), this.focusCameraOn(this.state.getFocusTarget()), this.notifyStateChange();
 	}
 	dispatchIntent(e) {
 		$s(this, e);
@@ -11403,10 +11403,10 @@ var Bc = class {
 		return this.state.getFocusTarget();
 	}
 	returnToParentFocus() {
-		this.setFocusTarget(Ac(this.graph, this.state.getFocusTarget()));
+		this.setFocusTarget(jc(this.graph, this.state.getFocusTarget()));
 	}
 	setHoveredTarget(e) {
-		pl(this.state.getHoveredTarget(), e) || (this.state.setHoveredTarget(e), this.notifyStateChange());
+		gl(this.state.getHoveredTarget(), e) || (this.state.setHoveredTarget(e), this.notifyStateChange());
 	}
 	getHoveredTarget() {
 		return this.state.getHoveredTarget();
@@ -11423,13 +11423,13 @@ var Bc = class {
 		return e ? this.getObjectSummary(e) : null;
 	}
 	getObjectSummary(e) {
-		return Dc(this.graph, e);
+		return Oc(this.graph, e);
 	}
 	getHierarchyBreadcrumb() {
-		return Oc(this.graph, this.state.getFocusTarget());
+		return kc(this.graph, this.state.getFocusTarget());
 	}
 	searchTargets(e) {
-		return kc(this.graph, e);
+		return Ac(this.graph, e);
 	}
 	selectNode(e) {
 		this.selectTarget(e ? {
@@ -11463,14 +11463,14 @@ var Bc = class {
 	getCameraSnapshot() {
 		return {
 			position: {
-				x: dl(this.camera.position.x),
-				y: dl(this.camera.position.y),
-				z: dl(this.camera.position.z)
+				x: ml(this.camera.position.x),
+				y: ml(this.camera.position.y),
+				z: ml(this.camera.position.z)
 			},
 			rotation: {
-				x: dl(this.camera.rotation.x),
-				y: dl(this.camera.rotation.y),
-				z: dl(this.camera.rotation.z)
+				x: ml(this.camera.rotation.x),
+				y: ml(this.camera.rotation.y),
+				z: ml(this.camera.rotation.z)
 			}
 		};
 	}
@@ -11482,7 +11482,7 @@ var Bc = class {
 		this.camera.position.addScaledVector(r, e * 1.8), this.camera.position.addScaledVector(i, t * 1.8), this.camera.position.y += n * 1.4;
 	}
 	inspectObservatory(e, t, n) {
-		this.state.getMode() === "observatory" && (this.observatoryYaw += e * .03, this.observatoryPitch = z.clamp(this.observatoryPitch + t * .02, -.9, .9), this.observatoryDistance = z.clamp(this.observatoryDistance - n * 6, 32, 240), this.focusCameraOn(this.state.getFocusTarget()));
+		this.state.getMode() === "observatory" && (this.observatoryYaw += e * .03, this.observatoryPitch = z.clamp(this.observatoryPitch + t * .02, -.9, .9), this.observatoryDistance = z.clamp(this.observatoryDistance - n * 6, 32, 320), this.focusCameraOn(this.state.getFocusTarget()));
 	}
 	panObservatory(e, t) {
 		if (this.state.getMode() !== "observatory") return;
@@ -11497,9 +11497,9 @@ var Bc = class {
 		let e = new xs("#b6c6ff", .42);
 		this.scene.add(e);
 		let t = new bs("#ffffff", 2.2);
-		t.position.set(34, 60, 24), this.scene.add(t), this.scene.add(nl(this.graph.seed));
-		for (let e of this.layout.galaxies.values()) this.scene.add(el(e));
-		for (let e of this.layout.solarSystems.values()) this.scene.add(tl(e.position, e.radius, "#76b9df", .32));
+		t.position.set(34, 60, 24), this.scene.add(t), this.scene.add(al(this.graph.seed));
+		for (let e of this.layout.galaxies.values()) this.scene.add(rl(e));
+		for (let e of this.layout.solarSystems.values()) this.scene.add(il(e.position, e.radius, "#76b9df", .32));
 		this.buildRepresentativeNodesAndDust(), this.updateSelectionVisuals();
 	}
 	buildSpatialLabels() {
@@ -11522,21 +11522,21 @@ var Bc = class {
 		});
 	}
 	updateSpatialLabels() {
-		let e = ul(this.renderer.domElement, "width", 960), t = ul(this.renderer.domElement, "height", 640), n = this.camera.position;
+		let e = pl(this.renderer.domElement, "width", 960), t = pl(this.renderer.domElement, "height", 640), n = this.camera.position;
 		for (let r of this.spatialLabels.values()) {
 			let i = new K(r.position.x, r.position.y, r.position.z), a = i.clone().project(this.camera), o = (a.x * .5 + .5) * e, s = (-a.y * .5 + .5) * t, c = n.distanceTo(i), l = z.clamp(1.16 - c / 260, .58, 1.08), u = o > 12 && o < e - 12 && s > 12 && s < t - 76, d = a.z < 1 && a.z > -1 && u;
-			r.element.style.transform = `translate3d(${dl(o)}px, ${dl(s)}px, 0) translate(-50%, -50%) scale(${dl(l)})`, r.element.style.opacity = d ? String(dl(z.clamp(l, .38, .92))) : "0", r.element.dataset.distanceScale = String(dl(l));
+			r.element.style.transform = `translate3d(${ml(o)}px, ${ml(s)}px, 0) translate(-50%, -50%) scale(${ml(l)})`, r.element.style.opacity = d ? String(ml(z.clamp(l, .38, .92))) : "0", r.element.dataset.distanceScale = String(ml(l));
 		}
 	}
 	buildRepresentativeNodesAndDust() {
-		let e = oc(this.graph, this.layout, {
+		let e = sc(this.graph, this.layout, {
 			foregroundLimit: 4,
 			focusTarget: this.state.getFocusTarget(),
 			hoveredTarget: this.state.getHoveredTarget(),
 			selectedTarget: this.state.getSelectedTarget()
-		}), t = ol(this.graph.nodes, (e) => e.solarSystemId);
+		}), t = ll(this.graph.nodes, (e) => e.solarSystemId);
 		for (let [n, r] of t) {
-			let t = e.get(n), i = r.length <= 8 ? r.length : t?.visibility === "foreground" ? 3 : 1, a = new Set([...r].sort((e, t) => t.importance - e.importance || e.id.localeCompare(t.id)).slice(0, i).map((e) => e.id)), o = [];
+			let t = e.get(n), i = Math.min(r.length, t?.visibility === "foreground" ? Vc : Hc), a = new Set([...r].sort((e, t) => t.importance - e.importance || e.id.localeCompare(t.id)).slice(0, i).map((e) => e.id)), o = [];
 			for (let e of r) {
 				let t = this.layout.nodes.get(e.id);
 				if (!t) continue;
@@ -11544,7 +11544,7 @@ var Bc = class {
 					o.push(t.position);
 					continue;
 				}
-				let n = zs(e.category), { mesh: r, material: i, bodyRadius: s } = Gc(t.position, t.radius, n);
+				let n = zs(e.category), { mesh: r, material: i, bodyRadius: s } = Jc(t.position, t.radius, n);
 				r.userData.nodeId = e.id, r.userData.representativeNode = !0, this.scene.add(r), this.renderedNodes.set(e.id, {
 					node: e,
 					basePosition: t.position,
@@ -11554,7 +11554,7 @@ var Bc = class {
 					bodyRadius: s
 				});
 			}
-			let s = Kc(o);
+			let s = Yc(o);
 			s && (s.userData.solarSystemId = n, this.scene.add(s));
 		}
 	}
@@ -11694,7 +11694,7 @@ var Bc = class {
 		this.lastRenderTime = n;
 		let i = e ?? n / 1e3;
 		for (let e of this.renderedNodes.values()) {
-			let n = t ? Tc(e.basePosition, e.motionProfile, i, .42) : e.basePosition;
+			let n = t ? Ec(e.basePosition, e.motionProfile, i, .42) : e.basePosition;
 			e.mesh.position.set(n.x, n.y, n.z), e.mesh.rotation.y += e.motionProfile === "none" ? .002 : .01;
 		}
 		this.updateSpatialLabels(), this.renderer.render(this.scene, this.camera), this.animationFrame = requestAnimationFrame(this.animate);
@@ -11712,7 +11712,7 @@ var Bc = class {
 	frameObservatoryTarget(e, t = !0) {
 		t && this.observatoryPanOffset.set(0, 0, 0);
 		let n = this.resolveFocusRadius(e);
-		this.observatoryDistance = z.clamp(n * 1.55, 18, 190), this.observatoryHeightOffset = z.clamp(n * .62, 8, 62);
+		this.observatoryDistance = z.clamp(n * this.resolveObservatoryFrameMultiplier(e), 18, 280), this.observatoryHeightOffset = z.clamp(n * .58, 8, 76);
 	}
 	captureSpaceshipAngles() {
 		let e = new Tt().setFromQuaternion(this.camera.quaternion, "YXZ");
@@ -11722,7 +11722,7 @@ var Bc = class {
 		this.camera.rotation.order = "YXZ", this.camera.rotation.y = this.spaceshipYaw, this.camera.rotation.x = this.spaceshipPitch, this.camera.rotation.z = 0;
 	}
 	resolveFocusPosition(e) {
-		return e.type === "galaxy" ? this.layout.galaxies.get(e.id)?.position ?? al() : e.type === "solarSystem" ? this.layout.solarSystems.get(e.id)?.position ?? al() : e.type === "planetarySystem" ? this.layout.planetarySystems.get(e.id)?.position ?? al() : e.type === "node" ? this.layout.nodes.get(e.id)?.position ?? al() : this.resolveUniverseFrame().center;
+		return e.type === "galaxy" ? this.layout.galaxies.get(e.id)?.position ?? cl() : e.type === "solarSystem" ? this.layout.solarSystems.get(e.id)?.position ?? cl() : e.type === "planetarySystem" ? this.layout.planetarySystems.get(e.id)?.position ?? cl() : e.type === "node" ? this.layout.nodes.get(e.id)?.position ?? cl() : this.resolveUniverseFrame().center;
 	}
 	resolveFocusRadius(e) {
 		if (e.type === "galaxy") return this.layout.galaxies.get(e.id)?.radius ?? 52;
@@ -11741,7 +11741,7 @@ var Bc = class {
 			...this.layout.planetarySystems.values()
 		];
 		if (t.length === 0) return {
-			center: al(),
+			center: cl(),
 			radius: 72
 		};
 		let n = {
@@ -11755,17 +11755,20 @@ var Bc = class {
 		};
 		for (let e of t) n.x = Math.min(n.x, e.position.x - e.radius), n.y = Math.min(n.y, e.position.y - e.radius), n.z = Math.min(n.z, e.position.z - e.radius), r.x = Math.max(r.x, e.position.x + e.radius), r.y = Math.max(r.y, e.position.y + e.radius), r.z = Math.max(r.z, e.position.z + e.radius);
 		let i = {
-			x: dl((n.x + r.x) / 2),
-			y: dl((n.y + r.y) / 2),
-			z: dl((n.z + r.z) / 2)
+			x: ml((n.x + r.x) / 2),
+			y: ml((n.y + r.y) / 2),
+			z: ml((n.z + r.z) / 2)
 		};
 		return {
 			center: i,
-			radius: dl(Math.max(fl(i, n), fl(i, r), 48) * 1.08)
+			radius: ml(Math.max(hl(i, n), hl(i, r), 48) * 1.08)
 		};
 	}
 	resolveSpaceshipFocusMultiplier(e) {
 		return e.type === "galaxy" ? .78 : e.type === "solarSystem" ? 1.65 : e.type === "planetarySystem" ? 1.45 : 1.25;
+	}
+	resolveObservatoryFrameMultiplier(e) {
+		return e.type === "galaxy" ? 1.34 : e.type === "solarSystem" ? 1.42 : e.type === "planetarySystem" ? 1.46 : e.type === "node" ? 1.55 : 1.6;
 	}
 	updateSelectionVisuals() {
 		let e = this.state.getSelectedTarget();
@@ -11777,18 +11780,18 @@ var Bc = class {
 	resolveNodeIdFromPointer(e) {
 		let t = this.renderer.domElement.getBoundingClientRect();
 		this.pointer.x = (e.clientX - t.left) / t.width * 2 - 1, this.pointer.y = -((e.clientY - t.top) / t.height * 2 - 1), this.raycaster.setFromCamera(this.pointer, this.camera);
-		let n = Array.from(new Set(Array.from(this.renderedNodes.values()).map((e) => e.mesh))), r = this.raycaster.intersectObjects(n, !0).find((e) => il(e));
-		return r ? il(r) : null;
+		let n = Array.from(new Set(Array.from(this.renderedNodes.values()).map((e) => e.mesh))), r = this.raycaster.intersectObjects(n, !0).find((e) => sl(e));
+		return r ? sl(r) : null;
 	}
 	notifyStateChange() {
 		this.params.onStateChange?.(this.getState());
 	}
 };
-function Vc(e) {
-	return new Bc(e);
+function Wc(e) {
+	return new Uc(e);
 }
-function Hc() {
-	if (Uc()) return new Co({
+function Gc() {
+	if (Kc()) return new Co({
 		antialias: !0,
 		alpha: !1,
 		preserveDrawingBuffer: !0
@@ -11800,7 +11803,7 @@ function Hc() {
 			e.width = t, e.height = n, e.style.width = `${t}px`, e.style.height = `${n}px`;
 		},
 		render() {
-			if (Wc()) return;
+			if (qc()) return;
 			let t = null;
 			try {
 				t = e.getContext("2d");
@@ -11812,8 +11815,8 @@ function Hc() {
 		dispose() {}
 	};
 }
-function Uc() {
-	if (Wc()) return !1;
+function Kc() {
+	if (qc()) return !1;
 	let e = document.createElement("canvas");
 	try {
 		return !!(e.getContext("webgl2") ?? e.getContext("webgl"));
@@ -11821,14 +11824,14 @@ function Uc() {
 		return !1;
 	}
 }
-function Wc() {
+function qc() {
 	return typeof navigator < "u" && /jsdom/i.test(navigator.userAgent);
 }
-function Gc(e, t, n) {
+function Jc(e, t, n) {
 	let r = Math.max(t * n.radius, .62), i = new fo();
 	i.position.set(e.x, e.y, e.z);
-	let a = Jc(n.bodyType, r), o = qc(n), s = new Y(a, o);
-	if (n.bodyType === "asteroid" && (s.scale.set(1.25, .82, .96), s.rotation.set(.4, .15, -.35)), i.add(s), n.bodyType === "star" && i.add(Yc(r, n.accentColor, 1.9, .22)), n.bodyType === "planet" && i.add(Xc(r, n.accentColor)), n.bodyType === "ringedPlanet") {
+	let a = Zc(n.bodyType, r), o = Xc(n), s = new Y(a, o);
+	if (n.bodyType === "asteroid" && (s.scale.set(1.25, .82, .96), s.rotation.set(.4, .15, -.35)), i.add(s), n.bodyType === "star" && i.add(Qc(r, n.accentColor, 1.9, .22)), n.bodyType === "planet" && i.add($c(r, n.accentColor)), n.bodyType === "ringedPlanet") {
 		let e = new Y(new Jo(r * 1.25, r * 1.72, 36), new cn({
 			color: n.accentColor,
 			side: 2,
@@ -11843,7 +11846,7 @@ function Gc(e, t, n) {
 			emissive: n.accentColor,
 			emissiveIntensity: .42
 		}));
-		e.position.set(r * 1.35, r * .22, 0), i.add(e), i.add(Yc(r, n.accentColor, 2.15, .2));
+		e.position.set(r * 1.35, r * .22, 0), i.add(e), i.add(Qc(r, n.accentColor, 2.15, .2));
 	}
 	if (n.bodyType === "comet") {
 		let e = new Y(new Wo(r * .42, r * 3.6, 16), new cn({
@@ -11853,13 +11856,13 @@ function Gc(e, t, n) {
 		}));
 		e.rotation.z = Math.PI / 2, e.position.x = -r * 2.05, i.add(e);
 	}
-	return n.bodyType === "moon" && (i.add(Zc(r, n.accentColor, -.35, .26, .17)), i.add(Zc(r, n.accentColor, .26, -.14, .12))), n.bodyType === "nebula" && i.add(Qc(r, n.color, n.accentColor)), n.bodyType === "beacon" && i.add($c(r, n.accentColor)), {
+	return n.bodyType === "moon" && (i.add(el(r, n.accentColor, -.35, .26, .17)), i.add(el(r, n.accentColor, .26, -.14, .12))), n.bodyType === "nebula" && i.add(tl(r, n.color, n.accentColor)), n.bodyType === "beacon" && i.add(nl(r, n.accentColor)), {
 		mesh: i,
 		material: o,
 		bodyRadius: r
 	};
 }
-function Kc(e) {
+function Yc(e) {
 	if (e.length === 0) return null;
 	let t = new xn(), n = [];
 	for (let t of e) n.push(t.x, t.y, t.z);
@@ -11873,7 +11876,7 @@ function Kc(e) {
 	}));
 	return r.userData.galaxyAtmospherePart = "nodeDust", r.userData.pickable = !1, r;
 }
-function qc(e) {
+function Xc(e) {
 	return new Zo({
 		color: e.color,
 		roughness: e.bodyType === "asteroid" ? .88 : .42,
@@ -11884,10 +11887,10 @@ function qc(e) {
 		opacity: e.bodyType === "nebula" ? .44 : 1
 	});
 }
-function Jc(e, t) {
+function Zc(e, t) {
 	return e === "asteroid" ? new Ko(t, 1) : e === "beacon" ? new qo(t * 1.05, 0) : e === "nebula" ? new Yo(t * 1.18, 16, 10) : new Yo(t, 32, 16);
 }
-function Yc(e, t, n, r) {
+function Qc(e, t, n, r) {
 	return new Y(new Jo(e * n, e * (n + .18), 48), new cn({
 		color: t,
 		side: 2,
@@ -11896,7 +11899,7 @@ function Yc(e, t, n, r) {
 		depthWrite: !1
 	}));
 }
-function Xc(e, t) {
+function $c(e, t) {
 	let n = new Y(new Xo(e * .98, e * .045, 8, 42), new cn({
 		color: t,
 		transparent: !0,
@@ -11904,7 +11907,7 @@ function Xc(e, t) {
 	}));
 	return n.rotation.x = Math.PI / 2, n.rotation.z = -.34, n;
 }
-function Zc(e, t, n, r, i) {
+function el(e, t, n, r, i) {
 	let a = new Y(new Ho(e * i, 16), new cn({
 		color: t,
 		transparent: !0,
@@ -11913,7 +11916,7 @@ function Zc(e, t, n, r, i) {
 	}));
 	return a.position.set(e * n, e * r, e * .92), a;
 }
-function Qc(e, t, n) {
+function tl(e, t, n) {
 	let r = new fo();
 	for (let [i, a, o, s] of [
 		[
@@ -11951,7 +11954,7 @@ function Qc(e, t, n) {
 	}
 	return r;
 }
-function $c(e, t) {
+function nl(e, t) {
 	let n = new fo(), r = new Y(new Uo(e * .16, e * .28, e * 2.2, 8), new cn({
 		color: t,
 		transparent: !0,
@@ -11965,7 +11968,7 @@ function $c(e, t) {
 	}));
 	return i.rotation.x = Math.PI / 2.35, n.add(i), n;
 }
-function el(e) {
+function rl(e) {
 	let t = new fo();
 	t.userData.galaxyId = e.id, t.userData.galaxyAtmosphere = !0, t.position.set(e.position.x, e.position.y, e.position.z), t.rotation.x = e.morphology.inclinationRadians;
 	let n = new Y(new Ho(e.morphology.diskRadius, 128), new cn({
@@ -11994,7 +11997,7 @@ function el(e) {
 		let r = [];
 		for (let t = 0; t <= 96; t += 1) {
 			let i = t / 96, a = n.startRadius + (n.endRadius - n.startRadius) * i, o = n.phaseRadians + i * Math.PI * 2 * n.turns, s = 1 - i * .46;
-			r.push(new K(Math.cos(o) * a, (ll(e.id, n.index, t) - .5) * e.morphology.diskThickness * .12, Math.sin(o) * a * .72 * s));
+			r.push(new K(Math.cos(o) * a, (fl(e.id, n.index, t) - .5) * e.morphology.diskThickness * .12, Math.sin(o) * a * .72 * s));
 		}
 		let i = new No(new xn().setFromPoints(r), new To({
 			color: n.index === 0 ? "#b9e6ff" : "#7aa7ff",
@@ -12021,7 +12024,7 @@ function el(e) {
 	}));
 	return a.rotation.x = -Math.PI / 2, a.scale.z = .72, a.userData.galaxyAtmospherePart = "sparseEdge", t.add(a), t;
 }
-function tl(e, t, n, r) {
+function il(e, t, n, r) {
 	let i = [];
 	for (let e = 0; e <= 96; e += 1) {
 		let n = e / 96 * Math.PI * 2;
@@ -12035,14 +12038,14 @@ function tl(e, t, n, r) {
 	}));
 	return a.position.set(e.x, e.y, e.z), a;
 }
-function nl(e) {
-	let t = new xn(), n = [], r = sl(e);
+function al(e) {
+	let t = new xn(), n = [], r = ul(e);
 	for (let e = 0; e < 900; e += 1) {
-		r = cl(r);
+		r = dl(r);
 		let e = (r / 4294967295 - .5) * 560;
-		r = cl(r);
+		r = dl(r);
 		let t = (r / 4294967295 - .5) * 360;
-		r = cl(r);
+		r = dl(r);
 		let i = (r / 4294967295 - .5) * 560;
 		n.push(e, t, i);
 	}
@@ -12053,7 +12056,7 @@ function nl(e) {
 		opacity: .78
 	}));
 }
-function rl(e) {
+function ol(e) {
 	let t = e;
 	for (; t;) {
 		if (typeof t.userData.nodeId == "string") return t.userData.nodeId;
@@ -12061,17 +12064,17 @@ function rl(e) {
 	}
 	return null;
 }
-function il(e) {
-	return rl(e.object);
+function sl(e) {
+	return ol(e.object);
 }
-function al() {
+function cl() {
 	return {
 		x: 0,
 		y: 0,
 		z: 0
 	};
 }
-function ol(e, t) {
+function ll(e, t) {
 	let n = /* @__PURE__ */ new Map();
 	for (let r of e) {
 		let e = t(r), i = n.get(e) ?? [];
@@ -12079,18 +12082,18 @@ function ol(e, t) {
 	}
 	return n;
 }
-function sl(e) {
+function ul(e) {
 	let t = 2166136261;
 	for (let n = 0; n < e.length; n += 1) t ^= e.charCodeAt(n), t = Math.imul(t, 16777619);
 	return t >>> 0;
 }
-function cl(e) {
+function dl(e) {
 	return Math.imul(e, 1664525) + 1013904223 >>> 0;
 }
-function ll(e, t, n) {
-	return sl(`${e}:${t}:${n}`) / 4294967295;
+function fl(e, t, n) {
+	return ul(`${e}:${t}:${n}`) / 4294967295;
 }
-function ul(e, t, n) {
+function pl(e, t, n) {
 	let r = t === "width" ? e.clientWidth : e.clientHeight;
 	if (r > 0) return r;
 	let i = Number.parseFloat(t === "width" ? e.style.width : e.style.height);
@@ -12098,19 +12101,19 @@ function ul(e, t, n) {
 	let a = t === "width" ? e.width : e.height;
 	return a > 0 ? a : n;
 }
-function dl(e) {
+function ml(e) {
 	return Number(e.toFixed(5));
 }
-function fl(e, t) {
+function hl(e, t) {
 	let n = e.x - t.x, r = e.y - t.y, i = e.z - t.z;
 	return Math.sqrt(n * n + r * r + i * i);
 }
-function pl(e, t) {
+function gl(e, t) {
 	return !e || !t ? e === t : e.type === t.type ? e.type === "universe" || t.type === "universe" ? !0 : e.id === t.id : !1;
 }
 //#endregion
 //#region src/lib/adapters/totalAgentMemoryAdapter.ts
-var ml = /* @__PURE__ */ new Set([
+var _l = /* @__PURE__ */ new Set([
 	"rule",
 	"system_constraint",
 	"project",
@@ -12134,13 +12137,13 @@ var ml = /* @__PURE__ */ new Set([
 	"database",
 	"unknown"
 ]);
-function hl(e) {
-	let t = [], n = kl(e);
+function vl(e) {
+	let t = [], n = Ml(e);
 	n || t.push({
 		code: "malformed-production-payload",
 		message: "Total Agent Memory export payload must be an object."
 	});
-	let r = kl(n?.metadata) ?? {}, i = Cl(r.agent_galaxies), a = Array.isArray(n?.nodes) ? n.nodes : [], o = Array.isArray(n?.edges) ? n.edges : [];
+	let r = Ml(n?.metadata) ?? {}, i = El(r.agent_galaxies), a = Array.isArray(n?.nodes) ? n.nodes : [], o = Array.isArray(n?.edges) ? n.edges : [];
 	n && !Array.isArray(n.nodes) && t.push({
 		code: "malformed-production-payload",
 		message: "Total Agent Memory export payload is missing a nodes array.",
@@ -12148,7 +12151,7 @@ function hl(e) {
 	});
 	let s = /* @__PURE__ */ new Map(), c = /* @__PURE__ */ new Map(), l = /* @__PURE__ */ new Map(), u = [], d = /* @__PURE__ */ new Set();
 	for (let e of a) {
-		let n = kl(e);
+		let n = Ml(e);
 		if (!n) {
 			t.push({
 				code: "malformed-production-payload",
@@ -12156,7 +12159,7 @@ function hl(e) {
 			});
 			continue;
 		}
-		let a = Ol(n, [
+		let a = jl(n, [
 			"id",
 			"node_id",
 			"uuid",
@@ -12180,14 +12183,14 @@ function hl(e) {
 			continue;
 		}
 		d.add(a);
-		let o = bl(n, r, i, t, a);
+		let o = Cl(n, r, i, t, a);
 		s.set(o.galaxy.id, o.galaxy), c.set(o.solarSystem.id, o.solarSystem), l.set(o.planetarySystem.id, o.planetarySystem);
-		let f = Ol(n, [
+		let f = jl(n, [
 			"label",
 			"name",
 			"title"
 		]) ?? a;
-		f === a && !Ol(n, [
+		f === a && !jl(n, [
 			"label",
 			"name",
 			"title"
@@ -12201,7 +12204,7 @@ function hl(e) {
 			id: a,
 			label: f,
 			category: o.nodeType,
-			importance: xl(n, t, a),
+			importance: wl(n, t, a),
 			galaxyId: o.galaxy.id,
 			solarSystemId: o.solarSystem.id,
 			planetarySystemId: o.planetarySystem.id,
@@ -12212,7 +12215,7 @@ function hl(e) {
 				galaxyLayer: o.galaxyLayer,
 				nodeType: o.nodeType
 			}
-		}, m = Ol(n, [
+		}, m = jl(n, [
 			"createdAt",
 			"created_at",
 			"timestamp",
@@ -12220,7 +12223,7 @@ function hl(e) {
 			"updated_at"
 		]);
 		m && (p.createdAt = m);
-		let h = Ol(n, [
+		let h = jl(n, [
 			"summary",
 			"content",
 			"description",
@@ -12229,22 +12232,22 @@ function hl(e) {
 		h && (p.summary = h), u.push(p);
 	}
 	let f = o.flatMap((e, n) => {
-		let r = kl(e);
+		let r = Ml(e);
 		if (!r) return t.push({
 			code: "skipped-edge",
 			message: "Skipped an edge because it is not an object."
 		}), [];
-		let i = Ol(r, [
+		let i = jl(r, [
 			"sourceNodeId",
 			"source",
 			"from",
 			"source_id"
-		]), a = Ol(r, [
+		]), a = jl(r, [
 			"targetNodeId",
 			"target",
 			"to",
 			"target_id"
-		]), o = Ol(r, ["id", "edge_id"]) ?? Dl(i, a, n);
+		]), o = jl(r, ["id", "edge_id"]) ?? Al(i, a, n);
 		return !i || !a || !d.has(i) || !d.has(a) ? (t.push({
 			code: "skipped-edge",
 			message: `Skipped edge ${o} because one or both endpoints are missing.`,
@@ -12253,7 +12256,7 @@ function hl(e) {
 			id: o,
 			sourceNodeId: i,
 			targetNodeId: a,
-			relation: Ol(r, [
+			relation: jl(r, [
 				"relation",
 				"type",
 				"label"
@@ -12261,7 +12264,7 @@ function hl(e) {
 		}];
 	}), p = {
 		version: "memory-universe-graph/v1",
-		seed: Ol(n ?? {}, ["seed"]) ?? "total-agent-memory-export",
+		seed: jl(n ?? {}, ["seed"]) ?? "total-agent-memory-export",
 		hierarchy: {
 			galaxies: [...s.values()],
 			solarSystems: [...c.values()],
@@ -12276,12 +12279,12 @@ function hl(e) {
 		warnings: t
 	};
 }
-function gl(e) {
+function yl(e) {
 	try {
-		let t = hl(e);
+		let t = vl(e);
 		return Zs(t.graph), {
 			productSurface: "non-product-adapter-development-harness",
-			summary: wl(t.graph),
+			summary: Dl(t.graph),
 			warnings: t.warnings,
 			validation: { valid: !0 }
 		};
@@ -12303,15 +12306,15 @@ function gl(e) {
 		};
 	}
 }
-var _l = {
+var bl = {
 	metadata: { agent_galaxies: {
 		codex: "Codex",
 		reasonix: "Reasonix"
 	} },
 	nodes: [
-		Tl("small-rule", "Safety routing rule", "rule", "router", "codex", "rules", .92),
-		Tl("small-decision", "Adapter decision", "decision", "knowledge", "codex", "project", .83),
-		Tl("small-event", "Research event", "event", "event", "reasonix", "session", .62)
+		Ol("small-rule", "Safety routing rule", "rule", "router", "codex", "rules", .92),
+		Ol("small-decision", "Adapter decision", "decision", "knowledge", "codex", "project", .83),
+		Ol("small-event", "Research event", "event", "event", "reasonix", "session", .62)
 	],
 	edges: [
 		{
@@ -12333,57 +12336,57 @@ var _l = {
 			relation: "mentions"
 		}
 	]
-}, vl = El("medium", 18, 3), yl = El("large", 96, 6);
-function bl(e, t, n, r, i) {
-	let a = Ol(e, [
+}, xl = kl("medium", 18, 3), Sl = kl("large", 96, 6);
+function Cl(e, t, n, r, i) {
+	let a = jl(e, [
 		"agent_namespace",
 		"agentNamespace",
 		"namespace"
-	]) ?? Ol(t, [
+	]) ?? jl(t, [
 		"agent_namespace",
 		"agentNamespace",
 		"namespace"
-	]) ?? Sl(r, "missing-agent-namespace", i, "agent_namespace", "unknown-agent"), o = Ol(e, [
+	]) ?? Tl(r, "missing-agent-namespace", i, "agent_namespace", "unknown-agent"), o = jl(e, [
 		"memory_system",
 		"memorySystem",
 		"system",
 		"classification"
-	]) ?? Ol(kl(e.metadata) ?? {}, [
+	]) ?? jl(Ml(e.metadata) ?? {}, [
 		"memory_system",
 		"memorySystem",
 		"system",
 		"classification"
-	]) ?? Sl(r, "missing-memory-system", i, "memory_system", "unknown-system"), s = Ol(e, [
+	]) ?? Tl(r, "missing-memory-system", i, "memory_system", "unknown-system"), s = jl(e, [
 		"galaxy_layer",
 		"galaxyLayer",
 		"layer"
-	]) ?? Ol(kl(e.metadata) ?? {}, [
+	]) ?? jl(Ml(e.metadata) ?? {}, [
 		"galaxy_layer",
 		"galaxyLayer",
 		"layer"
-	]) ?? Sl(r, "missing-galaxy-layer", i, "galaxy_layer", "unknown-layer"), c = Ol(e, ["type", "category"]) ?? Ol(kl(e.metadata) ?? {}, ["type", "category"]) ?? Sl(r, "missing-node-type", i, "type", "unknown");
-	ml.has(c) || r.push({
+	]) ?? Tl(r, "missing-galaxy-layer", i, "galaxy_layer", "unknown-layer"), c = jl(e, ["type", "category"]) ?? jl(Ml(e.metadata) ?? {}, ["type", "category"]) ?? Tl(r, "missing-node-type", i, "type", "unknown");
+	_l.has(c) || r.push({
 		code: "unsupported-node-type",
 		message: `Node ${i} uses unsupported node type ${c}; preserving it as a string category.`,
 		nodeId: i,
 		field: "type"
 	});
-	let l = `agent:${Al(a)}`, u = `${l}:system:${Al(o)}`, d = `${u}:layer:${Al(s)}:type:${Al(c)}`;
+	let l = `agent:${Nl(a)}`, u = `${l}:system:${Nl(o)}`, d = `${u}:layer:${Nl(s)}:type:${Nl(c)}`;
 	return {
 		galaxy: {
 			id: l,
-			label: n.get(a) ?? jl(a)
+			label: n.get(a) ?? Pl(a)
 		},
 		solarSystem: {
 			id: u,
 			galaxyId: l,
-			label: jl(o)
+			label: Pl(o)
 		},
 		planetarySystem: {
 			id: d,
 			galaxyId: l,
 			solarSystemId: u,
-			label: `${jl(s)} / ${jl(c)}`
+			label: `${Pl(s)} / ${Pl(c)}`
 		},
 		agentNamespace: a,
 		memorySystem: o,
@@ -12391,7 +12394,7 @@ function bl(e, t, n, r, i) {
 		nodeType: c
 	};
 }
-function xl(e, t, n) {
+function wl(e, t, n) {
 	let r = e.importance ?? e.weight ?? e.score;
 	return r == null ? (t.push({
 		code: "missing-importance",
@@ -12405,7 +12408,7 @@ function xl(e, t, n) {
 		field: "importance"
 	}), .5) : Math.min(1, Math.max(0, r));
 }
-function Sl(e, t, n, r, i) {
+function Tl(e, t, n, r, i) {
 	return e.push({
 		code: t,
 		message: `Node ${n} is missing ${r}; using ${i}.`,
@@ -12413,30 +12416,30 @@ function Sl(e, t, n, r, i) {
 		field: r
 	}), i;
 }
-function Cl(e) {
+function El(e) {
 	let t = /* @__PURE__ */ new Map();
 	if (Array.isArray(e)) for (let n of e) {
-		let e = kl(n);
+		let e = Ml(n);
 		if (!e) continue;
-		let r = Ol(e, [
+		let r = jl(e, [
 			"agent_namespace",
 			"agentNamespace",
 			"namespace",
 			"id"
-		]), i = Ol(e, [
+		]), i = jl(e, [
 			"label",
 			"name",
 			"title"
 		]);
 		r && i && t.set(r, i);
 	}
-	let n = kl(e);
+	let n = Ml(e);
 	if (n) for (let [e, r] of Object.entries(n)) {
 		if (typeof r == "string") {
 			t.set(e, r);
 			continue;
 		}
-		let n = kl(r), i = n ? Ol(n, [
+		let n = Ml(r), i = n ? jl(n, [
 			"label",
 			"name",
 			"title"
@@ -12445,7 +12448,7 @@ function Cl(e) {
 	}
 	return t;
 }
-function wl(e) {
+function Dl(e) {
 	return {
 		nodes: e.nodes.length,
 		edges: e.edges.length,
@@ -12454,7 +12457,7 @@ function wl(e) {
 		planetarySystems: e.hierarchy.planetarySystems.length
 	};
 }
-function Tl(e, t, n, r, i, a, o) {
+function Ol(e, t, n, r, i, a, o) {
 	return {
 		id: e,
 		label: t,
@@ -12467,7 +12470,7 @@ function Tl(e, t, n, r, i, a, o) {
 		created_at: "2026-07-03T00:00:00.000Z"
 	};
 }
-function El(e, t, n) {
+function kl(e, t, n) {
 	let r = Array.from({ length: n }, (t, n) => `${e}-agent-${n + 1}`), i = [
 		"router",
 		"knowledge",
@@ -12487,40 +12490,40 @@ function El(e, t, n) {
 		"event",
 		"project",
 		"context"
-	], s = Array.from({ length: t }, (t, n) => Tl(`${e}-node-${String(n + 1).padStart(3, "0")}`, `${jl(e)} memory ${n + 1}`, o[n % o.length], i[n % i.length], r[n % r.length], a[n % a.length], n % 9 == 0 ? void 0 : Number((.35 + n * 13 % 60 / 100).toFixed(2)))), c = s.slice(1).map((t, n) => ({
+	], s = Array.from({ length: t }, (t, n) => Ol(`${e}-node-${String(n + 1).padStart(3, "0")}`, `${Pl(e)} memory ${n + 1}`, o[n % o.length], i[n % i.length], r[n % r.length], a[n % a.length], n % 9 == 0 ? void 0 : Number((.35 + n * 13 % 60 / 100).toFixed(2)))), c = s.slice(1).map((t, n) => ({
 		id: `${e}-edge-${String(n + 1).padStart(3, "0")}`,
 		source: String(s[n].id),
 		target: String(t.id),
 		relation: n % 3 == 0 ? "supports" : "relates-to"
 	}));
 	return {
-		metadata: { agent_galaxies: Object.fromEntries(r.map((e) => [e, jl(e)])) },
+		metadata: { agent_galaxies: Object.fromEntries(r.map((e) => [e, Pl(e)])) },
 		nodes: s,
 		edges: c
 	};
 }
-function Dl(e, t, n) {
+function Al(e, t, n) {
 	return e && t ? `edge:${e}->${t}` : `edge:skipped:${n + 1}`;
 }
-function Ol(e, t) {
+function jl(e, t) {
 	for (let n of t) {
 		let t = e[n];
 		if (typeof t == "string" && t.trim()) return t.trim();
 	}
 	return null;
 }
-function kl(e) {
+function Ml(e) {
 	return !e || typeof e != "object" || Array.isArray(e) ? null : e;
 }
-function Al(e) {
+function Nl(e) {
 	return e.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
 }
-function jl(e) {
+function Pl(e) {
 	return e.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().replace(/\b\w/g, (e) => e.toUpperCase()) || "Unknown";
 }
 //#endregion
 //#region src/lib/coexistingViewerHost.ts
-var Ml = class {
+var Fl = class {
 	options;
 	viewerFactory;
 	isWebGLSupported;
@@ -12553,7 +12556,7 @@ var Ml = class {
 		error: null
 	};
 	constructor(e) {
-		this.options = e, this.viewerFactory = e.viewerFactory ?? Vc, this.isWebGLSupported = e.isWebGLSupported ?? Pl, this.enable3D = e.enable3D ?? !0, this.productionGraph = e.productionGraph, this.memoryUniverseGraph = Hl(), this.options.twoDStage.dataset.view = "2d-galaxy", this.options.threeDStage.dataset.view = "3d-universe", this.options.threeDStage.classList.add("memory-universe-3d-stage"), this.convertAndStoreGraph(), this.renderInspector(), this.render2DStage(), this.syncStages();
+		this.options = e, this.viewerFactory = e.viewerFactory ?? Wc, this.isWebGLSupported = e.isWebGLSupported ?? Ll, this.enable3D = e.enable3D ?? !0, this.productionGraph = e.productionGraph, this.memoryUniverseGraph = Gl(), this.options.twoDStage.dataset.view = "2d-galaxy", this.options.threeDStage.dataset.view = "3d-universe", this.options.threeDStage.classList.add("memory-universe-3d-stage"), this.convertAndStoreGraph(), this.renderInspector(), this.render2DStage(), this.syncStages();
 	}
 	renderBottomViewSwitcher(e) {
 		this.switcherContainer = e, e.setAttribute("aria-label", "Bottom View Switcher"), e.classList.add("bottom-view-switcher"), this.renderSwitcher();
@@ -12639,7 +12642,7 @@ var Ml = class {
 				}
 			}), this.threeD.status = "mounted", this.threeD.unavailableReason = null, this.shared.selectedNodeId && this.viewer.selectNode(this.shared.selectedNodeId), !0;
 		} catch (e) {
-			return this.viewer = null, this.set3DUnavailable(`3D Universe unavailable: ${Vl(e)}`), !1;
+			return this.viewer = null, this.set3DUnavailable(`3D Universe unavailable: ${Wl(e)}`), !1;
 		}
 	}
 	updateMounted3DGraph() {
@@ -12667,13 +12670,13 @@ var Ml = class {
 	}
 	convertAndStoreGraph() {
 		try {
-			let e = hl(Il(this.productionGraph, this.shared));
+			let e = vl(zl(this.productionGraph, this.shared));
 			return this.memoryUniverseGraph = e.graph, this.diagnostics = {
 				warnings: e.warnings,
 				error: null
 			}, this.options.onDiagnostics?.(this.getDiagnostics()), this.threeD.status === "unavailable" && (this.threeD.status = "idle", this.threeD.unavailableReason = null), !0;
 		} catch (e) {
-			let t = Vl(e);
+			let t = Wl(e);
 			return this.diagnostics = {
 				warnings: [],
 				error: t
@@ -12681,13 +12684,13 @@ var Ml = class {
 		}
 	}
 	set3DUnavailable(e) {
-		this.threeD.status = "unavailable", this.threeD.unavailableReason = e, this.options.threeDStage.replaceChildren(Rl(e));
+		this.threeD.status = "unavailable", this.threeD.unavailableReason = e, this.options.threeDStage.replaceChildren(Vl(e));
 	}
 	syncStages() {
 		this.options.twoDStage.hidden = this.activeView !== "2d-galaxy", this.options.threeDStage.hidden = this.activeView !== "3d-universe";
 	}
 	renderSwitcher() {
-		this.switcherContainer && this.switcherContainer.replaceChildren(Fl("2d-galaxy", "2D Galaxy", this.activeView, () => this.switchView("2d-galaxy")), Fl("3d-universe", "3D Universe", this.activeView, () => this.switchView("3d-universe")));
+		this.switcherContainer && this.switcherContainer.replaceChildren(Rl("2d-galaxy", "2D Galaxy", this.activeView, () => this.switchView("2d-galaxy")), Rl("3d-universe", "3D Universe", this.activeView, () => this.switchView("3d-universe")));
 	}
 	renderInspector() {
 		let e = this.shared.selectedNodeId ? this.memoryUniverseGraph.nodes.find((e) => e.id === this.shared.selectedNodeId) : null;
@@ -12698,7 +12701,7 @@ var Ml = class {
 		this.options.detailInspector.textContent = `${e.label} ${e.category} importance ${Math.round(e.importance * 100)}%`;
 	}
 	render2DStage() {
-		this.options.twoDStage.replaceChildren(Ll(this.memoryUniverseGraph, this.shared.selectedNodeId, (e) => {
+		this.options.twoDStage.replaceChildren(Bl(this.memoryUniverseGraph, this.shared.selectedNodeId, (e) => {
 			this.selectNodeFrom2D(e);
 		}));
 	}
@@ -12706,10 +12709,10 @@ var Ml = class {
 		this.options.onSharedStateChange?.(this.getState());
 	}
 };
-function Nl(e) {
-	return new Ml(e);
+function Il(e) {
+	return new Fl(e);
 }
-function Pl() {
+function Ll() {
 	if (typeof document > "u") return !1;
 	let e = document.createElement("canvas");
 	try {
@@ -12718,17 +12721,17 @@ function Pl() {
 		return !1;
 	}
 }
-function Fl(e, t, n, r) {
+function Rl(e, t, n, r) {
 	let i = document.createElement("button");
 	return i.type = "button", i.textContent = t, i.dataset.view = e, i.setAttribute("aria-pressed", String(e === n)), i.className = e === n ? "active" : "", i.addEventListener("click", r), i;
 }
-function Il(e, t) {
+function zl(e, t) {
 	if (!e || typeof e != "object" || Array.isArray(e)) return e;
 	let n = e;
 	if (!Array.isArray(n.nodes)) return e;
 	let r = t.searchTerm.trim().toLowerCase(), i = new Set(t.nodeTypes), a = t.graphScope?.trim().toLowerCase() ?? "", o = n.nodes.filter((e) => {
 		if (!e || typeof e != "object" || Array.isArray(e)) return !1;
-		let t = e, n = Bl(t, [
+		let t = e, n = Ul(t, [
 			"label",
 			"name",
 			"title",
@@ -12736,11 +12739,11 @@ function Il(e, t) {
 			"node_id",
 			"content",
 			"summary"
-		]).join(" ").toLowerCase(), o = zl(t, ["type", "category"]), s = zl(t, [
+		]).join(" ").toLowerCase(), o = Hl(t, ["type", "category"]), s = Hl(t, [
 			"agent_namespace",
 			"agentNamespace",
 			"namespace"
-		]), c = zl(t, [
+		]), c = Hl(t, [
 			"memory_system",
 			"memorySystem",
 			"system",
@@ -12753,7 +12756,7 @@ function Il(e, t) {
 		nodes: o
 	};
 }
-function Ll(e, t, n) {
+function Bl(e, t, n) {
 	let r = document.createElement("div");
 	r.className = "galaxy-2d-stage", r.setAttribute("aria-label", "2D Galaxy view");
 	let i = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -12762,14 +12765,14 @@ function Ll(e, t, n) {
 		s.type = "button", s.className = e.id === t ? "galaxy-node selected" : "galaxy-node", s.dataset.nodeId = e.id, s.textContent = e.label, s.style.left = `${a}px`, s.style.top = `${o}px`, s.addEventListener("click", () => n(e.id)), r.append(s);
 	}), r.prepend(i), r;
 }
-function Rl(e) {
+function Vl(e) {
 	let t = document.createElement("div");
 	return t.className = "three-d-unavailable", t.setAttribute("role", "status"), t.textContent = e, t;
 }
-function zl(e, t) {
-	return Bl(e, t)[0] ?? "";
+function Hl(e, t) {
+	return Ul(e, t)[0] ?? "";
 }
-function Bl(e, t) {
+function Ul(e, t) {
 	let n = [];
 	for (let r of t) {
 		let t = e[r];
@@ -12777,10 +12780,10 @@ function Bl(e, t) {
 	}
 	return n;
 }
-function Vl(e) {
+function Wl(e) {
 	return e instanceof Error ? e.message : "Unknown error.";
 }
-function Hl() {
+function Gl() {
 	return {
 		version: "memory-universe-graph/v1",
 		seed: "empty",
@@ -12794,4 +12797,4 @@ function Hl() {
 	};
 }
 //#endregion
-export { Ml as CoexistingViewerHost, Ys as MemoryUniverseGraphError, hl as adaptTotalAgentMemoryGraph, Tc as applyDecorativeMotion, Oc as buildHierarchyBreadcrumb, Pl as canUseBrowserWebGL, Nl as createCoexistingViewerHost, ic as createDeterministicLayout, Vc as createMemoryUniverseViewer, ac as distance, Ac as getParentFocusTarget, Xs as loadMemoryUniverseGraph, zs as mapCategoryToCelestialBody, Us as memoryUniverseFixture, Ws as memoryUniverseStressFixture, yl as productionShapedLargeFixture, vl as productionShapedMediumFixture, _l as productionShapedSmallFixture, Dc as resolveObjectSummary, gl as runTotalAgentMemoryAdapterHarness, kc as searchMemoryUniverseTargets, Zs as validateMemoryUniverseGraph };
+export { Fl as CoexistingViewerHost, Ys as MemoryUniverseGraphError, vl as adaptTotalAgentMemoryGraph, Ec as applyDecorativeMotion, kc as buildHierarchyBreadcrumb, Ll as canUseBrowserWebGL, Il as createCoexistingViewerHost, ac as createDeterministicLayout, Wc as createMemoryUniverseViewer, oc as distance, jc as getParentFocusTarget, Xs as loadMemoryUniverseGraph, zs as mapCategoryToCelestialBody, Us as memoryUniverseFixture, Ws as memoryUniverseStressFixture, Sl as productionShapedLargeFixture, xl as productionShapedMediumFixture, bl as productionShapedSmallFixture, Oc as resolveObjectSummary, yl as runTotalAgentMemoryAdapterHarness, Ac as searchMemoryUniverseTargets, Zs as validateMemoryUniverseGraph };
