@@ -2624,6 +2624,63 @@ class Store:
             return text
         return text[:limit].rstrip() + "..."
 
+    RULE_DOMAIN_VALUES = {
+        "global", "code", "writing", "research", "memory", "ops", "design",
+    }
+    RULE_DOMAIN_CONFIDENCE_THRESHOLD = 0.5
+    RULE_DOMAIN_KEYWORDS = {
+        "code": {
+            "code": 1.0, "repo": 1.0, "repository": 1.0, "test": 1.0,
+            "tests": 1.0, "pytest": 1.4, "bug": 1.0, "error": 1.0,
+            "stack": 0.8, "build": 0.8, "implement": 1.0,
+            "implementation": 1.0, "refactor": 1.0, "ci": 1.0, "pr": 0.8,
+            "commit": 1.0, "git": 1.0, "python": 1.0, "javascript": 1.0,
+            "typescript": 1.0, "function": 0.8, "class": 0.8,
+            "编程": 1.2, "代码": 1.2, "仓库": 1.0, "测试": 1.0,
+            "修复": 0.8, "报错": 1.0, "实现": 1.0, "重构": 1.0,
+            "提交": 1.0,
+        },
+        "writing": {
+            "manuscript": 1.4, "paper": 0.9, "docx": 1.3, "word": 1.0,
+            "rewrite": 1.3, "polish": 1.3, "translate": 1.2,
+            "translation": 1.2, "reviewer": 1.0, "sentence": 1.0,
+            "paragraph": 1.0, "prose": 1.0, "thesis": 1.0,
+            "论文": 1.4, "改写": 1.4, "润色": 1.3, "翻译": 1.2,
+            "句子": 1.0, "段落": 1.0, "审稿": 1.0, "原文": 0.9,
+            "修改句": 1.0,
+        },
+        "research": {
+            "search": 1.0, "find": 1.0, "lookup": 1.0,
+            "literature": 1.4, "citation": 1.2, "citations": 1.2,
+            "doi": 1.3, "crossref": 1.4, "reference": 1.0,
+            "references": 1.0, "source": 0.8, "sources": 0.8,
+            "查找": 1.2, "搜索": 1.2, "文献": 1.4, "引用": 1.2,
+            "参考文献": 1.4, "出版社": 1.0, "数据库": 0.9,
+        },
+        "memory": {
+            "memory": 1.3, "recall": 1.3, "rule layer": 1.4,
+            "preference": 1.0, "routing": 1.0, "rag": 1.3,
+            "harness": 1.0, "agent memory": 1.3,
+            "记忆": 1.4, "召回": 1.4, "规则层": 1.4, "偏好层": 1.2,
+            "路由层": 1.2, "知识库": 0.9, "记忆库": 1.3,
+        },
+        "ops": {
+            "config": 1.2, "configure": 1.2, "api key": 1.4,
+            "mcp": 1.4, "service": 1.2, "server": 1.0, "proxy": 1.2,
+            "network": 1.2, "env": 1.0, "token": 1.2, "vpn": 1.2,
+            "cli": 0.9, "windows": 1.0, "powershell": 1.0,
+            "配置": 1.3, "服务": 1.2, "网络": 1.2, "代理": 1.2,
+            "密钥": 1.2, "环境": 1.0, "令牌": 1.0, "重启": 1.0,
+        },
+        "design": {
+            "ui": 1.2, "ux": 1.2, "frontend": 1.0, "visual": 1.2,
+            "3d": 1.4, "canvas": 1.2, "galaxy": 1.2, "layout": 1.0,
+            "screenshot": 1.0, "css": 0.8,
+            "设计": 1.3, "视觉": 1.2, "截图": 1.0, "前端": 1.0,
+            "布局": 1.0, "画布": 1.0, "界面": 1.0,
+        },
+    }
+
     def _rank_rules_for_query(
         self,
         rows,
@@ -2655,7 +2712,35 @@ class Store:
         )
         selected_always = always_on if include_always_on else []
 
-        semantic_scores = self._rule_semantic_scores(query, contextual)
+        query_domain = self._classify_rule_query_domain(query)
+        domain_filter_active = bool(
+            query_domain["primary"]
+            and query_domain["confidence"] >= self.RULE_DOMAIN_CONFIDENCE_THRESHOLD
+        )
+        domain_excluded = []
+        contextual_for_scoring = []
+        for r in contextual:
+            tags = self._rule_tags(r)
+            trigger_score, trigger_match = self._rule_trigger_match(query, r, tags)
+            domain_status = self._rule_domain_filter_status(
+                tags,
+                query_domain=query_domain,
+                filter_active=domain_filter_active,
+                trigger_match=trigger_match,
+            )
+            if domain_status["excluded"]:
+                domain_excluded.append({
+                    "rule_id": r["id"],
+                    "domains": sorted(domain_status["domains"]),
+                    "primary_domain": domain_status["primary_domain"],
+                })
+                continue
+            contextual_for_scoring.append((r, tags, trigger_score, trigger_match, domain_status))
+
+        semantic_scores = self._rule_semantic_scores(
+            query,
+            [r for r, *_ in contextual_for_scoring],
+        )
         category_set = {str(c).strip().lower() for c in (categories or []) if str(c).strip()}
         ranking_weights = {
             "trigger": 0.45,
@@ -2665,9 +2750,7 @@ class Store:
             "priority": 0.05,
         }
         scored = []
-        for r in contextual:
-            tags = self._rule_tags(r)
-            trigger_score, trigger_match = self._rule_trigger_match(query, r, tags)
+        for r, tags, trigger_score, trigger_match, domain_status in contextual_for_scoring:
             semantic_score = semantic_scores.get(r["id"], 0.0)
             phase_match = 1.0 if phase and f"phase:{phase}" in tags else 0.0
             category_hint = 1.0 if self._rule_category_matches(r, category_set) else 0.0
@@ -2683,6 +2766,7 @@ class Store:
             ranked["_rule_relevance_score"] = round(final_score, 6)
             ranked["_rule_trigger_score"] = round(trigger_score, 6)
             ranked["_rule_semantic_score"] = round(semantic_score, 6)
+            ranked["_rule_domain_status"] = domain_status["reason"]
             if trigger_match:
                 ranked["_rule_trigger_match"] = trigger_match
             scored.append(ranked)
@@ -2716,8 +2800,153 @@ class Store:
             "trigger_matches": trigger_matches,
             "ranking_weights": ranking_weights,
             "always_on_tags": ["always_on", "hard", "security-critical"],
+            "query_domain": query_domain,
+            "domain_filter": {
+                "active": domain_filter_active,
+                "threshold": self.RULE_DOMAIN_CONFIDENCE_THRESHOLD,
+                "excluded_count": len(domain_excluded),
+                "excluded": domain_excluded[:20],
+                "exceptions": [
+                    "always_on",
+                    "hard",
+                    "security-critical",
+                    "domain:global",
+                    "trigger_match",
+                ],
+            },
         }
         return selected, meta
+
+    def _classify_rule_query_domain(self, query):
+        query_text = str(query or "")
+        query_canonical = self._rule_trigger_canonical(query_text)
+        query_tokens = set(self._rule_trigger_tokens(query_text))
+        scores = {domain: 0.0 for domain in self.RULE_DOMAIN_KEYWORDS}
+        matches = {domain: [] for domain in self.RULE_DOMAIN_KEYWORDS}
+
+        for domain, weighted_terms in self.RULE_DOMAIN_KEYWORDS.items():
+            for term, weight in weighted_terms.items():
+                if self._rule_domain_term_matches(term, query_canonical, query_tokens):
+                    scores[domain] += float(weight)
+                    matches[domain].append(term)
+
+        ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+        primary, top_score = ranked[0] if ranked else (None, 0.0)
+        if top_score <= 0:
+            return {
+                "primary": None,
+                "domains": [],
+                "confidence": 0.0,
+                "scores": {},
+                "matched": {},
+            }
+
+        active_domains = [
+            domain for domain, score in ranked
+            if score > 0 and score >= max(1.0, top_score * 0.55)
+        ]
+        confidence = min(1.0, top_score / 3.0)
+        return {
+            "primary": primary,
+            "domains": active_domains,
+            "confidence": round(confidence, 4),
+            "scores": {
+                domain: round(score, 4)
+                for domain, score in ranked
+                if score > 0
+            },
+            "matched": {
+                domain: terms
+                for domain, terms in matches.items()
+                if terms
+            },
+        }
+
+    def _rule_domain_filter_status(
+        self,
+        tags,
+        query_domain,
+        filter_active,
+        trigger_match=None,
+    ):
+        domains = self._rule_domains(tags)
+        primary_domain = self._rule_primary_domain(tags)
+        if not filter_active:
+            return {
+                "excluded": False,
+                "reason": "domain_filter_inactive",
+                "domains": domains,
+                "primary_domain": primary_domain,
+            }
+        if not domains:
+            return {
+                "excluded": False,
+                "reason": "untagged_compat",
+                "domains": domains,
+                "primary_domain": primary_domain,
+            }
+        if "global" in domains:
+            return {
+                "excluded": False,
+                "reason": "domain_global",
+                "domains": domains,
+                "primary_domain": primary_domain,
+            }
+        query_domains = set(query_domain.get("domains") or [])
+        query_primary = query_domain.get("primary")
+        if query_primary:
+            query_domains.add(query_primary)
+        if domains & query_domains:
+            return {
+                "excluded": False,
+                "reason": "domain_match",
+                "domains": domains,
+                "primary_domain": primary_domain,
+            }
+        if trigger_match:
+            return {
+                "excluded": False,
+                "reason": "trigger_exception",
+                "domains": domains,
+                "primary_domain": primary_domain,
+            }
+        return {
+            "excluded": True,
+            "reason": "domain_mismatch",
+            "domains": domains,
+            "primary_domain": primary_domain,
+        }
+
+    @classmethod
+    def _rule_domain_term_matches(cls, term, query_canonical, query_tokens):
+        canonical = cls._rule_trigger_canonical(term)
+        if not canonical:
+            return False
+        if cls._rule_trigger_phrase_matches(canonical, query_canonical, query_tokens):
+            return True
+        return bool(re.search(r"[\u4e00-\u9fff]", canonical) and canonical in query_canonical)
+
+    def _rule_domains(self, tags):
+        domains = set()
+        for tag in tags:
+            if not tag.startswith("domain:"):
+                continue
+            domain = tag.split(":", 1)[1].strip().lower()
+            if domain in self.RULE_DOMAIN_VALUES:
+                domains.add(domain)
+        return domains
+
+    def _rule_primary_domain(self, tags):
+        primaries = []
+        for tag in tags:
+            if not tag.startswith("primary_domain:"):
+                continue
+            domain = tag.split(":", 1)[1].strip().lower()
+            if domain in self.RULE_DOMAIN_VALUES:
+                primaries.append(domain)
+        if len(primaries) == 1:
+            return primaries[0]
+        return None
 
     def _rule_semantic_scores(self, query, rows):
         if not rows:
@@ -2785,7 +3014,12 @@ class Store:
 
         tag_matches = []
         for tag in sorted(tags if tags is not None else self._rule_tags(rule)):
-            if tag.startswith("phase:") or tag in {"always_on", "hard", "security-critical"}:
+            if (
+                tag.startswith("phase:")
+                or tag.startswith("domain:")
+                or tag.startswith("primary_domain:")
+                or tag in {"always_on", "hard", "security-critical"}
+            ):
                 continue
             canonical = self._rule_trigger_canonical(tag)
             if not canonical:
