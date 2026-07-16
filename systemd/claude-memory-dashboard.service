@@ -1,6 +1,6 @@
 [Unit]
 Description=total-agent-memory Dashboard (v12.0)
-Documentation=https://github.com/vbcherepanov/total-agent-memory
+Documentation=https://github.com/LLK-LL/Memnex
 After=default.target
 
 [Service]

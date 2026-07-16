@@ -37,9 +37,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vbcherepanov/total-agent-memory"
-Repository = "https://github.com/vbcherepanov/total-agent-memory"
-Issues = "https://github.com/vbcherepanov/total-agent-memory/issues"
+Homepage = "https://github.com/LLK-LL/Memnex"
+Repository = "https://github.com/LLK-LL/Memnex"
+Issues = "https://github.com/LLK-LL/Memnex/issues"
 
 [project.scripts]
 total-agent-memory = "total_agent_memory.server:main_sync"

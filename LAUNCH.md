@@ -174,7 +174,7 @@ TypeScript SDK: npm i @vbch/total-agent-memory-client
 Reproduce the benchmark yourself — evals/longmemeval-2026-04-17.json
 has the raw results, benchmarks/longmemeval_bench.py is the runner.
 
-GitHub: https://github.com/vbcherepanov/total-agent-memory
+GitHub: https://github.com/LLK-LL/Memnex
 Comparison with mem0/Letta/Zep/Supermemory/Cognee/LangMem/Mastra:
   docs/vs-competitors.md
 
@@ -197,7 +197,7 @@ LangMem    :  p95 59.82s
 MCP-native, temporal KG, procedural memory, cross-project analogy.
 Free, MIT, runs on your laptop.
 
-github.com/vbcherepanov/total-agent-memory
+github.com/LLK-LL/Memnex
 ```
 
 **Thread version (5 tweets):**
@@ -208,7 +208,7 @@ github.com/vbcherepanov/total-agent-memory
    Public LongMemEval: 96.2% R@5 vs Supermemory 85.4%. 38.8 ms/query.
    100% local.
    
-   github.com/vbcherepanov/total-agent-memory
+   github.com/LLK-LL/Memnex
 
 2/ Space is crowded — mem0 ($24M), Letta ($10M), Zep ($12M),
    Supermemory ($2.6M), Cognee ($7.5M), LangMem.
@@ -302,11 +302,11 @@ over Supermemory). Temporal knowledge graph, procedural memory, AST
 codebase ingest, cross-project analogy. MIT licensed, reproducible
 benchmarks.
 
-- Repo: https://github.com/vbcherepanov/total-agent-memory
+- Repo: https://github.com/LLK-LL/Memnex
 - Npm SDK: https://www.npmjs.com/package/@vbch/total-agent-memory-client
-- Benchmarks: https://github.com/vbcherepanov/total-agent-memory/blob/main/evals/longmemeval-2026-04-17.json
+- Benchmarks: https://github.com/LLK-LL/Memnex/blob/main/evals/longmemeval-2026-04-17.json
 - Comparison with mem0 / Letta / Zep / Supermemory / Cognee / LangMem:
-  https://github.com/vbcherepanov/total-agent-memory/blob/main/docs/vs-competitors.md
+  https://github.com/LLK-LL/Memnex/blob/main/docs/vs-competitors.md
 ```
 
 Target lists:
@@ -354,7 +354,7 @@ Integrates via MCP so it works with Claude Code, Codex CLI, Cursor,
 and anything that speaks Model Context Protocol. TypeScript SDK
 shipped today.
 
-Repo: github.com/vbcherepanov/total-agent-memory
+Repo: github.com/LLK-LL/Memnex
 Benchmark raw results: evals/longmemeval-2026-04-17.json
 
 Would love feedback on where the other memory layers still beat us —

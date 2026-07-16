@@ -161,6 +161,6 @@ Or leave it unset and let the fallback resolve to `codex`.
 
 ## Related Files
 
-- [.mcp.json](C:/Users/Administrator/total-agent-memory/.mcp.json)
-- [src/server.py](C:/Users/Administrator/total-agent-memory/src/server.py)
-- [docs/superpowers/specs/2026-06-29-agent-namespaced-memory-galaxies-design.md](C:/Users/Administrator/total-agent-memory/docs/superpowers/specs/2026-06-29-agent-namespaced-memory-galaxies-design.md)
+- [.mcp.json](../.mcp.json)
+- [src/server.py](../src/server.py)
+- [agent-namespaced-memory-galaxies-design.md](../docs/superpowers/specs/2026-06-29-agent-namespaced-memory-galaxies-design.md)

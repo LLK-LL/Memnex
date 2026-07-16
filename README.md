@@ -1,8 +1,15 @@
-# total-agent-memory
+# Memnex
 
-> **The only memory layer that learns _how_ you work — not just _what_ you said.**
+> **The local-first memory system that learns _how_ you work — not just _what_ you said.**
 > Persistent, local memory for AI coding agents: Claude Code, Codex CLI, Cursor, any MCP client.
 > Temporal knowledge graph · procedural memory · AST codebase ingest · cross-project analogy · 3D WebGL visualization.
+
+This repository was previously published under the local/package name
+`total-agent-memory`. The codebase and project are the same; **Memnex is now the
+canonical repository name**. Existing package, CLI, import, and data-directory
+names remain available for compatibility.
+
+[![Repository](https://img.shields.io/badge/repository-LLK--LL%2FMemnex-181717?logo=github)](https://github.com/LLK-LL/Memnex)
 
 [![Version](https://img.shields.io/badge/version-12.6.0-8ad.svg)](https://pypi.org/project/total-agent-memory/)
 [![Tests](https://img.shields.io/badge/tests-1769%20passing-4a9.svg)]()
@@ -16,7 +23,7 @@
 [![MCP](https://img.shields.io/badge/protocol-MCP-blue.svg)](https://modelcontextprotocol.io)
 [![npm](https://img.shields.io/badge/npm-total--agent--memory-cb3837.svg)](https://www.npmjs.com/package/total-agent-memory)
 [![PyPI](https://img.shields.io/badge/PyPI-total--agent--memory-3776AB.svg)](https://pypi.org/project/total-agent-memory/)
-[![Docker GHCR](https://img.shields.io/badge/docker-ghcr.io-2496ED.svg)](https://github.com/vbcherepanov/total-agent-memory/pkgs/container/total-agent-memory)
+[![Docker GHCR](https://img.shields.io/badge/docker-ghcr.io-2496ED.svg)](https://github.com/LLK-LL/Memnex/pkgs/container/total-agent-memory)
 [![Homebrew](https://img.shields.io/badge/brew-vbcherepanov%2Ftap-FBB040.svg)](https://github.com/vbcherepanov/homebrew-tap)
 [![Donate](https://img.shields.io/badge/PayPal-Donate-00457C.svg?logo=paypal&logoColor=white)](https://PayPal.Me/vbcherepanov)
 
@@ -36,7 +43,7 @@ expansion, multi-representation search, and phase-scoped rules.
 
 ![3D Knowledge Solar System overview](docs/assets/memory-galaxy-3d-solar-clean.png)
 
-Read the complete [v12.6.0 visual memory release guide](docs/v12.6.0-visual-memory-release.md)
+Read the complete [v12.6.0 Memnex release guide](docs/v12.6.0-visual-memory-release.md)
 for the CodeGraph chain map, panel reference, operation guide, gesture map,
 Memnex comparison, privacy boundary, and known limitations.
 
@@ -122,7 +129,7 @@ pipx install total-agent-memory                           # Python via pipx (iso
 brew install vbcherepanov/tap/total-memory                # Homebrew (macOS / Linuxbrew)
 docker run -p 37737:37737 -v ~/.tam:/data \
   ghcr.io/vbcherepanov/total-agent-memory:12.5.0          # Docker (multi-arch amd64+arm64)
-git clone https://github.com/vbcherepanov/total-agent-memory \
+git clone https://github.com/LLK-LL/Memnex \
   ~/total-agent-memory && cd ~/total-agent-memory && ./install.sh   # manual
 ```
 
@@ -130,7 +137,7 @@ The `npx` path also wires the MCP entry into the IDE you pass to `connect <ide>`
 `claude-code`, `codex`, `cursor`, `cline`, `continue`, `aider`, `windsurf`,
 `gemini-cli`, `opencode`.
 
-**Project URLs:** [totalmemory.dev](https://totalmemory.dev) · [PyPI](https://pypi.org/project/total-agent-memory/) · [npm](https://www.npmjs.com/package/total-agent-memory) · [Docker GHCR](https://ghcr.io/vbcherepanov/total-agent-memory) · [GitHub Release](https://github.com/vbcherepanov/total-agent-memory/releases/tag/v12.5.0)
+**Project URLs:** [Memnex](https://github.com/LLK-LL/Memnex) · [PyPI compatibility package](https://pypi.org/project/total-agent-memory/) · [npm compatibility package](https://www.npmjs.com/package/total-agent-memory) · [GitHub Release](https://github.com/LLK-LL/Memnex/releases/tag/v12.6.0)
 
 Full migration notes (Docker volume names kept for backward-compat, brew formula
 changes, etc.) live in [`CHANGELOG.md`](CHANGELOG.md). The historical sections
@@ -548,7 +555,7 @@ Full side-by-side with pricing, latency, accuracy, "when to pick each" → [docs
 | **pipx** (Python isolated) | `pipx install total-agent-memory` | Installs the `total-agent-memory`, `tam`, `tam-lookup`, `lookup-memory` binaries on PATH in an isolated venv. |
 | **brew** (macOS / Linuxbrew) | `brew install vbcherepanov/tap/total-memory` | Bottle-style install with `tam` and legacy `claude-total-memory` symlinks. |
 | **Docker** (multi-arch) | `docker run -p 37737:37737 -v ~/.tam:/data ghcr.io/vbcherepanov/total-agent-memory:12.5.0` | Containerized (linux/amd64 + linux/arm64). Dashboard on `:37737`. |
-| **Manual clone** | `git clone https://github.com/vbcherepanov/total-agent-memory ~/total-agent-memory && cd ~/total-agent-memory && ./install.sh --ide claude-code` | Full control. Lets you hack on the server, run benchmarks, and pick which background services to enable. Detailed walkthrough below. |
+| **Manual clone** | `git clone https://github.com/LLK-LL/Memnex ~/Memnex && cd ~/Memnex && ./install.sh --ide claude-code` | Full control. Lets you hack on the server, run benchmarks, and pick which background services to enable. Detailed walkthrough below. |
 
 All six channels land at the same MCP server. The `npx` and `./install.sh` paths
 additionally configure IDE-specific MCP entries and hooks. Other channels start
@@ -604,8 +611,8 @@ flows: **[docs/installation.md](docs/installation.md)**.
 ### Path A — native (macOS / Linux / WSL2)
 
 ```bash
-git clone https://github.com/vbcherepanov/total-agent-memory.git ~/total-agent-memory
-cd ~/total-agent-memory
+git clone https://github.com/LLK-LL/Memnex.git ~/Memnex
+cd ~/Memnex
 bash install.sh --ide claude-code   # or: cursor | gemini-cli | opencode | codex
 ```
 
@@ -628,8 +635,8 @@ Restart Claude Code → `/mcp` → `memory` should show **Connected** with 60+ t
 ### Path A — native (Windows 10/11)
 
 ```powershell
-git clone https://github.com/vbcherepanov/total-agent-memory.git $HOME\total-agent-memory
-cd $HOME\total-agent-memory
+git clone https://github.com/LLK-LL/Memnex.git $HOME\Memnex
+cd $HOME\Memnex
 powershell -ExecutionPolicy Bypass -File install.ps1 -Ide claude-code
 ```
 
@@ -666,8 +673,8 @@ Exit code 0 = all green, 1 = something broken.
 ### Path B — Docker (everything containerized, cross-platform)
 
 ```bash
-git clone https://github.com/vbcherepanov/total-agent-memory.git
-cd total-agent-memory
+git clone https://github.com/LLK-LL/Memnex.git
+cd Memnex
 bash install-docker.sh --with-compose
 ```
 

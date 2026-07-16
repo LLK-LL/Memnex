@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes to total-agent-memory are documented in this file.
+All notable changes to Memnex are documented in this file. The historical
+package and CLI name `total-agent-memory` remains for compatibility.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and versions use [Semantic Versioning](https://semver.org/).
 

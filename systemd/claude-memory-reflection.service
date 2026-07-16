@@ -1,6 +1,6 @@
 [Unit]
 Description=Claude Memory — drain reflection queues via Ollama (one-shot)
-Documentation=https://github.com/vbcherepanov/total-agent-memory
+Documentation=https://github.com/LLK-LL/Memnex
 After=network-online.target
 
 [Service]

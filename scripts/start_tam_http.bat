@@ -1,7 +1,7 @@
 @echo off
 REM Auto-start TAM Memory HTTP Server
 set PORT=3747
-set LOG=C:/Users/Administrator/total-agent-memory/tmp/http_server.log
+set LOG=C:/Users/Administrator/Memnex/tmp/http_server.log
 
 REM Check if already listening
 powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort %PORT% -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }" >nul 2>&1
@@ -30,4 +30,4 @@ set TAM_AGENT_NAMESPACE=codex
 set MCP_TRANSPORT=http
 set MCP_HTTP_HOST=127.0.0.1
 set MCP_HTTP_PORT=%PORT%
-C:/Users/Administrator/total-agent-memory/.venv/Scripts/python.exe C:/Users/Administrator/total-agent-memory/src/server.py >> %LOG% 2>&1
+C:/Users/Administrator/Memnex/.venv/Scripts/python.exe C:/Users/Administrator/Memnex/src/server.py >> %LOG% 2>&1

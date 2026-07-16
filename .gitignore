@@ -75,3 +75,17 @@ benchmarks/results/v11_latency_fast.json
 src.bak-*/
 logs/
 .worktrees/
+
+# Memnex-generated local state
+*.tmp
+*.log
+*.bak
+*.sqlite-shm
+*.sqlite-wal
+memory-system/logs/
+memory-data/
+graph-viewer-output/
+test-results/
+.playwright-mcp/
+.omo/
+.superpowers/
