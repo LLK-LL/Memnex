@@ -4,7 +4,7 @@
 > Persistent, local memory for AI coding agents: Claude Code, Codex CLI, Cursor, any MCP client.
 > Temporal knowledge graph · procedural memory · AST codebase ingest · cross-project analogy · 3D WebGL visualization.
 
-[![Version](https://img.shields.io/badge/version-12.5.0-8ad.svg)](https://pypi.org/project/total-agent-memory/)
+[![Version](https://img.shields.io/badge/version-12.6.0-8ad.svg)](https://pypi.org/project/total-agent-memory/)
 [![Tests](https://img.shields.io/badge/tests-1769%20passing-4a9.svg)]()
 [![IDEs](https://img.shields.io/badge/IDEs-9%20supported-4a9.svg)]()
 [![LongMemEval R@5](https://img.shields.io/badge/LongMemEval%20R@5-96.2%25-4a9.svg)](evals/longmemeval-2026-04-17.json)
@@ -21,6 +21,24 @@
 [![Donate](https://img.shields.io/badge/PayPal-Donate-00457C.svg?logo=paypal&logoColor=white)](https://PayPal.Me/vbcherepanov)
 
 **Why this, not mem0 / Letta / Zep / Supermemory / Cognee?** → [docs/vs-competitors.md](docs/vs-competitors.md)
+
+---
+
+## v12.6.0 - Visual memory workspace and recall-chain hardening (2026-07-16)
+
+This release combines the new 2D/3D Memory Galaxy workspace with a set of
+write, recall, and rules-layer repairs. The viewer now connects the existing
+2D graph surface to a Knowledge Solar System 3D route, while the memory engine
+keeps project and agent boundaries intact across save, retrieval, graph
+expansion, multi-representation search, and phase-scoped rules.
+
+![2D Memory Galaxy overview](docs/assets/memory-galaxy-2d-overview.png)
+
+![3D Knowledge Solar System overview](docs/assets/memory-galaxy-3d-solar-clean.png)
+
+Read the complete [v12.6.0 visual memory release guide](docs/v12.6.0-visual-memory-release.md)
+for the CodeGraph chain map, panel reference, operation guide, gesture map,
+Memnex comparison, privacy boundary, and known limitations.
 
 ---
 

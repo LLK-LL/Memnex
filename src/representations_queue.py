@@ -84,6 +84,44 @@ class RepresentationsQueue:
         self.db.commit()
         return deleted + updated
 
+    def repair_inconsistent_done(self, limit: int = 1000) -> int:
+        rows = self.db.execute(
+            """
+            SELECT q.id, q.knowledge_id
+            FROM representations_queue q
+            JOIN knowledge k ON k.id=q.knowledge_id
+            LEFT JOIN knowledge_representations r
+              ON r.knowledge_id=q.knowledge_id AND r.representation='raw'
+            WHERE q.status='done' AND r.knowledge_id IS NULL
+            ORDER BY q.id ASC LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+        repaired = 0
+        for row in rows:
+            pending = self.db.execute(
+                "SELECT id FROM representations_queue "
+                "WHERE knowledge_id=? AND status='pending' LIMIT 1",
+                (row["knowledge_id"],),
+            ).fetchone()
+            if pending:
+                self.db.execute(
+                    "DELETE FROM representations_queue WHERE id=?",
+                    (row["id"],),
+                )
+            else:
+                self.db.execute(
+                    "UPDATE representations_queue "
+                    "SET status='pending', attempts=0, claimed_at=NULL, "
+                    "processed_at=NULL, last_error='requeued: missing raw representation' "
+                    "WHERE id=?",
+                    (row["id"],),
+                )
+            repaired += 1
+        if repaired:
+            self.db.commit()
+        return repaired
+
     def claim_next(self) -> dict | None:
         self.reclaim_stale()
         row = self.db.execute(
@@ -152,6 +190,7 @@ class RepresentationsQueue:
         limit: int = 10,
     ) -> dict[str, int]:
         stats = {"processed": 0, "failed": 0, "skipped": 0}
+        self.repair_inconsistent_done()
 
         for _ in range(limit):
             item = self.claim_next()
@@ -174,11 +213,12 @@ class RepresentationsQueue:
             try:
                 # Raw embedding — always generated; serves as fallback
                 raw_emb = embedder(raw_content)
-                if raw_emb:
-                    self.store.upsert(
-                        kid, "raw", raw_content, raw_emb, model_name,
-                        parent_content_hash=parent_hash,
-                    )
+                if not raw_emb:
+                    raise RuntimeError("required raw representation embedding missing")
+                self.store.upsert(
+                    kid, "raw", raw_content, raw_emb, model_name,
+                    parent_content_hash=parent_hash,
+                )
 
                 # LLM views (summary/keywords/questions/compressed)
                 views = generator(raw_content) or {}
@@ -205,6 +245,13 @@ class RepresentationsQueue:
                             parent_content_hash=parent_hash,
                         )
 
+                raw_row = self.db.execute(
+                    "SELECT 1 FROM knowledge_representations "
+                    "WHERE knowledge_id=? AND representation='raw'",
+                    (kid,),
+                ).fetchone()
+                if raw_row is None:
+                    raise RuntimeError("required raw representation artifact missing")
                 self.mark_done(item["id"])
                 stats["processed"] += 1
             except Exception as e:  # noqa: BLE001

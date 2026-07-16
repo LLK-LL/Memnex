@@ -84,7 +84,7 @@ def _process_representation(
     db_lock: threading.Lock | None,
     repr_name: str,
     query_embedding: list[float],
-    project: str | None,
+    project: str | Iterable[str] | None,
     n_candidates: int,
     top_n: int,
 ) -> tuple[str, list[tuple[int, float]]]:
@@ -138,7 +138,7 @@ def _score_rows(
 def _search_sequential(
     db: sqlite3.Connection,
     query_embedding: list[float],
-    project: str | None,
+    project: str | Iterable[str] | None,
     n_candidates: int,
     top_n: int,
 ) -> dict[str, list[tuple[int, float]]]:
@@ -156,7 +156,7 @@ def _search_sequential(
 async def _search_parallel_async(
     db: sqlite3.Connection,
     query_embedding: list[float],
-    project: str | None,
+    project: str | Iterable[str] | None,
     n_candidates: int,
     top_n: int,
 ) -> dict[str, list[tuple[int, float]]]:
@@ -240,7 +240,7 @@ def _run_coroutine(coro):
 def search(
     db: sqlite3.Connection,
     query_embedding: list[float],
-    project: str | None = None,
+    project: str | Iterable[str] | None = None,
     n_candidates: int = 100,
     top_n: int = 20,
 ) -> list[tuple[int, float]]:
@@ -262,7 +262,7 @@ def search(
 def search_with_winners(
     db: sqlite3.Connection,
     query_embedding: list[float],
-    project: str | None = None,
+    project: str | Iterable[str] | None = None,
     n_candidates: int = 100,
     top_n: int = 20,
 ) -> tuple[list[tuple[int, float]], dict[int, str]]:
@@ -309,19 +309,21 @@ def search_with_winners(
 def _fetch(
     db: sqlite3.Connection,
     representation: str,
-    project: str | None,
+    project: str | Iterable[str] | None,
     limit: int,
 ) -> list[sqlite3.Row]:
     if project:
+        projects = [project] if isinstance(project, str) else list(project)
+        placeholders = ",".join("?" for _ in projects)
         return db.execute(
-            """SELECT kr.knowledge_id, kr.float32_vector, kr.embed_dim
+            f"""SELECT kr.knowledge_id, kr.float32_vector, kr.embed_dim
                  FROM knowledge_representations kr
                  JOIN knowledge k ON k.id = kr.knowledge_id
                 WHERE kr.representation = ?
                   AND k.status = 'active'
-                  AND k.project = ?
+                  AND k.project IN ({placeholders})
                 LIMIT ?""",
-            (representation, project, limit),
+            (representation, *projects, limit),
         ).fetchall()
     return db.execute(
         """SELECT kr.knowledge_id, kr.float32_vector, kr.embed_dim

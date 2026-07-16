@@ -9,11 +9,13 @@ to refine success rates and identify mastery.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import sys
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 LOG = lambda msg: sys.stderr.write(f"[memory-skills] {msg}\n")
@@ -237,6 +239,10 @@ class SkillStore:
         notes: str | None = None,
     ) -> str:
         """Record a skill use and update skill metrics. Returns use_id."""
+        skill = self.get(skill_id) or self.get_by_name(skill_id)
+        if skill is None:
+            raise ValueError(f"Skill {skill_id} not found")
+        skill_id = str(skill["id"])
         use_id = uuid.uuid4().hex
         now = _now_iso()
 
@@ -282,6 +288,76 @@ class SkillStore:
         self.db.commit()
         LOG(f"recorded use for skill {skill_id}: success={success}, total={total}, rate={new_rate:.2f}")
         return use_id
+
+    def sync_installed(
+        self,
+        roots: list[str | Path] | None = None,
+    ) -> dict[str, int]:
+        if roots is None:
+            codex_home = Path(
+                os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))
+            )
+            roots = [codex_home / "skills", Path.home() / ".agents" / "skills"]
+
+        scanned = created = existing = failed = 0
+        for root_value in roots:
+            root = Path(root_value).expanduser()
+            if not root.is_dir():
+                continue
+            for skill_file in root.rglob("SKILL.md"):
+                scanned += 1
+                try:
+                    text = skill_file.read_text(encoding="utf-8")
+                    name_match = re.search(
+                        r"(?m)^name:\s*['\"]?([^'\"\r\n]+)",
+                        text,
+                    )
+                    name = (
+                        name_match.group(1).strip()
+                        if name_match else skill_file.parent.name
+                    )
+                    current = self.get_by_name(name)
+                    if current is not None:
+                        existing += 1
+                        continue
+                    description_match = re.search(
+                        r"(?m)^description:\s*['\"]?([^'\"\r\n>]+)",
+                        text,
+                    )
+                    description = (
+                        description_match.group(1).strip()
+                        if description_match else name.replace("-", " ")
+                    )
+                    steps = [
+                        match.group(1).strip()
+                        for match in re.finditer(
+                            r"(?m)^\s*\d+[.)]\s+(.+)$",
+                            text,
+                        )
+                    ][:20]
+                    if not steps:
+                        steps = [f"Follow {skill_file.name} for {name}."]
+                    created_id = self.create(
+                        name=name,
+                        trigger_pattern=f"{name} {description}".strip(),
+                        steps=steps,
+                        projects=["global"],
+                        learned_from=[str(skill_file)],
+                    )
+                    self.db.execute(
+                        "UPDATE skills SET status='active' WHERE id=?",
+                        (created_id,),
+                    )
+                    self.db.commit()
+                    created += 1
+                except (OSError, sqlite3.Error, ValueError):
+                    failed += 1
+        return {
+            "scanned": scanned,
+            "created": created,
+            "existing": existing,
+            "failed": failed,
+        }
 
     def refine(
         self,

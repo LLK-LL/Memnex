@@ -126,7 +126,11 @@ memory_dir = toml_escape(os.environ['_CTM_MEM'])
 toml_block = f'''
 # --- Claude Total Memory MCP Server (Streamable HTTP for Codex Desktop) ---
 [mcp_servers.memory]
-url = "http://127.0.0.1:3737/mcp/"
+url = "http://127.0.0.1:3747/mcp/"
+type = "http"
+required = false
+startup_timeout_sec = 5.0
+tool_timeout_sec = 20.0
 # --- End Claude Total Memory ---
 '''
 

@@ -80,6 +80,6 @@ def test_memory_recall_schema_includes_expand_context():
 
     # Walk the list of tools built by server — it's a coroutine / function registration
     # Simplest: grep the module source for the property names (already added).
-    src_text = (Path(__file__).parent.parent / "src" / "server.py").read_text()
+    src_text = (Path(__file__).parent.parent / "src" / "server.py").read_text(encoding="utf-8")
     assert "expand_context" in src_text
     assert "expand_budget" in src_text

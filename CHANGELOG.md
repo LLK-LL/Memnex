@@ -4,6 +4,42 @@ All notable changes to total-agent-memory are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and versions use [Semantic Versioning](https://semver.org/).
 
+## [12.6.0] - 2026-07-16 - Visual memory workspace and recall-chain hardening
+
+### Added
+- 2D and 3D Memory Galaxy surfaces can coexist in one exported browser
+  workspace through the memory-universe bridge.
+- Knowledge Solar System route with real graph-derived planet systems,
+  satellite relationships, NASA texture metadata, asteroid-belt and comet
+  visuals, projected minimap, observatory mode, and fly-through mode.
+- Worker-backed MediaPipe gesture runtime with diagnostics and regression
+  coverage for pointing-up fallback, two-hand transforms, zoom accumulation,
+  stale frames, hand loss, and worker disposal.
+- Public release guide with panel-by-panel documentation, operation mapping,
+  gesture mapping, CodeGraph chain analysis, and sanitized 2D/3D screenshots.
+
+### Fixed
+- Save and recall project identity handling now accepts canonical names,
+  paths, and registered aliases without crossing project boundaries.
+- Recall keeps project and agent-namespace filters consistent across FTS,
+  semantic, multi-representation, episode, and graph-expansion tiers, then
+  removes disallowed candidates after fusion as a final boundary check.
+- Recall ranking now records query coverage and matched terms, applies a
+  configurable relevance gate, preserves retrieval diagnostics, and avoids
+  treating recall frequency as freshness decay.
+- Graph expansion is routed by query family and can report why it was applied
+  or skipped instead of silently changing the candidate set.
+- Rules-layer effectiveness is based on rated outcomes rather than raw fires,
+  and phase/project-scoped context is carried through the retrieval path.
+- Session continuity and asynchronous representation work are more tolerant of
+  stale sessions, missing optional enrichments, and queue-side failures.
+
+### Privacy
+- Release screenshots contain visualization UI only; the camera preview area
+  is removed from the 3D image.
+- Live memory databases, WAL/SHM files, logs, transcripts, raw captures,
+  backups, and generated private exports remain outside the release artifacts.
+
 ## [12.5.0] - 2026-06-22 - Memory graph visualization
 
 ### Added

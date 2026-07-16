@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Isolated Knowledge System 3D solar-system layout research preview."
+    />
+    <title>Knowledge Solar System</title>
+    <script type="module" crossorigin src="./assets/index-v8bs2Nx6.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DYpc8Q1m.css">
+  </head>
+  <body>
+    <main class="knowledge-solar-stage" aria-label="Knowledge Solar System 3D visualization">
+      <div class="knowledge-solar-canvas" data-knowledge-solar-stage></div>
+      <button type="button" class="knowledge-solar-flight-toggle" data-solar-flight-toggle aria-pressed="false" aria-hidden="true" tabindex="-1" disabled>
+        Fly
+      </button>
+      <section class="knowledge-solar-gesture-panel" aria-label="Gesture control">
+        <div class="knowledge-solar-gesture-preview" aria-hidden="true">
+          <video data-knowledge-solar-gesture-camera-preview="true" playsinline muted></video>
+          <canvas data-knowledge-solar-gesture-landmark-overlay="true"></canvas>
+        </div>
+        <button type="button" class="knowledge-solar-gesture-toggle" data-knowledge-solar-gesture-control-start="true">
+          Start gesture control
+        </button>
+        <p data-knowledge-solar-gesture-control-status="true">Idle. Camera is off.</p>
+      </section>
+      <section class="knowledge-solar-flight-minimap" data-knowledge-solar-flight-minimap="true" aria-label="Flight minimap">
+        <svg class="knowledge-solar-flight-minimap-map" viewBox="0 0 100 100" role="img" aria-label="Camera position in solar boundary">
+          <circle class="knowledge-solar-flight-minimap-boundary" cx="50" cy="50" r="42"></circle>
+          <g class="knowledge-solar-flight-minimap-orbits" data-knowledge-solar-flight-minimap-orbits="true"></g>
+          <ellipse class="knowledge-solar-flight-minimap-asteroid-belt" data-knowledge-solar-flight-minimap-asteroid-belt="true" cx="50" cy="50" rx="0" ry="0"></ellipse>
+          <circle class="knowledge-solar-flight-minimap-core" cx="50" cy="50" r="5"></circle>
+          <g class="knowledge-solar-flight-minimap-planet-systems" data-knowledge-solar-flight-minimap-planet-systems="true"></g>
+          <g data-knowledge-solar-flight-minimap-marker="true" transform="translate(50 50)">
+            <line data-knowledge-solar-flight-minimap-heading="true" x1="0" y1="0" x2="0" y2="-9"></line>
+            <circle cx="0" cy="0" r="3.5"></circle>
+          </g>
+        </svg>
+      </section>
+      <section class="knowledge-solar-flight-speedometer" data-knowledge-solar-flight-speedometer="true" aria-label="Flight speed">
+        <span>Speed</span>
+        <strong data-knowledge-solar-flight-speed-value="true">0.0x</strong>
+      </section>
+    </main>
+    <script>
+      window.__knowledgeSolarViewerBasePath = new URLSearchParams(window.location.search).get("viewerBase") ?? "/memory-viewer";
+    </script>
+  </body>
+</html>

@@ -25,6 +25,7 @@ import struct
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -189,6 +190,76 @@ def _monitor_recall_event(event_type, request, response):
         record_recall_event(event_type, request, response)
     except Exception as exc:  # noqa: BLE001
         LOG(f"recall monitor skipped: {exc}")
+
+
+def _canonical_project_name(value: str | None) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    normalized = raw.replace("\\", "/").rstrip("/")
+    if re.match(r"^[A-Za-z]:/", normalized):
+        return normalized[0].upper() + normalized[1:]
+    return normalized
+
+
+def _project_identity_key(value: str | None) -> str:
+    canonical = _canonical_project_name(value)
+    if not canonical:
+        return ""
+    prefix = "path:" if (
+        re.match(r"^[A-Za-z]:/", canonical) or canonical.startswith("/")
+    ) else "name:"
+    return prefix + canonical.casefold()
+
+
+def _resolve_project_aliases(
+    db: sqlite3.Connection,
+    project: str | None,
+) -> list[str] | None:
+    canonical = _canonical_project_name(project)
+    if not canonical:
+        return None
+    identity_keys = {_project_identity_key(canonical)}
+    explicit_canonical = canonical
+    try:
+        if db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' "
+            "AND name='project_aliases'"
+        ).fetchone():
+            mappings = db.execute(
+                "SELECT alias, canonical FROM project_aliases"
+            ).fetchall()
+            for row in mappings:
+                alias_value = str(row[0] or "").strip()
+                canonical_value = str(row[1] or "").strip()
+                if (
+                    _project_identity_key(alias_value) in identity_keys
+                    or _project_identity_key(canonical_value) in identity_keys
+                ):
+                    explicit_canonical = canonical_value or explicit_canonical
+                    identity_keys.add(_project_identity_key(alias_value))
+                    identity_keys.add(_project_identity_key(canonical_value))
+            canonical_key = _project_identity_key(explicit_canonical)
+            for row in mappings:
+                if _project_identity_key(row[1]) == canonical_key:
+                    identity_keys.add(_project_identity_key(row[0]))
+    except sqlite3.Error:
+        pass
+
+    aliases = {explicit_canonical}
+    try:
+        rows = db.execute(
+            "SELECT DISTINCT project FROM knowledge WHERE project IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            stored = str(row[0] or "").strip()
+            if stored and _project_identity_key(stored) in identity_keys:
+                aliases.add(stored)
+    except sqlite3.Error:
+        pass
+    return [explicit_canonical] + sorted(
+        alias for alias in aliases if alias != explicit_canonical
+    )
 
 
 def _normalise_agent_namespace(value: str | None) -> str:
@@ -901,8 +972,10 @@ class Store:
         conds = ["k.status='active'"]
         params: list = []
         if project:
-            conds.append("k.project=?")
-            params.append(project)
+            project_filter = [project] if isinstance(project, str) else list(project)
+            ph = ",".join("?" * len(project_filter))
+            conds.append(f"k.project IN ({ph})")
+            params.extend(project_filter)
         if embedding_spaces:
             ph = ",".join("?" * len(embedding_spaces))
             conds.append(f"e.embedding_space IN ({ph})")
@@ -965,6 +1038,15 @@ class Store:
                 project TEXT DEFAULT 'general', status TEXT DEFAULT 'open',
                 summary TEXT, log_count INTEGER DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS project_aliases (
+                alias TEXT PRIMARY KEY,
+                canonical TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (
+                    strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                )
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_aliases_canonical
+                ON project_aliases(canonical);
             CREATE TABLE IF NOT EXISTS knowledge (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL, type TEXT NOT NULL,
@@ -1352,10 +1434,42 @@ class Store:
 
     def session_start(self, sid, project="general", branch=""):
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        project = _canonical_project_name(project) or "general"
+        self.close_stale_sessions(exclude_session_id=sid)
         self.db.execute(
             "INSERT OR IGNORE INTO sessions (id,started_at,project,branch) VALUES (?,?,?,?)",
             (sid, now, project, branch))
         self.db.commit()
+
+    def close_stale_sessions(
+        self,
+        stale_hours: int = 24,
+        exclude_session_id: str | None = None,
+    ) -> int:
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(hours=max(1, int(stale_hours)))
+        ).isoformat().replace("+00:00", "Z")
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        params: list = [now, cutoff]
+        exclude = ""
+        if exclude_session_id:
+            exclude = " AND id != ?"
+            params.append(exclude_session_id)
+        cursor = self.db.execute(
+            """
+            UPDATE sessions
+            SET status='stale_closed',
+                ended_at=COALESCE(ended_at, ?),
+                summary=COALESCE(
+                    NULLIF(summary, ''),
+                    'Session closed automatically after inactivity.'
+                )
+            WHERE status='open' AND started_at < ?
+            """ + exclude,
+            params,
+        )
+        self.db.commit()
+        return int(cursor.rowcount or 0)
 
     def total_sessions(self):
         return self.db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
@@ -1388,13 +1502,16 @@ class Store:
             if not words:
                 return None
             fts_q = " OR ".join(self._fts_escape(w) for w in words)
-            rows = self.q("""
+            project_aliases = _resolve_project_aliases(self.db, project) or [project]
+            project_ph = ",".join("?" * len(project_aliases))
+            rows = self.q(f"""
                 SELECT k.id, k.content FROM knowledge_fts f
                 JOIN knowledge k ON k.id=f.rowid
-                WHERE f.content MATCH ? AND k.status='active' AND k.project=? AND k.type=?
+                WHERE f.content MATCH ? AND k.status='active'
+                  AND k.project IN ({project_ph}) AND k.type=?
                   AND k.agent_namespace=?
                 ORDER BY rank LIMIT 5
-            """, (fts_q, project, ktype, agent_namespace))
+            """, (fts_q, *project_aliases, ktype, agent_namespace))
             for row in rows:
                 if self._jaccard(content, row["content"]) > 0.85:
                     return row["id"]
@@ -1471,6 +1588,7 @@ class Store:
                               agent_id=None, parent_agent_id=None, agent_namespace=None,
                               _from_outbox=False):
         """Underlying implementation; wrapped by `save_knowledge` for telemetry."""
+        project = _canonical_project_name(project) or "general"
         now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         agent_namespace = resolve_agent_namespace(agent_namespace)
 
@@ -2467,23 +2585,37 @@ class Store:
                     "UPDATE rules SET fail_count=fail_count+1, updated_at=? WHERE id=?",
                     (now, rid))
             self.db.commit()
-            # Recalculate success_rate
+            # Unrated fires are coverage gaps, not failures. Effectiveness is
+            # computed only from explicit success/failure ratings.
             self.db.execute(
-                "UPDATE rules SET success_rate=CASE WHEN fire_count>0 "
-                "THEN CAST(success_count AS REAL)/CAST(fire_count AS REAL) "
+                "UPDATE rules SET success_rate=CASE "
+                "WHEN (success_count + fail_count)>0 "
+                "THEN CAST(success_count AS REAL)"
+                "/CAST(success_count + fail_count AS REAL) "
                 "ELSE 0.0 END WHERE id=?", (rid,))
             self.db.commit()
             rec = self.q1("SELECT * FROM rules WHERE id=?", (rid,))
+            rated_count = (
+                int(rec["success_count"] or 0) + int(rec["fail_count"] or 0)
+                if rec else 0
+            )
+            fire_count = int(rec["fire_count"] or 0) if rec else 0
+            rating_coverage = (
+                rated_count / fire_count if fire_count > 0 else 0.0
+            )
             # Auto-suspend ineffective rules
-            if rec and rec["fire_count"] >= 10 and rec["success_rate"] < 0.2:
+            if rec and rated_count >= 10 and rec["success_rate"] < 0.2:
                 self.db.execute(
                     "UPDATE rules SET status='suspended', updated_at=? WHERE id=?",
                     (now, rid))
                 self.db.commit()
                 return {"rated": True, "auto_suspended": True,
-                        "reason": "success_rate < 0.2 after 10+ fires"}
+                        "reason": "success_rate < 0.2 after 10+ rated outcomes",
+                        "success_rate": rec["success_rate"],
+                        "rating_coverage": rating_coverage}
             return {"rated": True, "id": rid,
-                    "success_rate": rec["success_rate"] if rec else None}
+                    "success_rate": rec["success_rate"] if rec else None,
+                    "rating_coverage": rating_coverage}
 
         elif action == "suspend":
             self.db.execute("UPDATE rules SET status='suspended', updated_at=? WHERE id=?",
@@ -3283,6 +3415,74 @@ class Store:
 # Retrieval
 # ═══════════════════════════════════════════════════════════
 
+_AUTO_GRAPH_EXPAND_FAMILIES = ("causal", "temporal")
+
+
+@dataclass(frozen=True)
+class _GraphExpandDecision:
+    apply: bool
+    reason: str
+    graph_families: list[str]
+    edge_families: list[str] | None
+
+
+def _env_truthy(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _classification_graph_families(router_classification) -> list[str]:
+    if router_classification is None:
+        return []
+    families = getattr(router_classification, "graph_families", None) or []
+    out: list[str] = []
+    for family in families:
+        value = str(family).strip().lower()
+        if value and value not in out:
+            out.append(value)
+    return out
+
+
+def _auto_graph_edge_families(families: list[str]) -> list[str]:
+    return [family for family in families if family != "semantic"]
+
+
+def _graph_expand_decision(
+    *,
+    has_graph_expand: bool,
+    ranked_count: int,
+    explicit_expand_context: bool,
+    router_classification,
+) -> _GraphExpandDecision:
+    families = _classification_graph_families(router_classification)
+
+    if not has_graph_expand:
+        return _GraphExpandDecision(False, "skipped_disabled", families, [])
+    if ranked_count <= 0:
+        return _GraphExpandDecision(False, "skipped_no_seed_results", families, [])
+    if explicit_expand_context:
+        return _GraphExpandDecision(True, "explicit_expand_context", families, None)
+    if not _env_truthy("MEMORY_GRAPH_EXPAND", "0"):
+        return _GraphExpandDecision(False, "skipped_disabled", families, [])
+    if router_classification is None:
+        return _GraphExpandDecision(False, "skipped_semantic", families, [])
+
+    kind = str(getattr(router_classification, "kind", "") or "").lower()
+    edge_families = _auto_graph_edge_families(families)
+
+    if kind == "relational":
+        return _GraphExpandDecision(True, "auto_relational", families, edge_families)
+    for family in _AUTO_GRAPH_EXPAND_FAMILIES:
+        if family in families:
+            return _GraphExpandDecision(True, f"auto_{family}", families, edge_families)
+    if "entity" in families:
+        return _GraphExpandDecision(False, "skipped_entity_only", families, [])
+    if families == ["procedural"]:
+        return _GraphExpandDecision(False, "skipped_procedural_only", families, [])
+    return _GraphExpandDecision(False, "skipped_semantic", families, [])
+
+
 class Recall:
     def __init__(self, store: Store):
         self.s = store
@@ -3353,7 +3553,8 @@ class Recall:
 
     def search(self, query, project=None, ktype="all", limit=10, detail="full", branch=None, fusion="rrf",
                rerank=False, diverse=False, embedding_space=None, agent_namespace=None,
-               agent_namespaces=None, scope=None, _explain=False):
+               agent_namespaces=None, scope=None, expand_context=False, expand_budget=None,
+               phase=None, _explain=False):
         # v11 Phase 5 — total wall-clock for this search; recorded into
         # `memory_core.telemetry.counters['search_total_ms']`.
         try:
@@ -3369,13 +3570,16 @@ class Recall:
                 query, project=project, ktype=ktype, limit=limit, detail=detail,
                 branch=branch, fusion=fusion, rerank=rerank, diverse=diverse,
                 embedding_space=embedding_space, agent_namespace=agent_namespace,
-                agent_namespaces=agent_namespaces, scope=scope, _explain=_explain,
+                agent_namespaces=agent_namespaces, scope=scope,
+                expand_context=expand_context, expand_budget=expand_budget,
+                phase=phase, _explain=_explain,
             )
 
     def _search_impl(self, query, project=None, ktype="all", limit=10, detail="full",
                      branch=None, fusion="rrf", rerank=False, diverse=False,
                      embedding_space=None, agent_namespace=None, agent_namespaces=None,
-                     scope=None, _explain=False):
+                     scope=None, expand_context=False, expand_budget=None,
+                     phase=None, _explain=False):
         """Underlying implementation; wrapped by `search` for telemetry.
 
         v11 Phase 6b — `embedding_space` (str | list[str] | None) filters
@@ -3388,6 +3592,10 @@ class Recall:
         per-tier breakdowns; this is the data path used by the
         `memory_explain_search` MCP tool.
         """
+        project = _canonical_project_name(project) or None
+        phase = str(phase or "").strip().lower() or None
+        project_aliases = _resolve_project_aliases(self.s.db, project)
+
         # Normalize embedding_space param to a sorted list[str] (or None).
         if embedding_space is None or embedding_space == "":
             _v11_spaces: list[str] | None = None
@@ -3415,6 +3623,23 @@ class Recall:
                 value = row["agent_namespace"] if "agent_namespace" in keys else "codex"
             return _normalise_agent_namespace(value) in namespace_filter
 
+        allowed_project_keys = {
+            _project_identity_key(value)
+            for value in (project_aliases or [project])
+        }
+
+        def _project_allows(row) -> bool:
+            if project is None:
+                return True
+            if row is None:
+                return False
+            try:
+                value = row.get("project", "")
+            except AttributeError:
+                keys = row.keys() if hasattr(row, "keys") else []
+                value = row["project"] if "project" in keys else ""
+            return _project_identity_key(value) in allowed_project_keys
+
         def _drop_namespace_disallowed():
             if namespace_filter is None:
                 return
@@ -3429,12 +3654,32 @@ class Recall:
             for tier_name, ranked_ids in list(tier_rankings.items()):
                 tier_rankings[tier_name] = [kid for kid in ranked_ids if kid not in dropped]
 
+        def _drop_project_disallowed():
+            if project is None:
+                return
+            dropped = {
+                kid for kid, item in results.items()
+                if not _project_allows(item.get("r"))
+            }
+            if not dropped:
+                return
+            for kid in dropped:
+                results.pop(kid, None)
+            for tier_name, ranked_ids in list(tier_rankings.items()):
+                tier_rankings[tier_name] = [kid for kid in ranked_ids if kid not in dropped]
+
         # v9 A2 L1: fast-path query cache. Keyed by full filter set so that
         # different projects / ktypes / branches / spaces don't collide.
         _v9 = getattr(self.s, "v9_cache", None)
         _v9_filters = {
             "project": project, "ktype": ktype, "detail": detail, "branch": branch,
             "fusion": fusion, "rerank": rerank, "diverse": diverse,
+            "expand_context": str(bool(expand_context)),
+            "expand_budget": str(expand_budget or ""),
+            "phase": phase,
+            "graph_expand": os.environ.get("MEMORY_GRAPH_EXPAND", "0"),
+            "relevance_gate": os.environ.get("MEMORY_RECALL_RELEVANCE_GATE", "1"),
+            "min_coverage": os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25"),
             # v11 Phase 6b — embedding_space affects candidate pool, must be in cache key.
             "embedding_space": ",".join(_v11_spaces) if _v11_spaces else None,
             "agent_namespaces": ",".join(namespace_filter) if namespace_filter else "*",
@@ -3451,6 +3696,12 @@ class Recall:
             cache_key = self.s.cache.make_key(query=query, project=project, ktype=ktype,
                                                limit=limit, detail=detail, branch=branch,
                                                fusion=fusion, rerank=rerank, diverse=diverse,
+                                               expand_context=str(bool(expand_context)),
+                                               expand_budget=str(expand_budget or ""),
+                                               phase=phase,
+                                               graph_expand=os.environ.get("MEMORY_GRAPH_EXPAND", "0"),
+                                               relevance_gate=os.environ.get("MEMORY_RECALL_RELEVANCE_GATE", "1"),
+                                               min_coverage=os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25"),
                                                embedding_space=",".join(_v11_spaces) if _v11_spaces else None,
                                                agent_namespaces=",".join(namespace_filter) if namespace_filter else "*")
             cached = self.s.cache.get(cache_key)
@@ -3495,9 +3746,10 @@ class Recall:
             conds = ["knowledge_fts MATCH ?", "k.status='active'"]
             params = [fts_q]
             joins = ""
-            if project:
-                conds.append("k.project=?")
-                params.append(project)
+            if project_aliases:
+                ph = ",".join("?" * len(project_aliases))
+                conds.append(f"k.project IN ({ph})")
+                params.extend(project_aliases)
             if ktype != "all":
                 conds.append("k.type=?")
                 params.append(ktype)
@@ -3553,7 +3805,8 @@ class Recall:
             if embs:
                 try:
                     candidates = self.s._binary_search(
-                        embs[0], n_candidates=50, project=project, n_results=limit * 3,
+                        embs[0], n_candidates=50, project=project_aliases,
+                        n_results=limit * 3,
                         embedding_spaces=_v11_spaces)
                     for kid, cos_sim in candidates:
                         score = max(0, cos_sim)
@@ -3576,7 +3829,8 @@ class Recall:
                         hyde_emb = hyde_expand(query, project)
                         if hyde_emb:
                             candidates2 = self.s._binary_search(
-                                hyde_emb, n_candidates=50, project=project, n_results=limit * 2,
+                                hyde_emb, n_candidates=50, project=project_aliases,
+                                n_results=limit * 2,
                                 embedding_spaces=_v11_spaces)
                             for kid, cos_sim in candidates2:
                                 score = max(0, cos_sim) * 0.8
@@ -3601,8 +3855,8 @@ class Recall:
                 # Build where filter — merge project + embedding_space when set.
                 # v11 Phase 6b — Chroma uses {"$in": [...]} for multi-value filters.
                 _w_clauses: list[dict] = [{"status": "active"}]
-                if project:
-                    _w_clauses.append({"project": project})
+                if project_aliases:
+                    _w_clauses.append({"project": {"$in": project_aliases}})
                 if _v11_spaces:
                     _w_clauses.append({"embedding_space": {"$in": _v11_spaces}})
                 if len(_w_clauses) == 1:
@@ -3676,7 +3930,8 @@ class Recall:
                     q_emb = q_emb_list[0] if q_emb_list else None
                 if q_emb:
                     repr_hits, repr_winners = search_with_winners(
-                        self.s.db, q_emb, project=project, n_candidates=100, top_n=limit * 3
+                        self.s.db, q_emb, project=project_aliases,
+                        n_candidates=100, top_n=limit * 3
                     )
                     if repr_hits:
                         repr_tier: list[tuple[int, float]] = []
@@ -3711,9 +3966,10 @@ class Recall:
             try:
                 conds2 = ["k.status='active'"]
                 params2 = []
-                if project:
-                    conds2.append("k.project=?")
-                    params2.append(project)
+                if project_aliases:
+                    ph = ",".join("?" * len(project_aliases))
+                    conds2.append(f"k.project IN ({ph})")
+                    params2.extend(project_aliases)
                 if ktype != "all":
                     conds2.append("k.type=?")
                     params2.append(ktype)
@@ -3795,10 +4051,12 @@ class Recall:
                         return None
                     v = vecs[0]
                     return v if v is not None else None
-                ep_hits = retrieve_episodes(
-                    self.s.db, query, project,
-                    k=max(5, limit // 2), embed_fn=ep_embed,
-                )
+                ep_hits = []
+                for ep_project in (project_aliases or [None]):
+                    ep_hits.extend(retrieve_episodes(
+                        self.s.db, query, ep_project,
+                        k=max(5, limit // 2), embed_fn=ep_embed,
+                    ))
                 for hit in ep_hits:
                     fact_ids = list(getattr(hit, "fact_ids", ()) or ())
                     if not fact_ids:
@@ -3810,7 +4068,8 @@ class Recall:
                                 "SELECT * FROM knowledge WHERE id=? AND status='active'",
                                 (fid,),
                             ).fetchone()
-                            if row is None or not _namespace_allows(row):
+                            if (row is None or not _namespace_allows(row)
+                                    or not _project_allows(row)):
                                 continue
                             ep_score = base * (1.0 / (1 + rank))
                             results[fid] = {"r": dict(row), "score": ep_score, "via": ["episode"]}
@@ -3840,6 +4099,7 @@ class Recall:
         # that hold value for forensics but inflate recall noise. They remain
         # accessible via the dedicated ``memory_search_by_tag`` path.
         _drop_namespace_disallowed()
+        _drop_project_disallowed()
 
         try:
             from config import get_recall_excluded_tags
@@ -3947,8 +4207,7 @@ class Recall:
                 hl = get_parent_half_life_days()
                 item["half_life_days"] = hl
             decay = Store._decay_factor(lc, hl)
-            recall_boost = min(0.3, (item["r"].get("recall_count", 0) or 0) * 0.05)
-            item["decay_factor"] = decay + recall_boost
+            item["decay_factor"] = decay
             # v10 — importance boost (defaults to neutral 1.0 for legacy rows
             # without the column or with NULL/unknown values).
             imp = (item["r"].get("importance") or "medium").lower()
@@ -3980,9 +4239,7 @@ class Recall:
                 hl = get_repr_half_life_days(item["matched_repr"])
             else:
                 hl = get_parent_half_life_days()
-            decay = Store._decay_factor(lc, hl)
-            recall_boost = min(0.3, (item["r"].get("recall_count", 0) or 0) * 0.05)
-            return decay + recall_boost
+            return Store._decay_factor(lc, hl)
 
         # ── Score fusion: RRF or legacy ──
         if use_rrf and tier_rankings:
@@ -4085,6 +4342,69 @@ class Recall:
             except Exception as e:
                 LOG(f"MMR diversify failed, using original order: {e}")
 
+        relevance_gate_applied = False
+        relevance_gate_reason = "skipped_no_candidates"
+        relevance_gate_best_coverage = 0.0
+        relevance_gate_filtered_count = 0
+        try:
+            relevance_gate_threshold = float(
+                os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25")
+            )
+        except (TypeError, ValueError):
+            relevance_gate_threshold = 0.25
+        relevance_gate_threshold = min(1.0, max(0.0, relevance_gate_threshold))
+        coverage_terms: list[str] = []
+
+        try:
+            from recall_modes import _query_coverage, _query_coverage_terms
+
+            coverage_terms = _query_coverage_terms(original_query)
+            project_term_keys = {
+                term.lower()
+                for alias in (project_aliases or [project])
+                for term in _query_coverage_terms(str(alias or ""))
+            }
+            if project_term_keys:
+                coverage_terms = [
+                    term for term in coverage_terms
+                    if term.lower() not in project_term_keys
+                ]
+
+            def _attach_raw_relevance(item):
+                row = item.get("r") or {}
+                coverage, matched_terms = _query_coverage(
+                    row,
+                    content=str(row.get("content", "") or ""),
+                    summary="",
+                    query_terms=coverage_terms,
+                )
+                item["query_coverage"] = coverage
+                item["matched_query_terms"] = matched_terms
+                return coverage
+
+            if not _env_truthy("MEMORY_RECALL_RELEVANCE_GATE", "1"):
+                relevance_gate_reason = "skipped_disabled"
+            elif not ranked:
+                relevance_gate_reason = "skipped_no_candidates"
+            elif not coverage_terms:
+                relevance_gate_reason = "skipped_no_terms"
+            else:
+                relevance_gate_applied = True
+                kept = []
+                for item in ranked:
+                    coverage = _attach_raw_relevance(item)
+                    relevance_gate_best_coverage = max(
+                        relevance_gate_best_coverage, coverage
+                    )
+                    if coverage >= relevance_gate_threshold:
+                        kept.append(item)
+                relevance_gate_filtered_count = len(ranked) - len(kept)
+                ranked = kept
+                relevance_gate_reason = "passed" if ranked else "below_minimum"
+        except Exception as e:
+            relevance_gate_reason = "skipped_error"
+            LOG(f"relevance gate skipped: {e}")
+
         # v10 — Smart query router. For relational questions ("who worked
         # on X with Y", "связь между X и Y"), inject knowledge rows reached
         # via the episodic graph alongside the regular hybrid hits. The
@@ -4097,15 +4417,20 @@ class Recall:
             router_classification = _qr_router.classify_query(query)
             if (router_classification.kind == "relational"
                     and router_classification.entities):
-                graph_rows = _qr_router.graph_search(
-                    self.s.db,
-                    entities=router_classification.entities,
-                    project=project,
-                    limit=max(5, limit),
-                    agent_namespace=agent_namespace,
-                    agent_namespaces=agent_namespaces,
-                    scope=scope,
-                )
+                graph_rows_by_id = {}
+                for graph_project in (project_aliases or [None]):
+                    for graph_row in _qr_router.graph_search(
+                        self.s.db,
+                        entities=router_classification.entities,
+                        project=graph_project,
+                        limit=max(5, limit),
+                        agent_namespace=agent_namespace,
+                        agent_namespaces=agent_namespaces,
+                        scope=scope,
+                    ):
+                        if _project_allows(graph_row):
+                            graph_rows_by_id.setdefault(graph_row.get("id"), graph_row)
+                graph_rows = list(graph_rows_by_id.values())
                 if graph_rows:
                     existing_ids = {item["r"]["id"] for item in ranked}
                     base_score = (
@@ -4139,22 +4464,36 @@ class Recall:
 
         # Stage 6.5 (optional): Graph expansion — add 1-hop neighbours
         # of the top-K to help multi-hop questions. Neighbours get a
-        # penalised score (0.5× min of the top score) so they never
+        # capped score (0.5x of the top score by default) so they never
         # outrank primary hits.
-        if (HAS_GRAPH_EXPAND
-                and os.environ.get("MEMORY_GRAPH_EXPAND", "0") == "1"
-                and len(ranked) > 0):
+        graph_decision = _graph_expand_decision(
+            has_graph_expand=HAS_GRAPH_EXPAND,
+            ranked_count=len(ranked),
+            explicit_expand_context=bool(expand_context),
+            router_classification=router_classification,
+        )
+        graph_expand_applied = False
+
+        if graph_decision.apply:
             try:
                 seed_ids = [item["r"]["id"] for item in ranked[:limit]]
                 existing_ids = {item["r"]["id"] for item in ranked}
+                budget = (
+                    int(expand_budget)
+                    if expand_budget is not None
+                    else max(1, limit)
+                )
                 neighbours = _graph_expand(
                     self.s.db,
                     seed_ids,
-                    budget=max(1, limit),
+                    budget=max(1, budget),
+                    edge_families=graph_decision.edge_families,
+                    project=project_aliases,
                     agent_namespace=agent_namespace,
                     agent_namespaces=agent_namespaces,
                     scope=scope,
                 )
+                graph_expand_applied = True
                 new_kids = [kid for kid, _ in neighbours if kid not in existing_ids]
                 if new_kids:
                     new_id_set = set(new_kids)
@@ -4171,9 +4510,18 @@ class Recall:
                         }
                         max_graph = max(graph_scores.values(), default=1.0) or 1.0
                         boost = float(os.environ.get("MEMORY_GRAPH_EXPAND_BOOST", "1.1"))
+                        try:
+                            max_ratio = float(
+                                os.environ.get("MEMORY_GRAPH_EXPAND_MAX_RATIO", "0.5")
+                            )
+                        except (TypeError, ValueError):
+                            max_ratio = 0.5
+                        max_ratio = min(1.0, max(0.0, max_ratio))
+                        score_ceiling = max_primary * max_ratio
                         for row in rows:
                             graph_score = graph_scores.get(row.get("id"), 0.0)
-                            fused_score = max_primary * (graph_score / max_graph) * boost
+                            boosted_score = max_primary * (graph_score / max_graph) * boost
+                            fused_score = max(0.0, min(boosted_score, score_ceiling))
                             ranked.append({
                                 "r": row,
                                 "score": fused_score,
@@ -4187,7 +4535,17 @@ class Recall:
                         )
                         ranked = ranked[:limit]
             except Exception as e:
+                graph_expand_applied = False
                 LOG(f"graph_expand failed, keeping original ranked: {e}")
+
+        if coverage_terms:
+            for item in ranked:
+                if "query_coverage" not in item:
+                    try:
+                        _attach_raw_relevance(item)
+                    except Exception:
+                        item["query_coverage"] = 0.0
+                        item["matched_query_terms"] = []
 
         returned_ids = [item["r"]["id"] for item in ranked]
         if returned_ids:
@@ -4220,11 +4578,14 @@ class Recall:
                     "project": r.get("project", ""),
                     "agent_namespace": r.get("agent_namespace", "codex"),
                     "score": round(item["score"], 3),
+                    "via": list(item.get("via", [])),
                     "importance": importance,
                     "created_at": r.get("created_at", ""),
                 }
                 if "rrf_score" in item:
                     entry["rrf_score"] = round(item["rrf_score"], 6)
+                entry["query_coverage"] = round(item.get("query_coverage", 0.0), 3)
+                entry["matched_query_terms"] = list(item.get("matched_query_terms", []))
                 est = Store._estimate_tokens(json.dumps(entry))
                 entry["_tokens"] = est
                 total_tokens += est
@@ -4234,6 +4595,7 @@ class Recall:
                 context = ""
                 entry = {
                     "id": r["id"], "content": content, "context": context,
+                    "type": t,
                     "project": r.get("project", ""), "tags": tags,
                     "agent_namespace": r.get("agent_namespace", "codex"),
                     "confidence": r.get("confidence", 1.0),
@@ -4245,6 +4607,8 @@ class Recall:
                 }
                 if "rrf_score" in item:
                     entry["rrf_score"] = round(item["rrf_score"], 6)
+                entry["query_coverage"] = round(item.get("query_coverage", 0.0), 3)
+                entry["matched_query_terms"] = list(item.get("matched_query_terms", []))
                 est = Store._estimate_tokens(json.dumps(entry))
                 entry["_tokens"] = est
                 total_tokens += est
@@ -4268,6 +4632,7 @@ class Recall:
                         _v11_es = None
                 entry = {
                     "id": r["id"], "content": content, "context": context,
+                    "type": t,
                     "project": r.get("project", ""), "tags": tags,
                     "agent_namespace": r.get("agent_namespace", "codex"),
                     "confidence": r.get("confidence", 1.0),
@@ -4281,6 +4646,8 @@ class Recall:
                 }
                 if "rrf_score" in item:
                     entry["rrf_score"] = round(item["rrf_score"], 6)
+                entry["query_coverage"] = round(item.get("query_coverage", 0.0), 3)
+                entry["matched_query_terms"] = list(item.get("matched_query_terms", []))
                 est = Store._estimate_tokens(json.dumps(entry))
                 entry["_tokens"] = est
                 total_tokens += est
@@ -4288,6 +4655,21 @@ class Recall:
 
         result = {"query": query, "total": len(ranked), "detail": detail,
                   "fusion": fusion, "total_tokens": total_tokens, "results": grouped}
+        result["graph_expand_applied"] = graph_expand_applied
+        result["graph_expand_reason"] = graph_decision.reason
+        result["graph_expand_families"] = graph_decision.graph_families
+        result["relevance_gate_applied"] = relevance_gate_applied
+        result["relevance_gate_reason"] = relevance_gate_reason
+        result["relevance_gate_threshold"] = round(relevance_gate_threshold, 3)
+        result["relevance_gate_best_coverage"] = round(
+            relevance_gate_best_coverage, 3
+        )
+        result["relevance_gate_filtered_count"] = relevance_gate_filtered_count
+        if project is not None:
+            result["project_canonical"] = project
+            result["project_aliases"] = list(project_aliases or [project])
+        if phase is not None:
+            result["phase"] = phase
         if namespace_filter is None:
             result["agent_scope"] = "all_agents"
         else:
@@ -4302,6 +4684,7 @@ class Recall:
         if router_classification is not None:
             result["routed_via"] = router_classification.kind
             result["routed_signals"] = router_classification.signals
+            result["routed_graph_families"] = router_classification.graph_families
             if router_classification.entities:
                 result["routed_entities"] = router_classification.entities
 
@@ -4311,6 +4694,12 @@ class Recall:
             cache_key = self.s.cache.make_key(query=query, project=project, ktype=ktype,
                                                limit=limit, detail=detail, branch=branch,
                                                fusion=fusion, rerank=rerank, diverse=diverse,
+                                               expand_context=str(bool(expand_context)),
+                                               expand_budget=str(expand_budget or ""),
+                                               phase=phase,
+                                               graph_expand=os.environ.get("MEMORY_GRAPH_EXPAND", "0"),
+                                               relevance_gate=os.environ.get("MEMORY_RECALL_RELEVANCE_GATE", "1"),
+                                               min_coverage=os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25"),
                                                embedding_space=",".join(_v11_spaces) if _v11_spaces else None,
                                                agent_namespaces=",".join(namespace_filter) if namespace_filter else "*")
             self.s.cache.put(cache_key, result, project=project)
@@ -4431,8 +4820,20 @@ class Recall:
         superseded = s.db.execute("SELECT COUNT(*) FROM knowledge WHERE status='superseded'").fetchone()[0]
         by_type = dict(s.db.execute(
             "SELECT type,COUNT(*) FROM knowledge WHERE status='active' GROUP BY type").fetchall())
-        by_project = dict(s.db.execute(
-            "SELECT project,COUNT(*) FROM knowledge WHERE status='active' GROUP BY project").fetchall())
+        raw_project_counts = s.db.execute(
+            "SELECT project,COUNT(*) FROM knowledge "
+            "WHERE status='active' GROUP BY project"
+        ).fetchall()
+        by_project: dict[str, int] = {}
+        project_labels: dict[str, str] = {}
+        for raw_project, count in raw_project_counts:
+            key = _project_identity_key(raw_project)
+            label = _canonical_project_name(raw_project) or "general"
+            if key not in project_labels:
+                project_labels[key] = label
+            by_project[project_labels[key]] = (
+                by_project.get(project_labels[key], 0) + int(count)
+            )
 
         # Health metrics
         stale = s.db.execute("""
@@ -4521,9 +4922,13 @@ class Recall:
             ).fetchone()[0]
         except Exception:
             enrich_count = 0
+        session_status = dict(s.db.execute(
+            "SELECT status,COUNT(*) FROM sessions GROUP BY status"
+        ).fetchall())
 
         return {
             "sessions": s.total_sessions(),
+            "session_status": session_status,
             "knowledge": {
                 "active": active,
                 "archived": archived,
@@ -4589,6 +4994,14 @@ class Recall:
     def _si_stats(s):
         """Self-improvement stats (safe: returns empty if tables missing)."""
         try:
+            rule_rated = int(s.db.execute(
+                "SELECT COALESCE(SUM(success_count+fail_count),0) "
+                "FROM rules WHERE status='active'"
+            ).fetchone()[0] or 0)
+            rule_fires = int(s.db.execute(
+                "SELECT COALESCE(SUM(fire_count),0) "
+                "FROM rules WHERE status='active'"
+            ).fetchone()[0] or 0)
             return {
                 "errors": {
                     "total": s.db.execute("SELECT COUNT(*) FROM errors").fetchone()[0],
@@ -4606,8 +5019,24 @@ class Recall:
                     "active": s.db.execute("SELECT COUNT(*) FROM rules WHERE status='active'").fetchone()[0],
                     "suspended": s.db.execute("SELECT COUNT(*) FROM rules WHERE status='suspended'").fetchone()[0],
                     "avg_success_rate": round(
-                        s.db.execute("SELECT AVG(success_rate) FROM rules WHERE status='active' AND fire_count>0").fetchone()[0] or 0, 2),
+                        s.db.execute(
+                            "SELECT AVG(success_rate) FROM rules "
+                            "WHERE status='active' AND (success_count+fail_count)>0"
+                        ).fetchone()[0] or 0, 2),
+                    "rated_outcomes": s.db.execute(
+                        "SELECT COALESCE(SUM(success_count+fail_count),0) "
+                        "FROM rules WHERE status='active'"
+                    ).fetchone()[0],
+                    "fires": s.db.execute(
+                        "SELECT COALESCE(SUM(fire_count),0) "
+                        "FROM rules WHERE status='active'"
+                    ).fetchone()[0],
+                    "rating_coverage": round(
+                        rule_rated / rule_fires, 4
+                    ) if rule_fires else 0.0,
                 },
+                "workflows": __import__("procedural").ProceduralMemory(s.db).stats(),
+                "skills": _get_v5("skills", s.db).stats(),
             }
         except Exception:
             return {}
@@ -6279,21 +6708,80 @@ def _cleanup_eval_records(record_ids: list[int]) -> int:
     if not ids:
         return 0
     qmarks = ",".join("?" for _ in ids)
+    linked_node_ids: list[str] = []
     removed = 0
+
+    def _table_exists(table: str) -> bool:
+        return store.db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?",
+            (table,),
+        ).fetchone() is not None
+
+    def _delete(table: str, where: str, params: list[int]) -> None:
+        if not _table_exists(table):
+            return
+        store.db.execute(f"DELETE FROM {table} WHERE {where}", params)
+
+    if _table_exists("knowledge_nodes"):
+        linked_node_ids = [
+            str(row[0])
+            for row in store.db.execute(
+                f"SELECT DISTINCT node_id FROM knowledge_nodes "
+                f"WHERE knowledge_id IN ({qmarks})",
+                ids,
+            ).fetchall()
+            if row[0]
+        ]
+
     try:
-        removed += int(store.db.execute(
-            f"DELETE FROM knowledge_fts WHERE rowid IN ({qmarks})", ids,
-        ).rowcount or 0)
-    except Exception:
-        pass
-    try:
+        store.db.execute("BEGIN")
+        for table in (
+            "knowledge_representations",
+            "knowledge_enrichment",
+            "embeddings",
+            "knowledge_nodes",
+            "episode_facts",
+            "enrichment_queue",
+            "representations_queue",
+            "triple_extraction_queue",
+            "deep_enrichment_queue",
+        ):
+            _delete(table, f"knowledge_id IN ({qmarks})", ids)
+        _delete(
+            "relations",
+            f"from_id IN ({qmarks}) OR to_id IN ({qmarks})",
+            [*ids, *ids],
+        )
+        _delete(
+            "contradiction_log",
+            f"new_knowledge_id IN ({qmarks}) OR candidate_knowledge_id IN ({qmarks})",
+            [*ids, *ids],
+        )
+        _delete("knowledge_fts", f"rowid IN ({qmarks})", ids)
         cur = store.db.execute(
             f"DELETE FROM knowledge WHERE id IN ({qmarks})", ids,
         )
-        removed = max(removed, int(cur.rowcount or 0))
+        removed = int(cur.rowcount or 0)
+
+        if linked_node_ids and _table_exists("graph_nodes"):
+            node_marks = ",".join("?" for _ in linked_node_ids)
+            store.db.execute(
+                f"DELETE FROM graph_nodes "
+                f"WHERE id IN ({node_marks}) "
+                "AND NOT EXISTS ("
+                "  SELECT 1 FROM knowledge_nodes kn WHERE kn.node_id=graph_nodes.id"
+                ") "
+                "AND NOT EXISTS ("
+                "  SELECT 1 FROM graph_edges ge "
+                "  WHERE ge.source_id=graph_nodes.id OR ge.target_id=graph_nodes.id"
+                ")",
+                linked_node_ids,
+            )
         store.db.commit()
     except Exception as exc:
+        store.db.rollback()
         LOG(f"eval cleanup failed: {exc}")
+        return 0
     try:
         if store.chroma is not None:
             store.chroma.delete(ids=[str(rid) for rid in ids])
@@ -6333,13 +6821,21 @@ async def _do(name, a):
         # neighbours. Underlying search runs at "full" detail regardless of the
         # caller's detail= for those modes.
         search_detail = "full" if mode_param != "search" else detail_param
+        requested_limit = int(a.get("limit", 10))
+        search_limit = requested_limit
+        if mode_param == "rag":
+            search_limit = max(requested_limit * 4, 20)
+
         result = recall.search(a["query"], a.get("project"), a.get("type", "all"),
-                               a.get("limit", 10), search_detail,
+                               search_limit, search_detail,
                                a.get("branch"), a.get("fusion", "rrf"),
                                a.get("rerank", False), a.get("diverse", False),
                                agent_namespace=a.get("agent_namespace"),
                                agent_namespaces=a.get("agent_namespaces"),
-                               scope=a.get("scope"))
+                               scope=a.get("scope"),
+                               expand_context=a.get("expand_context", False),
+                               expand_budget=a.get("expand_budget"),
+                               phase=a.get("phase"))
         if a.get("detail") == "auto":
             result["auto_detail"] = detail_param
 
@@ -6409,50 +6905,6 @@ async def _do(name, a):
                     result["cognitive"] = enrichment
             except Exception as e:
                 LOG(f"CognitiveEngine enrichment error: {e}")
-
-        # Optional graph-based context expansion (1-hop neighbors).
-        # Also skipped for index/timeline modes (callers opt-in to lightweight output).
-        if mode_param == "search" and a.get("expand_context"):
-            try:
-                from context_expander import ContextExpander
-
-                seed_ids: list[int] = []
-                for group in result.get("results", {}).values():
-                    for item in group:
-                        kid = item.get("id")
-                        if isinstance(kid, int):
-                            seed_ids.append(kid)
-                if seed_ids:
-                    expander = ContextExpander(store.db)
-                    extra_ids = expander.expand(
-                        seed_ids=seed_ids,
-                        budget=int(a.get("expand_budget", 5)),
-                        depth=1,
-                    )
-                    if extra_ids:
-                        placeholders = ",".join("?" * len(extra_ids))
-                        rows = store.db.execute(
-                            f"SELECT id, type, content, project, tags, created_at "
-                            f"FROM knowledge WHERE id IN ({placeholders})",
-                            extra_ids,
-                        ).fetchall()
-                        expansion: list[dict] = []
-                        for r in rows:
-                            expansion.append(
-                                {
-                                    "id": r["id"],
-                                    "type": r["type"],
-                                    "content": r["content"],
-                                    "project": r["project"],
-                                    "tags": r["tags"],
-                                    "created_at": r["created_at"],
-                                    "via": ["graph_expansion"],
-                                }
-                            )
-                        if expansion:
-                            result["expansion"] = expansion
-            except Exception as e:
-                LOG(f"Context expansion error: {e}")
 
         # Structured-decisions-only filter (v8.0): narrow to type=decision
         # with the 'structured' tag and attach parsed schema payload.
@@ -6589,7 +7041,9 @@ async def _do(name, a):
             })
         # Invalidate cache on write
         if store.cache is not None:
-            store.cache.invalidate(project=a.get("project"))
+            store.cache.invalidate(
+                project=_canonical_project_name(a.get("project")) or None
+            )
         # v9 A2: drop L1 query cache wholesale on write — cheap + correct.
         if getattr(store, "v9_cache", None) is not None:
             store.v9_cache.invalidate_all()
@@ -6597,6 +7051,7 @@ async def _do(name, a):
             "saved": True,
             "id": rid,
             "deduplicated": was_dedup,
+            "project": _canonical_project_name(a.get("project", "general")) or "general",
             "agent_namespace": resolve_agent_namespace(a.get("agent_namespace")),
         }
         if was_redacted:
@@ -7093,15 +7548,19 @@ async def _do(name, a):
 
     elif name == "memory_skill_get":
         ss = _get_v5("skills", store.db)
+        sync = ss.sync_installed()
         if a.get("name"):
             skill = ss.get_by_name(a["name"])
-            return J({"skill": skill} if skill else {"error": "Skill not found"})
+            return J(
+                {"skill": skill, "sync": sync}
+                if skill else {"error": "Skill not found", "sync": sync}
+            )
         if a.get("list_all"):
-            return J({"skills": ss.get_all()})
+            return J({"skills": ss.get_all(), "sync": sync})
         if a.get("trigger"):
             matches = ss.match_trigger(a["trigger"])
-            return J({"skills": matches, "total": len(matches)})
-        return J({"skills": ss.get_all()})
+            return J({"skills": matches, "total": len(matches), "sync": sync})
+        return J({"skills": ss.get_all(), "sync": sync})
 
     elif name == "memory_skill_update":
         ss = _get_v5("skills", store.db)
@@ -7109,7 +7568,7 @@ async def _do(name, a):
         if a.get("new_steps") or a.get("new_anti_pattern"):
             ss.refine(a["skill_id"], new_steps=a.get("new_steps"),
                       new_anti_pattern=a.get("new_anti_pattern"))
-        skill = ss.get(a["skill_id"])
+        skill = ss.get(a["skill_id"]) or ss.get_by_name(a["skill_id"])
         return J({"updated": True, "use_id": use_id, "skill": skill})
 
     elif name == "memory_self_assess":
@@ -7523,6 +7982,14 @@ async def _do(name, a):
                 }
         except Exception as e:
             report["embedding_cache_hot_path_error"] = str(e)
+        try:
+            from recall_monitor import summarize_log as _summarize_recall_log
+            report["recall_effectiveness_7d"] = _summarize_recall_log(
+                days=7,
+                recent_limit=0,
+            )
+        except Exception as e:
+            report["recall_effectiveness_error"] = str(e)
         # Optional benchmark snapshot from docs/v11/benchmark.md.
         try:
             from pathlib import Path as _P

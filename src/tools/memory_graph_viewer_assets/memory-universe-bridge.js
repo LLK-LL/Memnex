@@ -1,6 +1,6 @@
-const bundlePath = "./memory-universe-3d/memory-universe-viewer.js?v=20260706-state5-rendering";
-const max3DNodes = 420;
-const max3DEdges = 220;
+const bundlePath = "./memory-universe-3d/memory-universe-viewer.js?v=20260712-solar-surface-switch";
+const knowledgeSolarPath = "./knowledge-solar-system/index.html?viewerBase=";
+const max3DRenderEdges = 400;
 const supportedMemoryCategories = new Set([
   "rule",
   "system_constraint",
@@ -31,6 +31,7 @@ export function initMemoryUniverse3DCoexistence(options) {
   const threeDStage = document.getElementById("memoryUniverse3d");
   const twoDButton = document.getElementById("viewMode2d");
   const threeDButton = document.getElementById("viewMode3d");
+  const solarButton = document.getElementById("universe3dSolar");
   const observatoryButton = document.getElementById("universe3dObservatory");
   const spaceshipButton = document.getElementById("universe3dSpaceship");
   const resetButton = document.getElementById("universe3dReset");
@@ -40,15 +41,18 @@ export function initMemoryUniverse3DCoexistence(options) {
   }
 
   let activeView = "2d";
+  let activeSurface = "knowledgeSolar";
+  let activeSolarMode = "observatory";
   let viewer = null;
   let viewerModule = null;
+  let solarFrame = null;
   let latestGraph = convertGalaxyToMemoryUniverseGraph(options.getGraph());
+  let latestRenderGraph = graphFor3DRender(latestGraph);
   let hoverPreview = null;
   let canvasHost = null;
   let navigationPanel = null;
   let navigationSearchInput = null;
   let navigationResults = null;
-  let renderSettingsPanel = null;
   let minimapPanel = null;
   let minimapDots = null;
   let unavailableReason = null;
@@ -57,23 +61,30 @@ export function initMemoryUniverse3DCoexistence(options) {
   let navigationCollapsed = false;
   let minimapAnimationFrame = null;
   let lastMinimapSignature = "";
+  let pendingMode = null;
 
   sync3DGraphDiagnostics();
   twoDButton.addEventListener("click", () => setActiveView("2d"));
-  threeDButton.addEventListener("click", () => setActiveView("3d"));
-  observatoryButton?.addEventListener("click", () => {
-    viewer?.dispatchIntent({ type: "switchMode", mode: "observatory" });
+  threeDButton.addEventListener("click", activateKnowledgeSolar);
+  solarButton?.addEventListener("click", activateKnowledgeSolar);
+  observatoryButton?.addEventListener("click", async () => {
+    const mounted = await activateKnowledgeSolar();
+    if (!mounted) return;
+    postKnowledgeSolarCommand({ type: "knowledgeSolar:setMode", mode: "observatory" });
   });
-  spaceshipButton?.addEventListener("click", () => {
-    viewer?.dispatchIntent({ type: "switchMode", mode: "spaceship" });
+  spaceshipButton?.addEventListener("click", async () => {
+    const mounted = await activateKnowledgeSolar();
+    if (!mounted) return;
+    postKnowledgeSolarCommand({ type: "knowledgeSolar:setMode", mode: "flyThrough" });
   });
-  resetButton?.addEventListener("click", () => {
-    viewer?.dispatchIntent({ type: "clearFocus" });
-    viewer?.dispatchIntent({ type: "clearSelection" });
-    viewer?.dispatchIntent({ type: "switchMode", mode: "observatory" });
+  resetButton?.addEventListener("click", async () => {
+    const mounted = await activateKnowledgeSolar();
+    if (!mounted) return;
+    postKnowledgeSolarCommand({ type: "knowledgeSolar:centerReset" });
   });
 
   syncViewChrome();
+  window.addEventListener("message", handleKnowledgeSolarMessage);
   window.__memoryUniverse3DDebug = {
     refreshMinimap() {
       lastMinimapSignature = "";
@@ -82,6 +93,7 @@ export function initMemoryUniverse3DCoexistence(options) {
     getFramingSnapshot() {
       return viewer?.getFramingSnapshot?.() || null;
     },
+    getGraphSummary,
   };
 
   return {
@@ -89,9 +101,10 @@ export function initMemoryUniverse3DCoexistence(options) {
       threeDStage.dataset.memoryUniverseRawNodes = String(galaxyGraph?.nodes?.length || 0);
       threeDStage.dataset.memoryUniverseRawEdges = String(galaxyGraph?.links?.length || 0);
       latestGraph = convertGalaxyToMemoryUniverseGraph(galaxyGraph);
+      latestRenderGraph = graphFor3DRender(latestGraph);
       sync3DGraphDiagnostics();
       if (viewer) {
-        viewer.updateGraph(latestGraph);
+        viewer.updateGraph(latestRenderGraph);
         viewer.selectNode(readSelectedNodeId(options.getSelectedNodeId()));
         if (activeView === "3d") applyCurrent2DFocusTo3D();
         renderNavigationPanel();
@@ -119,20 +132,48 @@ export function initMemoryUniverse3DCoexistence(options) {
   async function setActiveView(view) {
     activeView = view;
     if (view === "3d") {
-      const mounted = await mount3D();
+      const mounted = activeSurface === "knowledgeSolar" ? mountKnowledgeSolar() : await mount3D();
       if (!mounted) {
         activeView = "2d";
-      } else {
+      } else if (activeSurface === "memoryUniverse") {
         applyCurrent2DFocusTo3D();
       }
     }
     syncViewChrome();
+    return activeView === view;
+  }
+
+  async function activateKnowledgeSolar() {
+    activeSurface = "knowledgeSolar";
+    const mounted = await setActiveView("3d");
+    if (!mounted) return;
+    postKnowledgeSolarCommand({ type: "knowledgeSolar:setMode", mode: activeSolarMode });
+    syncSurfaceButtons("knowledgeSolar");
+    return true;
+  }
+
+  function mountKnowledgeSolar() {
+    if (solarFrame?.isConnected) {
+      return true;
+    }
+    destroyMemoryUniverseViewer();
+    threeDStage.replaceChildren();
+    solarFrame = document.createElement("iframe");
+    solarFrame.className = "knowledge-solar-frame";
+    solarFrame.title = "Knowledge Solar System";
+    solarFrame.src = `${knowledgeSolarPath}${encodeURIComponent("../..")}`;
+    solarFrame.setAttribute("allow", "camera; fullscreen");
+    threeDStage.append(solarFrame);
+    unavailableReason = null;
+    return true;
   }
 
   async function mount3D() {
     if (viewer) {
       return true;
     }
+    solarFrame?.remove();
+    solarFrame = null;
     if (!canUseWebGL()) {
       unavailableReason = "3D Universe unavailable: WebGL or GPU support is not available.";
       renderUnavailable(unavailableReason);
@@ -144,19 +185,18 @@ export function initMemoryUniverse3DCoexistence(options) {
       canvasHost = document.createElement("div");
       canvasHost.className = "memory-universe-canvas-host";
       navigationPanel = createNavigationPanel();
-      renderSettingsPanel = createRenderSettingsPanel();
       minimapPanel = createProjectedMinimap();
       hoverPreview = document.createElement("div");
       hoverPreview.className = "memory-universe-hover";
       hoverPreview.hidden = true;
-      threeDStage.append(canvasHost, navigationPanel, renderSettingsPanel, minimapPanel, hoverPreview);
+      threeDStage.append(canvasHost, navigationPanel, minimapPanel, hoverPreview);
       viewer = viewerModule.createMemoryUniverseViewer({
         container: canvasHost,
-        graph: latestGraph,
+        graph: latestRenderGraph,
         options: {
           initialMode: "observatory",
           initialFocus: resolveCurrent2DFocusTarget() || undefined,
-          initialQualityProfile: "Balanced",
+          initialQualityProfile: "Performance",
         },
         onSelectNode(node) {
           if (suppressSelectionCallback) return;
@@ -165,16 +205,16 @@ export function initMemoryUniverse3DCoexistence(options) {
         onStateChange(state) {
           renderHoverPreview(state.hoverSummary, state.selectedObject);
           renderNavigationPanel(state);
-          renderRenderSettingsPanel();
           renderProjectedMinimap();
-          syncModeButtons(state.mode);
+          syncModeButtons(resolveDisplayedMode(state.mode));
+          syncSurfaceButtons(state.surface);
         },
       });
       viewer.selectNode(readSelectedNodeId(options.getSelectedNodeId()));
       renderNavigationPanel();
-      renderRenderSettingsPanel();
       renderProjectedMinimap();
-      syncModeButtons(viewer.getMode?.() || "observatory");
+      syncModeButtons(resolveDisplayedMode(viewer.getMode?.() || "observatory"));
+      syncSurfaceButtons(viewer.getState?.().surface || "memoryUniverse");
       unavailableReason = null;
       return true;
     } catch (error) {
@@ -183,6 +223,37 @@ export function initMemoryUniverse3DCoexistence(options) {
       viewer = null;
       return false;
     }
+  }
+
+  function destroyMemoryUniverseViewer() {
+    viewer?.destroy?.();
+    viewer = null;
+    canvasHost = null;
+    navigationPanel = null;
+    navigationSearchInput = null;
+    navigationResults = null;
+    minimapPanel = null;
+    minimapDots = null;
+    hoverPreview = null;
+  }
+
+  function handleKnowledgeSolarMessage(event) {
+    if (event.origin !== window.location.origin || event.source !== solarFrame?.contentWindow) {
+      return;
+    }
+    const message = event.data;
+    if (!message || message.type !== "knowledgeSolar:selectNode") {
+      return;
+    }
+    options.onSelectNode?.(typeof message.nodeId === "string" ? message.nodeId : null);
+  }
+
+  function postKnowledgeSolarCommand(command) {
+    if (command.type === "knowledgeSolar:setMode") {
+      activeSolarMode = command.mode;
+    }
+    syncSurfaceButtons("knowledgeSolar");
+    solarFrame?.contentWindow?.postMessage(command, window.location.origin);
   }
 
   function syncViewChrome() {
@@ -200,8 +271,26 @@ export function initMemoryUniverse3DCoexistence(options) {
   }
 
   function syncModeButtons(mode) {
-    observatoryButton?.classList.toggle("is-active", mode === "observatory");
-    spaceshipButton?.classList.toggle("is-active", mode === "spaceship");
+    observatoryButton?.classList.toggle("is-active", activeSurface === "knowledgeSolar" && activeSolarMode === "observatory");
+    spaceshipButton?.classList.toggle("is-active", activeSurface === "knowledgeSolar" && activeSolarMode === "flyThrough");
+  }
+
+  function syncSurfaceButtons(surface = "memoryUniverse") {
+    solarButton?.classList.toggle("is-active", surface === "knowledgeSolar");
+    observatoryButton?.classList.toggle("is-active", surface === "knowledgeSolar" && activeSolarMode === "observatory");
+    spaceshipButton?.classList.toggle("is-active", surface === "knowledgeSolar" && activeSolarMode === "flyThrough");
+  }
+
+  function setPendingMode(mode) {
+    pendingMode = mode;
+    syncModeButtons(mode);
+  }
+
+  function resolveDisplayedMode(mode) {
+    if (pendingMode && mode === pendingMode) {
+      pendingMode = null;
+    }
+    return pendingMode || mode;
   }
 
   function sync3DGraphDiagnostics() {
@@ -316,10 +405,12 @@ export function initMemoryUniverse3DCoexistence(options) {
       if (!target) return;
 
       const key = treeTargetKey(target);
-      if (target.type !== "planetarySystem") {
+      const canExpand = treeButton.querySelector(".memory-universe-tree-caret")?.textContent?.trim();
+      if (canExpand) {
         if (expandedTreeTargets.has(key)) expandedTreeTargets.delete(key);
         else expandedTreeTargets.add(key);
         renderNavigationPanel();
+        return;
       }
 
       viewer?.dispatchIntent({ type: "focus", target });
@@ -337,64 +428,6 @@ export function initMemoryUniverse3DCoexistence(options) {
     `;
     minimapDots = panel.querySelector(".minimap-dots");
     return panel;
-  }
-
-  function createRenderSettingsPanel() {
-    const panel = document.createElement("aside");
-    panel.className = "memory-universe-render-settings";
-    panel.setAttribute("aria-label", "3D render settings");
-    panel.innerHTML = `
-      <button type="button" class="memory-universe-render-toggle" aria-expanded="false">Render</button>
-      <div class="memory-universe-render-body" hidden>
-        <div class="memory-universe-render-profiles" role="group" aria-label="Render quality profile">
-          <button type="button" data-quality-profile="Performance">Performance</button>
-          <button type="button" data-quality-profile="Balanced">Balanced</button>
-          <button type="button" data-quality-profile="Cinematic">Cinematic</button>
-        </div>
-        <dl class="memory-universe-render-metrics">
-          <div><dt>FPS</dt><dd data-render-metric="fps">--</dd></div>
-          <div><dt>Effective</dt><dd data-render-metric="effective">Balanced</dd></div>
-          <div><dt>Status</dt><dd data-render-metric="status">Stable</dd></div>
-        </dl>
-        <div class="memory-universe-render-effects" aria-label="Active effects"></div>
-      </div>
-    `;
-    panel.addEventListener("click", event => {
-      const toggle = event.target.closest(".memory-universe-render-toggle");
-      if (toggle) {
-        const body = panel.querySelector(".memory-universe-render-body");
-        const expanded = body?.hidden;
-        if (body) body.hidden = !expanded;
-        toggle.setAttribute("aria-expanded", String(Boolean(expanded)));
-        return;
-      }
-
-      const profileButton = event.target.closest("button[data-quality-profile]");
-      if (!profileButton) return;
-      viewer?.setRenderQualityProfile?.(profileButton.dataset.qualityProfile);
-      renderRenderSettingsPanel();
-    });
-    return panel;
-  }
-
-  function renderRenderSettingsPanel() {
-    if (!renderSettingsPanel || !viewer?.getVisualPerformanceSnapshot) return;
-    const snapshot = viewer.getVisualPerformanceSnapshot();
-    renderSettingsPanel.querySelectorAll("button[data-quality-profile]").forEach(button => {
-      button.classList.toggle("is-active", button.dataset.qualityProfile === snapshot.preferredProfile);
-    });
-    const fps = renderSettingsPanel.querySelector('[data-render-metric="fps"]');
-    const effective = renderSettingsPanel.querySelector('[data-render-metric="effective"]');
-    const status = renderSettingsPanel.querySelector('[data-render-metric="status"]');
-    if (fps) fps.textContent = snapshot.fps === null ? "--" : String(Math.round(snapshot.fps));
-    if (effective) effective.textContent = snapshot.effectiveProfile;
-    if (status) status.textContent = snapshot.temporaryDegradation ? "Temporary Performance Step-down" : "Stable";
-    const effects = renderSettingsPanel.querySelector(".memory-universe-render-effects");
-    if (effects) {
-      effects.innerHTML = Object.entries(snapshot.effects)
-        .map(([name, enabled]) => `<span class="${enabled ? "is-on" : "is-off"}">${escapeHtml(labelize(name))}</span>`)
-        .join("");
-    }
   }
 
   function startProjectedMinimapLoop() {
@@ -656,6 +689,42 @@ export function initMemoryUniverse3DCoexistence(options) {
     }
     return grouped;
   }
+
+  function getGraphSummary() {
+    const nodeCountsByGalaxy = new Map();
+    const nodeCountsBySolarSystem = new Map();
+    const nodeCountsByPlanetarySystem = new Map();
+    for (const node of latestGraph.nodes) {
+      nodeCountsByGalaxy.set(node.galaxyId, (nodeCountsByGalaxy.get(node.galaxyId) || 0) + 1);
+      nodeCountsBySolarSystem.set(node.solarSystemId, (nodeCountsBySolarSystem.get(node.solarSystemId) || 0) + 1);
+      nodeCountsByPlanetarySystem.set(node.planetarySystemId, (nodeCountsByPlanetarySystem.get(node.planetarySystemId) || 0) + 1);
+    }
+    return {
+      rawNodes: Number(threeDStage.dataset.memoryUniverseRawNodes || 0),
+      rawEdges: Number(threeDStage.dataset.memoryUniverseRawEdges || 0),
+      nodes: latestGraph.nodes.length,
+      edges: latestGraph.edges.length,
+      renderNodes: latestRenderGraph.nodes.length,
+      renderEdges: latestRenderGraph.edges.length,
+      galaxies: latestGraph.hierarchy.galaxies.map(galaxy => ({
+        id: galaxy.id,
+        label: galaxy.label,
+        nodes: nodeCountsByGalaxy.get(galaxy.id) || 0,
+      })),
+      solarSystems: latestGraph.hierarchy.solarSystems.map(system => ({
+        id: system.id,
+        galaxyId: system.galaxyId,
+        label: system.label,
+        nodes: nodeCountsBySolarSystem.get(system.id) || 0,
+      })),
+      planetarySystems: latestGraph.hierarchy.planetarySystems.map(system => ({
+        id: system.id,
+        solarSystemId: system.solarSystemId,
+        label: system.label,
+        nodes: nodeCountsByPlanetarySystem.get(system.id) || 0,
+      })),
+    };
+  }
 }
 
 function createUnavailableBridge(reason) {
@@ -671,13 +740,12 @@ function createUnavailableBridge(reason) {
   };
 }
 
-function convertGalaxyToMemoryUniverseGraph(galaxy) {
+export function convertGalaxyToMemoryUniverseGraph(galaxy) {
   const galaxies = new Map();
   const solarSystems = new Map();
   const planetarySystems = new Map();
   const sourceNodes = [...(galaxy?.nodes || [])]
-    .sort((left, right) => scoreNodeFor3D(right) - scoreNodeFor3D(left))
-    .slice(0, max3DNodes);
+    .sort((left, right) => scoreNodeFor3D(right) - scoreNodeFor3D(left));
   const nodes = [];
 
   for (const node of sourceNodes) {
@@ -729,8 +797,7 @@ function convertGalaxyToMemoryUniverseGraph(galaxy) {
       const targetNodeId = String(link.target?.id || link.target || "");
       return nodeIds.has(sourceNodeId) && nodeIds.has(targetNodeId);
     })
-    .sort((left, right) => scoreEdgeFor3D(right) - scoreEdgeFor3D(left))
-    .slice(0, max3DEdges);
+    .sort((left, right) => scoreEdgeFor3D(right) - scoreEdgeFor3D(left));
   for (const [index, link] of sourceEdges.entries()) {
     const sourceNodeId = String(link.source?.id || link.source || "");
     const targetNodeId = String(link.target?.id || link.target || "");
@@ -753,6 +820,14 @@ function convertGalaxyToMemoryUniverseGraph(galaxy) {
     },
     nodes,
     edges,
+  };
+}
+
+function graphFor3DRender(graph) {
+  if (!graph || graph.edges.length <= max3DRenderEdges) return graph;
+  return {
+    ...graph,
+    edges: graph.edges.slice(0, max3DRenderEdges),
   };
 }
 

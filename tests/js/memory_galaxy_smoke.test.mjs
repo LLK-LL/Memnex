@@ -76,6 +76,17 @@ exports.renderPromptText = renderPromptText;`,
 );
 const { formatNodeDetails, timelineCutoffFromPercent, renderPromptText } = sharedContext.exports;
 
+const bridgeHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-universe-bridge.js");
+const bridgeHelperSource = readFileSync(bridgeHelperPath, "utf8").replaceAll("export function ", "function ");
+const bridgeContext = { exports: {} };
+vm.runInNewContext(
+  `${bridgeHelperSource}
+exports.convertGalaxyToMemoryUniverseGraph = convertGalaxyToMemoryUniverseGraph;`,
+  bridgeContext,
+  { filename: bridgeHelperPath },
+);
+const { convertGalaxyToMemoryUniverseGraph } = bridgeContext.exports;
+
 const systemsHelperPath = resolve("src/tools/memory_graph_viewer_assets/memory-galaxy-systems.js");
 const systemsHelperSource = readFileSync(systemsHelperPath, "utf8")
   .replaceAll("export const ", "const ")
@@ -144,6 +155,12 @@ exports.selectCometOverlay = selectCometOverlay;`,
 const { createGalaxyViewState, selectGalaxySystem, selectSolarPlanet, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank, selectCometOverlay } = viewStateContext.exports;
 
 const viewerSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/viewer.js"), "utf8");
+const indexSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/index.html"), "utf8");
+const bridgeSource = readFileSync(resolve("src/tools/memory_graph_viewer_assets/memory-universe-bridge.js"), "utf8");
+assert.match(indexSource, /id="universe3dSolar"/);
+assert.match(indexSource, /Knowledge Solar System Mode/);
+assert.match(indexSource, /viewer\.js\?v=20260716-solar-gesture-camera/);
+assert.match(indexSource, /memory-universe-viewer\.css\?v=20260712-solar-surface-switch/);
 assert.match(viewerSource, /enteredSolar/);
 assert.match(viewerSource, /enteredPlanet/);
 assert.doesNotMatch(viewerSource, /result\.entered(?!Solar|Planet)/);
@@ -151,6 +168,9 @@ assert.match(viewerSource, /window\.__tamAgentBridge/);
 assert.match(viewerSource, /surface: "memory-galaxy-2d"/);
 assert.match(viewerSource, /getCapabilities/);
 assert.match(viewerSource, /execute\(command, payload = \{\}\)/);
+assert.match(viewerSource, /let filteredUniverseGraph = \{ nodes: \[\], links: \[\], metadata: \{\} \};/);
+assert.match(viewerSource, /getGraph: \(\) => filteredUniverseGraph/);
+assert.match(viewerSource, /memoryUniverse3d\?\.updateGraph\(filteredUniverseGraph\);/);
 assert.match(viewerSource, /new CustomEvent\("tam:agent-event"/);
 assert.match(viewerSource, /"set-search"/);
 assert.match(viewerSource, /"select-node"/);
@@ -168,6 +188,12 @@ assert.match(viewerSource, /\["Agent galaxies", agentCount\]/);
 assert.match(viewerSource, /const BACKEND_PERF_SAMPLE_INTERVAL_MS = 3000;/);
 assert.match(viewerSource, /if \(document\.hidden\) return;/);
 assert.match(viewerSource, /now - perfState\.backendPerformanceAt < BACKEND_PERF_SAMPLE_INTERVAL_MS/);
+assert.match(viewerSource, /memory-universe-bridge\.js\?v=20260716-solar-gesture-camera/);
+assert.match(bridgeSource, /memory-universe-viewer\.js\?v=20260712-solar-surface-switch/);
+assert.match(bridgeSource, /knowledge-solar-system\/index\.html\?viewerBase=/);
+assert.match(bridgeSource, /document\.createElement\("iframe"\)/);
+assert.match(bridgeSource, /knowledgeSolar:selectNode/);
+assert.match(bridgeSource, /return activeView === view;/);
 const handleNodeTapSource = viewerSource.slice(
   viewerSource.indexOf("function handleNodeTap"),
   viewerSource.indexOf("function flyIntoEnteredView"),
@@ -211,14 +237,25 @@ const {
 } = rendererContext.exports;
 
 function createFakePixiRenderer() {
+  return createFakePixiHarness().renderer;
+}
+
+function createFakePixiHarness() {
   class FakeContainer {
     constructor() {
       this.children = [];
+      this.handlers = new Map();
       this.scale = { value: 1, set: value => { this.scale.value = value; } };
       this.position = { x: 0, y: 0, set: (x, y) => { this.position.x = x; this.position.y = y; } };
     }
     addChild(...children) {
       this.children.push(...children);
+    }
+    on(type, handler) {
+      this.handlers.set(type, handler);
+    }
+    emit(type, event) {
+      this.handlers.get(type)?.(event);
     }
   }
   const fakeApp = {
@@ -226,17 +263,31 @@ function createFakePixiRenderer() {
     tickerCallback: null,
   };
   fakeApp.ticker = { add: callback => { fakeApp.tickerCallback = callback; } };
-  return createMemoryGalaxyRenderer({
+  const stage = new FakeContainer();
+  const renderer = createMemoryGalaxyRenderer({
     PIXI: {
       Container: FakeContainer,
       Graphics: class {},
       Text: class {},
     },
     app: fakeApp,
-    stage: Object.assign(new FakeContainer(), {
-      on() {},
-    }),
+    stage,
   });
+  return { renderer, stage };
+}
+
+function fakePointerEvent({ x, y, button = 0, ctrlKey = false }) {
+  return {
+    button,
+    ctrlKey,
+    global: {
+      x,
+      y,
+      clone() {
+        return { x, y };
+      },
+    },
+  };
 }
 
 {
@@ -253,6 +304,22 @@ function createFakePixiRenderer() {
   assert.equal(arrived.pan.x, 380);
   assert.equal(arrived.pan.y, 304);
   assert.equal(cinematicRenderer.isCameraTransitionActive(), false);
+}
+
+{
+  const { renderer, stage } = createFakePixiHarness();
+  renderer.setTransform({ scale: 1, pan: { x: 0, y: 0 } });
+  stage.emit("pointerdown", fakePointerEvent({ x: 100, y: 100, button: 0, ctrlKey: true }));
+  stage.emit("pointermove", fakePointerEvent({ x: 145, y: 125, button: 0, ctrlKey: true }));
+  stage.emit("pointerup", fakePointerEvent({ x: 145, y: 125, button: 0, ctrlKey: true }));
+  assert.equal(renderer.getTransform().pan.x, 0);
+  assert.equal(renderer.getTransform().pan.y, 0);
+
+  stage.emit("pointerdown", fakePointerEvent({ x: 100, y: 100, button: 1 }));
+  stage.emit("pointermove", fakePointerEvent({ x: 145, y: 125, button: 1 }));
+  stage.emit("pointerup", fakePointerEvent({ x: 145, y: 125, button: 1 }));
+  assert.equal(renderer.getTransform().pan.x, 45);
+  assert.equal(renderer.getTransform().pan.y, 25);
 }
 
 const starsA = buildDeterministicStarfield("fixture", 4, { minX: 0, maxX: 10, minY: 0, maxY: 10 });
@@ -287,6 +354,41 @@ const galaxy = convertGraphToGalaxy(fixture);
 assert.equal(galaxy.nodes.length, 3);
 assert.equal(galaxy.links.length, 2);
 assert.equal(galaxy.nodes.find(node => node.id === "r1").layer, "core");
+
+{
+  const nodes = Array.from({ length: 460 }, (_, index) => {
+    const type = index % 2 === 0 ? "concept" : "rule";
+    const layer = index % 3 === 0 ? "core" : "knowledge";
+    const memorySystem = index % 5 === 0 ? "project" : "knowledge";
+    return {
+      id: `full:${index}`,
+      label: `Full Node ${index}`,
+      type,
+      layer,
+      memorySystem,
+      val: 18,
+      raw: {
+        type,
+        galaxy_layer: layer,
+        memory_system: memorySystem,
+        agent_namespace: "codex",
+        agent_label: "Codex",
+        importance: 0.5,
+        content: `Full node ${index}`,
+      },
+    };
+  });
+  const links = Array.from({ length: 459 }, (_, index) => ({
+    source: `full:${index}`,
+    target: `full:${index + 1}`,
+    relation: "related",
+    weight: 1,
+    raw: { id: `full-edge:${index}` },
+  }));
+  const universeGraph = convertGalaxyToMemoryUniverseGraph({ nodes, links, metadata: {} });
+  assert.equal(universeGraph.nodes.length, nodes.length);
+  assert.equal(universeGraph.edges.length, links.length);
+}
 
 {
   const multiAgentGraph = {

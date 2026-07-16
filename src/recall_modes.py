@@ -26,6 +26,20 @@ from typing import Any
 _TITLE_MAX = 80
 _RAG_SUMMARY_MAX = 220
 _RAG_DEDUPE_MAX = 180
+_RECALL_DIAGNOSTIC_KEYS = (
+    "graph_expand_applied",
+    "graph_expand_reason",
+    "graph_expand_families",
+    "routed_via",
+    "routed_graph_families",
+    "relevance_gate_applied",
+    "relevance_gate_reason",
+    "relevance_gate_threshold",
+    "relevance_gate_best_coverage",
+    "relevance_gate_filtered_count",
+    "project_canonical",
+    "project_aliases",
+)
 
 _FAILURE_TERMS = (
     "bug",
@@ -54,9 +68,63 @@ _PREFERENCE_TERMS = (
     "user preferences",
     "prefer",
     "prefers",
+    "default",
+    "defaults",
     "qr",
     "偏好",
     "用户偏好",
+    "默认",
+)
+
+_QUERY_COVERAGE_STOP_TERMS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "use",
+    "with",
+    "codex",
+    "codex++",
+    "config",
+    "configure",
+    "configured",
+    "configuration",
+    "mcp",
+    "memory",
+    "rag",
+    "template",
+    "templates",
+    "配置",
+    "模板",
+    "记忆",
+    "检索",
+}
+
+_QUERY_COVERAGE_LOW_SIGNAL_CJK_TERMS = {
+    "报告",
+    "项目",
+    "当前",
+    "更新",
+    "描述",
+    "方案",
+    "执行",
+    "问题",
+    "分析",
+}
+
+_QUERY_COVERAGE_TOKEN_RE = re.compile(
+    r"[A-Za-z][A-Za-z0-9_+\-./]{1,}|\d+(?:\.\d+)+|[\u4e00-\u9fff]{2,}"
 )
 
 
@@ -77,6 +145,12 @@ def _first_line(content: str, limit: int = _TITLE_MAX) -> str:
     if len(content) > limit:
         return content[:limit] + "..."
     return content
+
+
+def _copy_recall_diagnostics(source: dict[str, Any], target: dict[str, Any]) -> None:
+    for key in _RECALL_DIAGNOSTIC_KEYS:
+        if key in source:
+            target[key] = source[key]
 
 
 def _index_entry(item: dict[str, Any]) -> dict[str, Any]:
@@ -137,6 +211,7 @@ def index_response(search_result: dict[str, Any]) -> dict[str, Any]:
     for key in ("fusion", "tiers_used", "auto_detail"):
         if key in search_result:
             out[key] = search_result[key]
+    _copy_recall_diagnostics(search_result, out)
     return out
 
 
@@ -225,17 +300,97 @@ def _query_has_preference_intent(query: str) -> bool:
 def _query_terms(query: str) -> set[str]:
     return {
         t.lower()
-        for t in re.findall(r"[A-Za-z][A-Za-z0-9_+\-./]{1,}|[\u4e00-\u9fff]{2,}", query or "")
+        for t in _QUERY_COVERAGE_TOKEN_RE.findall(query or "")
     }
 
 
-def _rag_score(item: dict[str, Any], *, query: str, phase: str | None) -> tuple[float, bool, bool, bool]:
+def _query_coverage_terms(query: str) -> list[str]:
+    """Return high-signal query terms for precision reranking."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw_term in _QUERY_COVERAGE_TOKEN_RE.findall(query or ""):
+        term_key = raw_term.lower()
+        if term_key in _QUERY_COVERAGE_STOP_TERMS:
+            continue
+        if re.fullmatch(r"[\u4e00-\u9fff]{2,}", raw_term):
+            if raw_term in _QUERY_COVERAGE_LOW_SIGNAL_CJK_TERMS:
+                continue
+            if raw_term.endswith("项目"):
+                continue
+            term = raw_term
+        elif re.fullmatch(r"\d+(?:\.\d+)+", raw_term):
+            term = raw_term
+        elif re.fullmatch(r"[A-Z][A-Z0-9]{1,3}", raw_term):
+            term = raw_term
+        elif re.search(r"[-_+./]", raw_term) or len(raw_term) >= 4:
+            term = term_key
+        else:
+            continue
+        if term.lower() in seen:
+            continue
+        seen.add(term.lower())
+        out.append(term)
+    return sorted(out, key=lambda value: value.lower())
+
+
+def _query_coverage(
+    item: dict[str, Any],
+    *,
+    content: str,
+    summary: str,
+    query_terms: list[str],
+) -> tuple[float, list[str]]:
+    if not query_terms:
+        return 0.0, []
+    tags = " ".join(_parse_tags(item.get("tags", [])))
+    haystack = " ".join(
+        str(part or "")
+        for part in (
+            content,
+            item.get("context", ""),
+            tags,
+        )
+    ).lower()
+    matched = [
+        term for term in query_terms
+        if _query_coverage_term_matches(term, haystack)
+    ]
+    return len(matched) / len(query_terms), matched
+
+
+def _query_coverage_term_matches(term: str, haystack: str) -> bool:
+    term_key = term.lower()
+    if re.search(r"[\u4e00-\u9fff]", term_key):
+        return term_key in haystack
+    return bool(
+        re.search(
+            rf"(?<![A-Za-z0-9_]){re.escape(term_key)}(?![A-Za-z0-9_])",
+            haystack,
+        )
+    )
+
+
+def _rag_score(
+    item: dict[str, Any],
+    *,
+    query: str,
+    phase: str | None,
+    content: str = "",
+    summary: str = "",
+    coverage_terms: list[str] | None = None,
+) -> tuple[float, bool, bool, bool, float, list[str]]:
     base = float(item.get("rrf_score", item.get("score", 0.0)) or 0.0)
     ktype = str(item.get("type", "") or "").lower()
     tags = [t.lower() for t in _parse_tags(item.get("tags", []))]
     failure = _query_has_failure_intent(query)
     preference = _query_has_preference_intent(query)
     phase_match = bool(phase and f"phase:{phase}".lower() in tags)
+    coverage, matched_terms = _query_coverage(
+        item,
+        content=content,
+        summary=summary,
+        query_terms=coverage_terms or [],
+    )
 
     if failure:
         if ktype in {"solution", "lesson"}:
@@ -261,9 +416,17 @@ def _rag_score(item: dict[str, Any], *, query: str, phase: str | None) -> tuple[
             base *= 1.15
         elif is_governance:
             base *= 0.82
+        elif has_user_preference:
+            base *= 0.95
+        else:
+            base *= 0.75
     if phase_match:
         base *= 1.15
-    return base, failure, phase_match, preference
+    if coverage:
+        base *= 1.0 + (0.45 * coverage)
+        if coverage >= 0.999:
+            base *= 1.25
+    return base, failure, phase_match, preference, coverage, matched_terms
 
 
 def rag_response(
@@ -288,6 +451,7 @@ def rag_response(
     effective_query = query or search_result.get("query", "")
     failure_intent = _query_has_failure_intent(effective_query)
     preference_intent = _query_has_preference_intent(effective_query)
+    coverage_terms = _query_coverage_terms(effective_query)
     for item in hits:
         kid = item.get("id")
         if not isinstance(kid, int):
@@ -303,7 +467,14 @@ def rag_response(
         if not key:
             key = f"id:{kid}"
 
-        score, _failure, phase_match, preference_match = _rag_score(item, query=effective_query, phase=phase)
+        score, _failure, phase_match, preference_match, coverage, matched_terms = _rag_score(
+            item,
+            query=effective_query,
+            phase=phase,
+            content=content,
+            summary=summary,
+            coverage_terms=coverage_terms,
+        )
         entry = {
             "id": kid,
             "title": _first_line(content, _TITLE_MAX),
@@ -311,6 +482,7 @@ def rag_response(
             "summary_source": source,
             "type": item.get("type", ""),
             "project": item.get("project", ""),
+            "via": item.get("via", []),
             "score": round(score, 6),
             "importance": item.get("importance", "medium"),
             "created_at": item.get("created_at", ""),
@@ -318,6 +490,8 @@ def rag_response(
             "duplicate_count": 1,
             "phase_match": phase_match,
             "preference_match": preference_match,
+            "query_coverage": round(coverage, 3),
+            "matched_query_terms": matched_terms,
         }
         if "rrf_score" in item:
             entry["rrf_score"] = item.get("rrf_score")
@@ -343,7 +517,7 @@ def rag_response(
         entry["_tokens"] = est
         total_tokens += est
 
-    return {
+    out = {
         "query": search_result.get("query"),
         "mode": "rag",
         "total": len(entries),
@@ -360,6 +534,8 @@ def rag_response(
         },
         "results": entries,
     }
+    _copy_recall_diagnostics(search_result, out)
+    return out
 
 
 # ── timeline mode ─────────────────────────────────────────────
@@ -533,4 +709,5 @@ def timeline_response(
     for key in ("fusion", "tiers_used"):
         if key in search_result:
             out[key] = search_result[key]
+    _copy_recall_diagnostics(search_result, out)
     return out

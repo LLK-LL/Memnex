@@ -349,8 +349,19 @@ class ProceduralMemory:
                 {'JOIN workflows w ON w.id = wr.workflow_id WHERE w.project = ?' if project else ''}""",
             params,
         ).fetchone()[0]
+        tracked_workflows = cur.execute(
+            f"""SELECT COUNT(*) FROM workflows
+                WHERE times_run > 0 {' AND project = ?' if project else ''}""",
+            params,
+        ).fetchone()[0]
+        untracked_workflows = max(0, total_wf - tracked_workflows)
         return {
             "total_workflows": total_wf,
             "active_workflows": active_wf,
             "total_runs": total_runs,
+            "tracked_workflows": tracked_workflows,
+            "untracked_workflows": untracked_workflows,
+            "execution_coverage": round(
+                tracked_workflows / total_wf, 4
+            ) if total_wf else 0.0,
         }

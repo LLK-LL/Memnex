@@ -210,7 +210,7 @@ def test_query_aware_rules_context_returns_always_on_plus_relevant_top_k(monkeyp
     contents = [x["content"] for x in r["rules"]]
     joined = "\n".join(contents)
     assert r["rules_count"] == 3
-    assert r["query_filter"]["strategy"] == "always_on_plus_query_top_k"
+    assert r["query_filter"]["strategy"] == "always_on_plus_trigger_semantic_top_k"
     assert "remove secrets and tokens" in joined
     assert "Rule layer recall" in joined
     assert "Memory iteration" in joined
@@ -234,6 +234,115 @@ def test_query_aware_rules_context_can_skip_always_on(monkeypatch, store):
     contents = [x["content"] for x in r["rules"]]
     assert contents == ["Rule layer recall ranks memory governance rules by query."]
     assert r["query_filter"]["always_on_count"] == 0
+
+
+def test_query_aware_rules_context_exact_tag_match_outranks_generic_rules(monkeypatch, store):
+    monkeypatch.setattr(store, "embed", lambda texts: None)
+    for idx in range(25):
+        _add_rule(
+            store,
+            f"Memory governance generic routing rule {idx}.",
+            priority=10,
+            category="memory_governance",
+        )
+    qr_id = _add_rule(
+        store,
+        "When the user asks for code output format, provide terminal-safe output.",
+        priority=1,
+        tags=["qr", "\u4e8c\u7ef4\u7801", "output-format"],
+        category="output_format",
+    )
+
+    r = store.get_rules_for_context(
+        project="myproj",
+        query="QR memory governance routing",
+        top_k=1,
+    )
+
+    assert r["rules_count"] == 1
+    assert r["rules"][0]["id"] == qr_id
+    assert r["query_filter"]["candidate_count"] == 26
+    assert r["query_filter"]["contextual_count"] == 1
+    assert r["query_filter"]["trigger_matches"] == [
+        {"rule_id": qr_id, "matched": ["qr"], "source": "tags"}
+    ]
+
+
+def test_query_aware_rules_context_trigger_matches_count_toward_limit(monkeypatch, store):
+    monkeypatch.setattr(store, "embed", lambda texts: None)
+    banana_id = _add_rule(
+        store,
+        "When the user says banana for slides, route to the presentation workflow.",
+        priority=2,
+        tags=["banana", "ppt", "presentation"],
+        category="skill_routing",
+    )
+    _add_rule(
+        store,
+        "Memory governance generic routing rule.",
+        priority=10,
+        category="memory_governance",
+    )
+
+    r = store.get_rules_for_context(
+        project="myproj",
+        query="banana memory governance",
+        top_k=1,
+    )
+
+    assert r["rules_count"] == 1
+    assert r["rules"][0]["id"] == banana_id
+    assert r["query_filter"]["contextual_count"] == 1
+    assert r["query_filter"]["contextual_limit"] == 1
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_tag"),
+    [
+        ("Igor remote work", "igor"),
+        ("banana slides", "banana"),
+        ("\u4e8c\u7ef4\u7801 output", "\u4e8c\u7ef4\u7801"),
+    ],
+)
+def test_query_aware_rules_context_returns_explicit_trigger_rules(
+    monkeypatch,
+    store,
+    query,
+    expected_tag,
+):
+    monkeypatch.setattr(store, "embed", lambda texts: None)
+    rule_ids = {
+        "igor": _add_rule(
+            store,
+            "When the user mentions Igor, use the remote Codex workflow.",
+            priority=2,
+            tags=["igor", "remote-codex-cli", "skill-routing"],
+        ),
+        "banana": _add_rule(
+            store,
+            "When the user says banana, route slide work to banana-ppt-workflow.",
+            priority=2,
+            tags=["banana", "ppt", "presentation"],
+        ),
+        "\u4e8c\u7ef4\u7801": _add_rule(
+            store,
+            "When the user asks for a QR code, provide command-line output.",
+            priority=2,
+            tags=["qr", "\u4e8c\u7ef4\u7801", "output-format"],
+        ),
+    }
+    _add_rule(
+        store,
+        "Memory governance generic routing rule.",
+        priority=10,
+        category="memory_governance",
+    )
+
+    r = store.get_rules_for_context(project="myproj", query=query, top_k=1)
+
+    assert r["rules_count"] == 1
+    assert r["rules"][0]["id"] == rule_ids[expected_tag]
+    assert r["query_filter"]["trigger_matches"][0]["matched"] == [expected_tag]
 
 
 def test_rule_set_phase_adds_tag_or_column(store):

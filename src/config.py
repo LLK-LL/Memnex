@@ -381,12 +381,31 @@ def get_status() -> dict:
     """Snapshot for dashboards / `memory_stats`."""
     avail = detect_ollama()
     model = get_llm_model()
+    installed_models = list_ollama_models() if avail else []
+    effective_model = resolve_ollama_model(model) if avail else model
+    fallback_active = bool(
+        avail and effective_model and effective_model != model
+        and effective_model in installed_models
+    )
+    if not avail:
+        model_policy = "ollama-unavailable"
+    elif has_model(model):
+        model_policy = "configured-model"
+    elif fallback_active and "MEMORY_LLM_MODEL" not in os.environ and len(installed_models) == 1:
+        model_policy = "single-installed-model-fallback"
+    elif fallback_active:
+        model_policy = "compatible-tag-fallback"
+    else:
+        model_policy = "configured-model-missing"
     return {
         "ollama_url": get_ollama_url(),
         "ollama_available": avail,
         "model_configured": model,
         "model_installed": has_model(model) if avail else False,
-        "installed_models": list_ollama_models() if avail else [],
+        "installed_models": installed_models,
+        "model_effective": effective_model,
+        "model_fallback_active": fallback_active,
+        "model_policy": model_policy,
         "llm_mode": get_llm_mode(),
         "llm_enabled": has_llm(),
     }

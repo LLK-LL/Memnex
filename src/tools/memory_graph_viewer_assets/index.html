@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Total Agent Memory Galaxy</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="styles.css?v=20260705-inspector-overlay-3">
-  <link rel="stylesheet" href="memory-universe-3d/memory-universe-viewer.css?v=20260704-1">
+  <link rel="stylesheet" href="styles.css?v=20260716-solar-bridge-controls">
+  <link rel="stylesheet" href="memory-universe-3d/memory-universe-viewer.css?v=20260712-solar-surface-switch">
   <script src="pixi.min.js?v=20260627-13"></script>
 </head>
 <body>
@@ -163,17 +163,18 @@
 
     <section class="galaxy-stage">
       <header class="stage-toolbar">
-        <button id="backView" type="button" class="icon-button" aria-label="Back">‹</button>
+        <button id="backView" type="button" class="icon-button" aria-label="Back">&lsaquo;</button>
         <button id="viewBadge" type="button" class="toolbar-pill">Galactic View</button>
         <label class="stage-search">
-          <span aria-hidden="true">⌕</span>
+          <span aria-hidden="true">&#8981;</span>
           <input id="stageSearchMirror" type="search" placeholder="Search memory galaxy...">
         </label>
         <div class="stage-toolbar-spacer"></div>
-        <button id="universe3dObservatory" type="button" class="icon-button universe-3d-control is-active" aria-label="Observatory Atlas Mode" title="Observatory Atlas Mode">O</button>
-        <button id="universe3dSpaceship" type="button" class="icon-button universe-3d-control" aria-label="Spaceship Cruise Mode" title="Spaceship Cruise Mode">S</button>
-        <button id="universe3dReset" type="button" class="icon-button universe-3d-control" aria-label="Reset 3D view" title="Reset 3D View">U</button>
-        <button id="fitTop" type="button" class="icon-button" aria-label="Fit view">⛶</button>
+        <button id="universe3dSolar" type="button" class="icon-button universe-3d-control" aria-label="Knowledge Solar System Mode" title="Knowledge Solar System Mode">K</button>
+        <button id="universe3dObservatory" type="button" class="icon-button universe-3d-control is-active" aria-label="Normal observation mode" title="Normal Observation Mode">O</button>
+        <button id="universe3dSpaceship" type="button" class="icon-button universe-3d-control" aria-label="Fly-through mode" title="Fly-through Mode">S</button>
+        <button id="universe3dReset" type="button" class="icon-button universe-3d-control" aria-label="Center and reset 3D view" title="Center and Reset 3D View">U</button>
+        <button id="fitTop" type="button" class="icon-button" aria-label="Fit view">&#9974;</button>
       </header>
 
       <section id="galaxy2d" class="galaxy-canvas" aria-label="2D memory galaxy">
@@ -215,6 +216,6 @@
       </div>
     </aside>
   </main>
-  <script type="module" src="viewer.js?v=20260705-inspector-overlay-3"></script>
+  <script type="module" src="viewer.js?v=20260716-solar-gesture-camera"></script>
 </body>
 </html>

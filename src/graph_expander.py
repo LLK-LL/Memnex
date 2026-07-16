@@ -122,6 +122,31 @@ def _knowledge_namespace_clause(
     return f" AND {alias}.agent_namespace IN ({placeholders})", list(namespace_filter)
 
 
+def _normalise_project_filter(
+    project: Iterable[str] | str | None,
+) -> list[str] | None:
+    if project is None:
+        return None
+    values = [project] if isinstance(project, str) else list(project)
+    return sorted({str(value).strip() for value in values if str(value).strip()})
+
+
+def _knowledge_project_clause(
+    db: sqlite3.Connection,
+    project: Iterable[str] | str | None,
+    alias: str = "k",
+) -> tuple[str, list]:
+    project_filter = _normalise_project_filter(project)
+    if project_filter is None:
+        return "", []
+    if not project_filter:
+        return " AND 1=0", []
+    if not _table_exists(db, "knowledge") or "project" not in _columns(db, "knowledge"):
+        return " AND 1=0", []
+    placeholders = ",".join("?" for _ in project_filter)
+    return f" AND {alias}.project IN ({placeholders})", project_filter
+
+
 def _as_int_list(ids: Iterable[int]) -> list[int]:
     out: list[int] = []
     for x in ids:
@@ -152,6 +177,7 @@ def expand_top_k(
     budget: int = 10,
     min_strength: float = 0.3,
     edge_families: list[str] | None = None,
+    project: Iterable[str] | str | None = None,
     agent_namespace: str | None = None,
     agent_namespaces: Iterable[str] | str | None = None,
     scope: str | None = None,
@@ -261,7 +287,8 @@ def expand_top_k(
     strength_select = f", {strength_col}" if strength_col else ", 1.0"
     namespace_join = ""
     namespace_clause, namespace_params = _knowledge_namespace_clause(db, namespace_filter, "k")
-    if namespace_clause:
+    project_clause, project_params = _knowledge_project_clause(db, project, "k")
+    if namespace_clause or project_clause:
         namespace_join = "JOIN knowledge k ON k.id = kn.knowledge_id"
     try:
         kn_rows = db.execute(
@@ -272,8 +299,9 @@ def expand_top_k(
             WHERE kn.node_id IN ({neigh_ph})
               AND kn.knowledge_id NOT IN ({placeholders})
               {namespace_clause}
+              {project_clause}
             """,
-            neigh_list + seeds + namespace_params,
+            neigh_list + seeds + namespace_params + project_params,
         ).fetchall()
     except sqlite3.Error as e:
         logger.warning("graph_expander: neighbor->knowledge map failed: %s", e)
@@ -301,7 +329,13 @@ def expand_top_k(
 
 
 def expand_via_associations(
-    db: sqlite3.Connection, seed_ids: list[int], budget: int = 10
+    db: sqlite3.Connection,
+    seed_ids: list[int],
+    budget: int = 10,
+    project: Iterable[str] | str | None = None,
+    agent_namespace: str | None = None,
+    agent_namespaces: Iterable[str] | str | None = None,
+    scope: str | None = None,
 ) -> list[tuple[int, float]]:
     """Expand via the 'associations'-like table.
 
@@ -311,6 +345,10 @@ def expand_via_associations(
     seeds = _as_int_list(seed_ids)
     if not seeds or budget <= 0:
         return []
+    namespace_filter = _resolve_agent_namespaces(
+        db, seeds, agent_namespace=agent_namespace,
+        agent_namespaces=agent_namespaces, scope=scope,
+    )
 
     if _table_exists(db, "associations"):
         table = "associations"
@@ -334,14 +372,29 @@ def expand_via_associations(
         return []
 
     placeholders = ",".join("?" for _ in seeds)
+    namespace_clause, namespace_params = _knowledge_namespace_clause(db, namespace_filter, "k")
+    project_clause, project_params = _knowledge_project_clause(db, project, "k")
+    knowledge_join_a = ""
+    knowledge_join_b = ""
+    if namespace_clause or project_clause:
+        knowledge_join_a = f"JOIN knowledge k ON k.id = rel.{b_col}"
+        knowledge_join_b = f"JOIN knowledge k ON k.id = rel.{a_col}"
+    candidate_clause = f"{namespace_clause}{project_clause}"
     try:
         rows = db.execute(
             f"""
-            SELECT {b_col} AS other FROM {table} WHERE {a_col} IN ({placeholders})
+            SELECT rel.{b_col} AS other
+            FROM {table} rel
+            {knowledge_join_a}
+            WHERE rel.{a_col} IN ({placeholders}) {candidate_clause}
             UNION ALL
-            SELECT {a_col} AS other FROM {table} WHERE {b_col} IN ({placeholders})
+            SELECT rel.{a_col} AS other
+            FROM {table} rel
+            {knowledge_join_b}
+            WHERE rel.{b_col} IN ({placeholders}) {candidate_clause}
             """,
-            seeds + seeds,
+            seeds + namespace_params + project_params
+            + seeds + namespace_params + project_params,
         ).fetchall()
     except sqlite3.Error as e:
         logger.warning("graph_expander: associations lookup failed: %s", e)
@@ -368,6 +421,7 @@ def expand(
     seed_ids: list[int],
     budget: int = 10,
     edge_families: list[str] | None = None,
+    project: Iterable[str] | str | None = None,
     agent_namespace: str | None = None,
     agent_namespaces: Iterable[str] | str | None = None,
     scope: str | None = None,
@@ -380,10 +434,15 @@ def expand(
     # Split budget generously then trim at the end.
     a = expand_top_k(
         db, seeds, budget=budget, edge_families=edge_families,
+        project=project,
         agent_namespace=agent_namespace, agent_namespaces=agent_namespaces,
         scope=scope,
     )
-    b = expand_via_associations(db, seeds, budget=budget)
+    b = expand_via_associations(
+        db, seeds, budget=budget, project=project,
+        agent_namespace=agent_namespace, agent_namespaces=agent_namespaces,
+        scope=scope,
+    )
 
     merged = _dedupe_merge(a + b, exclude=set(seeds))
     ranked = sorted(merged.items(), key=lambda p: p[1], reverse=True)[:budget]
@@ -396,6 +455,7 @@ def explain_expansion_paths(
     *,
     candidate_ids: list[int],
     edge_families: list[str] | None = None,
+    project: Iterable[str] | str | None = None,
     agent_namespace: str | None = None,
     agent_namespaces: Iterable[str] | str | None = None,
     scope: str | None = None,
@@ -422,7 +482,8 @@ def explain_expansion_paths(
     candidate_ph = ",".join("?" for _ in candidates)
     namespace_join = ""
     namespace_clause, namespace_params = _knowledge_namespace_clause(db, namespace_filter, "k")
-    if namespace_clause:
+    project_clause, project_params = _knowledge_project_clause(db, project, "k")
+    if namespace_clause or project_clause:
         namespace_join = "JOIN knowledge k ON k.id = ckn.knowledge_id"
     rows = db.execute(
         f"""
@@ -445,8 +506,9 @@ def explain_expansion_paths(
          WHERE skn.knowledge_id IN ({seed_ph})
            AND ckn.knowledge_id IN ({candidate_ph})
            {namespace_clause}
+           {project_clause}
         """,
-        seeds + candidates + namespace_params,
+        seeds + candidates + namespace_params + project_params,
     ).fetchall()
 
     out: dict[int, dict] = {}

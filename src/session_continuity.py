@@ -109,6 +109,18 @@ class SessionContinuity:
                 context_blob, started_at, now, now,
             ),
         )
+        try:
+            self.db.execute(
+                """
+                UPDATE sessions
+                SET ended_at=?, status='closed', summary=?
+                WHERE id=?
+                """,
+                (now, summary, session_id),
+            )
+        except sqlite3.Error as exc:
+            if "no such table" not in str(exc).lower():
+                raise
         self.db.commit()
 
         result: dict[str, Any] = {

@@ -120,6 +120,8 @@ def summarize_events(
         "by_layer": {},
         "verdicts": {},
         "proxy_hit_rate": None,
+        "retrieval_tiers": {},
+        "graph_result_rate": None,
         "recent": [],
     }
     by_type: dict[str, Counter] = defaultdict(Counter)
@@ -128,6 +130,9 @@ def summarize_events(
     hit_miss_total = 0
     hit_total = 0
     recent: list[dict[str, Any]] = []
+    retrieval_tiers: Counter = Counter()
+    memory_events = 0
+    graph_events = 0
 
     for event in events:
         if since is not None:
@@ -148,6 +153,20 @@ def summarize_events(
         by_layer[event_layer]["events"] += 1
         by_layer[event_layer][verdict] += 1
         verdicts[verdict] += 1
+        if event_layer == "memory_layer":
+            memory_events += 1
+            event_has_graph = False
+            for item in event.get("top_results") or []:
+                via = item.get("via") or []
+                if isinstance(via, str):
+                    via = [via]
+                for tier in via:
+                    tier_name = str(tier)
+                    retrieval_tiers[tier_name] += 1
+                    if tier_name in {"graph", "graph_expand"}:
+                        event_has_graph = True
+            if event_has_graph:
+                graph_events += 1
         if verdict in {"likely_hit", "likely_miss"}:
             hit_miss_total += 1
             if verdict == "likely_hit":
@@ -160,6 +179,9 @@ def summarize_events(
     totals["by_type"] = {k: dict(v) for k, v in sorted(by_type.items())}
     totals["by_layer"] = {k: dict(v) for k, v in sorted(by_layer.items())}
     totals["verdicts"] = dict(verdicts)
+    totals["retrieval_tiers"] = dict(retrieval_tiers)
+    if memory_events:
+        totals["graph_result_rate"] = round(graph_events / memory_events, 4)
     totals["recent"] = recent
     if hit_miss_total:
         totals["proxy_hit_rate"] = round(hit_total / hit_miss_total, 4)
@@ -208,6 +230,7 @@ def render_markdown(summary: dict[str, Any]) -> str:
         f"- Layer: {summary.get('layer_filter', 'all')}",
         f"- Events: {summary.get('events', 0)}",
         f"- Proxy hit rate: {_format_rate(summary.get('proxy_hit_rate'))}",
+        f"- Graph result rate: {_format_rate(summary.get('graph_result_rate'))}",
         f"- Log: `{summary.get('log_path', '')}`",
         "",
         "## By Layer",
@@ -266,27 +289,49 @@ def _memory_payload(request: dict[str, Any], response: dict[str, Any], query: st
         results = flat
     if not isinstance(results, list):
         results = []
+    results = sorted(
+        (item for item in results if isinstance(item, dict)),
+        key=lambda item: _float(item.get("rrf_score", item.get("score", 0.0))),
+        reverse=True,
+    )
 
     top_results = []
-    best_overlap = 0
-    best_score = 0.0
-    phase_or_preference = False
-    for item in results[:MAX_ITEMS]:
-        if not isinstance(item, dict):
-            continue
+    top_overlap = 0
+    top_score = 0.0
+    top_signal = False
+    lower_rank_signal = False
+    for index, item in enumerate(results[:MAX_ITEMS]):
         text = " ".join(str(item.get(k) or "") for k in ("title", "summary", "content"))
         overlap = len(_terms(query) & _terms(text))
-        score = _float(item.get("score", item.get("rrf_score", 0.0)))
-        best_overlap = max(best_overlap, overlap)
-        best_score = max(best_score, score)
-        phase_or_preference = phase_or_preference or bool(
+        score = _float(item.get("rrf_score", item.get("score", 0.0)))
+        query_coverage = _float(item.get("query_coverage", 0.0))
+        phase_or_preference = bool(
             item.get("phase_match") or item.get("preference_match")
         )
+        item_signal = overlap >= 2 or phase_or_preference or query_coverage >= 0.25
+        if index == 0:
+            top_overlap = overlap
+            top_score = score
+            top_signal = item_signal
+        elif item_signal:
+            lower_rank_signal = True
+        via = item.get("via") or []
+        if isinstance(via, str):
+            via = [via]
+        matched_query_terms = item.get("matched_query_terms") or []
+        if not isinstance(matched_query_terms, list):
+            matched_query_terms = [matched_query_terms]
         top_results.append({
             "id": item.get("id"),
             "type": item.get("type", ""),
+            "project": item.get("project", ""),
+            "via": [str(value) for value in via],
             "score": score,
             "overlap_terms": overlap,
+            "query_coverage": query_coverage,
+            "matched_query_terms": [
+                _safe_text(value) for value in matched_query_terms[:12]
+            ],
             "summary_source": item.get("summary_source", ""),
             "phase_match": bool(item.get("phase_match")),
             "preference_match": bool(item.get("preference_match")),
@@ -295,15 +340,19 @@ def _memory_payload(request: dict[str, Any], response: dict[str, Any], query: st
 
     total = int(response.get("total") or len(results))
     if total <= 0:
-        proxy = _proxy("likely_miss", "no_results", best_overlap, best_score)
-    elif best_overlap >= 2 or phase_or_preference:
-        proxy = _proxy("likely_hit", "top_result_signal", best_overlap, best_score)
-    elif best_score >= 0.30:
-        proxy = _proxy("likely_hit", "high_score", best_overlap, best_score)
+        proxy = _proxy("likely_miss", "no_results", top_overlap, top_score)
+    elif top_signal:
+        proxy = _proxy("likely_hit", "top_result_signal", top_overlap, top_score)
+    elif top_score >= 0.30:
+        proxy = _proxy("likely_hit", "high_score", top_overlap, top_score)
+    elif lower_rank_signal:
+        proxy = _proxy("unknown", "lower_rank_signal_only", top_overlap, top_score)
     else:
-        proxy = _proxy("unknown", "returned_without_deterministic_signal", best_overlap, best_score)
+        proxy = _proxy(
+            "unknown", "returned_without_deterministic_signal", top_overlap, top_score
+        )
 
-    return {
+    payload = {
         "mode": response.get("mode") or request.get("mode", "rag"),
         "limit": request.get("limit"),
         "total": total,
@@ -311,6 +360,23 @@ def _memory_payload(request: dict[str, Any], response: dict[str, Any], query: st
         "top_results": top_results,
         "proxy": proxy,
     }
+    for key in (
+        "graph_expand_applied",
+        "graph_expand_reason",
+        "graph_expand_families",
+        "routed_via",
+        "routed_graph_families",
+        "relevance_gate_applied",
+        "relevance_gate_reason",
+        "relevance_gate_threshold",
+        "relevance_gate_best_coverage",
+        "relevance_gate_filtered_count",
+        "project_canonical",
+        "project_aliases",
+    ):
+        if key in response:
+            payload[key] = response[key]
+    return payload
 
 
 def _rule_payload(response: dict[str, Any], query: str) -> dict[str, Any]:

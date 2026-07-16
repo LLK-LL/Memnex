@@ -1,10 +1,10 @@
 import { convertGraphToGalaxy, filterGalaxy, groupNeighborRelations } from "./memory-galaxy-core.js";
 import { createInteractionLog, createMemoryGalaxyEvent, suggestAgentPrompt } from "./memory-galaxy-events.js";
 import { buildCometOverlayLayout, buildGalaxyOverviewLayout, buildPlanetSatelliteLayout, buildSolarSystemLayout } from "./memory-galaxy-layouts.js";
-import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js";
+import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js?v=20260706-middle-pan-1";
 import { memorySystemForData, systemColors } from "./memory-galaxy-systems.js";
 import { createGalaxyViewState, enterGalaxyView, goBackView, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank, selectCometOverlay, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
-import { initMemoryUniverse3DCoexistence } from "./memory-universe-bridge.js?v=20260705-state3-shapes-camera";
+import { initMemoryUniverse3DCoexistence } from "./memory-universe-bridge.js?v=20260716-solar-gesture-camera";
 import { copyableInline, escapeHtml, formatNodeDetails, renderInspectorList, renderMetricGrid, renderPromptText, renderTag, timelineCutoffFromPercent } from "./viewer-shared.js";
 
 const viewName = "2d-memory-galaxy";
@@ -22,6 +22,7 @@ let app;
 let renderer;
 let originalGraph = { nodes: [], links: [], metadata: {} };
 let filteredGraph = { nodes: [], links: [], metadata: {} };
+let filteredUniverseGraph = { nodes: [], links: [], metadata: {} };
 let currentLayout = null;
 let activeTypes = new Set();
 let activeLayers = new Set(["core", "active", "knowledge", "episode", "external"]);
@@ -45,7 +46,24 @@ function setLeftSidebarCollapsed(collapsed) {
 
 function setInspectorCollapsed(collapsed) {
   const shouldCollapse = Boolean(collapsed) && document.body.classList.contains("memory-universe-active");
+  const wasCollapsed = document.body.classList.contains("inspector-collapsed");
+  const inspector = document.querySelector(".details");
+  if (inspector && shouldCollapse && !wasCollapsed) {
+    inspector.style.transform = "translateX(24px)";
+    inspector.style.opacity = "0.88";
+    inspector.getBoundingClientRect();
+  } else if (inspector && !shouldCollapse) {
+    inspector.style.transform = "";
+    inspector.style.opacity = "";
+  }
   document.body.classList.toggle("inspector-collapsed", shouldCollapse);
+  if (inspector && shouldCollapse && !wasCollapsed) {
+    requestAnimationFrame(() => {
+      if (!document.body.classList.contains("inspector-collapsed")) return;
+      inspector.style.transform = "";
+      inspector.style.opacity = "";
+    });
+  }
 }
 
 function expandInspector() {
@@ -229,7 +247,7 @@ async function init() {
   await createPixi();
   ensureLeftSidebarToggle();
   memoryUniverse3d = initMemoryUniverse3DCoexistence({
-    getGraph: () => filteredGraph,
+    getGraph: () => filteredUniverseGraph,
     getSelectedNodeId: () => state.selectedNodeId,
     getFocusTarget: () => ({
       view: state.view,
@@ -248,7 +266,13 @@ async function init() {
       const node = filteredNodeById(nodeId) || originalGraph.nodes.find(item => item.id === nodeId);
       if (node) handleNodeTap(node, { detail: 1 });
     },
-    onActiveViewChange: () => expandInspector(),
+    onActiveViewChange: activeView => {
+      if (activeView === "3d") {
+        collapseInspector();
+        return;
+      }
+      expandInspector();
+    },
     onBlankStageClick: collapseInspector,
   });
   bindControls();
@@ -473,6 +497,7 @@ function applyFilters() {
     minWeight: Number(document.getElementById("weightFilter")?.value || 0),
     timelineCutoff,
   });
+  filteredUniverseGraph = scopedGraph;
   filteredGraph = scopedGraph;
   if (filteredGraph.nodes.length > focusLimit) {
     const visibleNodes = capNodesBySystem(filteredGraph.nodes, focusLimit);
@@ -486,7 +511,7 @@ function applyFilters() {
     };
   }
   filteredNodeIndex = null;
-  memoryUniverse3d?.updateGraph(filteredGraph);
+  memoryUniverse3d?.updateGraph(filteredUniverseGraph);
   shouldAutoFit = true;
   drawCurrentLayout();
   renderStats({
@@ -579,7 +604,7 @@ function redrawCurrentLayoutState() {
 
 function filteredNodeById(id) {
   if (!filteredNodeIndex) {
-    filteredNodeIndex = new Map(filteredGraph.nodes.map(node => [String(node.id), node]));
+    filteredNodeIndex = new Map(filteredUniverseGraph.nodes.map(node => [String(node.id), node]));
   }
   return filteredNodeIndex.get(String(id));
 }
@@ -970,7 +995,8 @@ function renderSelectionFromState() {
   }
   if (state.selectedNodeId) {
     const node = (currentLayout?.nodes || []).find(item => item.id === state.selectedNodeId)
-      || filteredGraph.nodes.find(item => item.id === state.selectedNodeId);
+      || filteredNodeById(state.selectedNodeId)
+      || originalGraph.nodes.find(item => item.id === state.selectedNodeId);
     if (node) {
       showNodeSelection(node);
       return;
@@ -1291,7 +1317,7 @@ function renderConnectionItem(link, sourceNode, targetNode, relation) {
 
 function renderSystemSummary(systemKey) {
   const members = filteredGraph.nodes
-    .filter(node => visibleNodeSystem(node) === systemKey)
+    .filter(node => matchesSystem(node, systemKey))
     .sort((a, b) => scoreVisibleNode(b) - scoreVisibleNode(a));
   const solarLayout = buildSolarSystemLayout(filteredGraph, systemKey, { nodeScale: state.nodeScale || 0.48 });
   const memberIds = new Set(members.map(node => node.id));

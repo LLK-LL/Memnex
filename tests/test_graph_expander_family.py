@@ -136,6 +136,47 @@ def test_expand_top_k_all_agents_scope_keeps_cross_namespace_candidates():
     assert set(result) == {(2, 1.0), (4, 1.0)}
 
 
+def test_expand_hard_filters_graph_and_association_candidates_by_project():
+    db = _db()
+    _seed(db)
+    db.executescript(
+        """
+        CREATE TABLE relations (
+            from_id INTEGER NOT NULL,
+            to_id INTEGER NOT NULL,
+            type TEXT
+        );
+        INSERT INTO knowledge
+            (id, type, content, project, agent_namespace, created_at)
+        VALUES
+            (4, 'fact', 'cross-project graph neighbor', 'other', 'codex', '2026-06-30'),
+            (5, 'fact', 'same-project association neighbor', 'demo', 'codex', '2026-06-30'),
+            (6, 'fact', 'cross-project association neighbor', 'other', 'codex', '2026-06-30');
+        INSERT INTO knowledge_nodes (knowledge_id, node_id, strength)
+        VALUES (4, 'cross-project-node', 1.0);
+        INSERT INTO graph_edges
+            (id, source_id, target_id, relation_type, weight, context)
+        VALUES
+            ('e3', 'seed-node', 'cross-project-node', 'caused_by', 1.0, 'cross-project path');
+        INSERT INTO relations (from_id, to_id, type)
+        VALUES
+            (1, 5, 'related'),
+            (1, 6, 'related');
+        """
+    )
+    db.commit()
+
+    result = graph_expander.expand(
+        db,
+        [1],
+        budget=10,
+        edge_families=["causal"],
+        project="demo",
+    )
+
+    assert set(result) == {(2, 1.0), (5, 0.5)}
+
+
 def test_explain_expansion_paths_defaults_to_seed_namespace():
     db = _db()
     _seed(db)

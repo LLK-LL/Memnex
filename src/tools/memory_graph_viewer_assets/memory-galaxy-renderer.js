@@ -33,14 +33,14 @@ export function createMemoryGalaxyRenderer({ PIXI, app, stage, onAnimationFrame 
   stage.eventMode = "static";
   stage.hitArea = app.screen;
   stage.on("pointerdown", event => {
-    if (!isPrimaryButton(event)) return;
-    if (hasCtrlModifier(event)) {
+    if (isMiddleButton(event)) {
       panState = {
         start: event.global.clone(),
         origin: { ...pan },
       };
       return;
     }
+    if (!isPrimaryButton(event)) return;
     blankPressState = {
       start: event.global.clone(),
       moved: false,
@@ -1176,6 +1176,10 @@ function hasCtrlModifier(event) {
 
 function isPrimaryButton(event) {
   return Number(event?.button ?? event?.nativeEvent?.button ?? event?.originalEvent?.button ?? 0) === 0;
+}
+
+function isMiddleButton(event) {
+  return Number(event?.button ?? event?.nativeEvent?.button ?? event?.originalEvent?.button ?? 0) === 1;
 }
 
 function labelBounds(text, align) {
