@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-agent-memory"
-version = "12.7.0"
+version = "12.7.1"
 description = "Local-first memory MCP server for Claude Code, Codex CLI, Cursor and any MCP client: project-safe recall, multi-representation retrieval, temporal knowledge graph, and 2D/3D Memory Galaxy visualization"
 readme = "README.md"
 license = "MIT"
@@ -65,8 +65,6 @@ include = [
     "src*",
 ]
 exclude = [
-    "tests*",
-    "benchmarks*",
     "docs*",
     "scripts*",
 ]
@@ -89,9 +87,4 @@ src = [
     "**/*.jpeg",
     "**/*.webp",
     "**/*.svg",
-]
-
-[tool.pytest.ini_options]
-markers = [
-    "slow: heavy tests (network/model download); set RUN_RERANKER_SLOW=1 to enable",
 ]

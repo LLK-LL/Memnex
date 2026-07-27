@@ -19,7 +19,7 @@ Cost: 1 cheap LLM call per QA (~$0.0001 on gpt-4o-mini × 1986 = $0.20 extra).
 ROI: expected +5-10pp on cat=1 because generator now sees the answer
 verbatim at position 0 of the context.
 
-Used by benchmarks/locomo_bench_llm.py via --subject-aware flag.
+Used by subject-aware recall paths and offline analysis utilities.
 """
 
 from __future__ import annotations

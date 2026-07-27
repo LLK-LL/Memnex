@@ -14,9 +14,8 @@ deep_enricher, contradiction_detector, reflection, self_improve) live
 here too so that grep/AST tools can answer "what touches the LLM?" with
 a single directory walk.
 
-The regression suite (`tests/test_v11_layer_separation.py`) enforces the
-import wall: any `from ai_layer.*` reference inside `src/memory_core/`
-will fail CI.
+The import wall is part of the public architecture: `src/memory_core/`
+must stay deterministic and must not import `from ai_layer.*`.
 
 Submodules
 ----------

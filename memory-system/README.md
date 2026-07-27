@@ -27,12 +27,14 @@ By default, the exporter writes the full graph. Use `--max-nodes` or
 `--max-edges` only when you intentionally want a reduced rendering workload.
 
 ```powershell
-python .\memory-system\tools\graph-viewer\export_graph_viewer.py `
+python .\src\tools\memory_graph_viewer_export.py `
   --db "$env:USERPROFILE\.tam\memory.db" `
   --output .\graph-viewer-output
 ```
 
-Open `graph-viewer-output\index.html` for the full 2D Memory Galaxy workspace. Generated viewer output is ignored by Git because it can contain private memory summaries from the selected database.
+Open `graph-viewer-output\index.html` for the Memory Galaxy workspace.
+Generated viewer output is ignored by Git because it can contain private
+memory summaries from the selected database.
 
 ## Data Layers
 

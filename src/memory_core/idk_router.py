@@ -12,11 +12,8 @@ budget the recall loop has left, it picks one of four actions:
 
 Living in ``memory_core`` is intentional: routing is pure logic on
 small dataclasses, has no LLM dependency, and runs on the hot path of
-every retrieval iteration. The v11 layer-separation regression test
-(``tests/test_v11_layer_separation.py``) forbids ``memory_core``
-modules from importing ``ai_layer`` — so we import only the dataclass
-through a TYPE_CHECKING-guarded reference for typing, and accept any
-duck-typed object at runtime.
+every retrieval iteration. ``memory_core`` must not import ``ai_layer``,
+so callers pass duck-typed verdict objects at runtime.
 """
 
 from __future__ import annotations
@@ -30,8 +27,7 @@ class _AnswerabilityLike(Protocol):
     """Subset of ``AnswerabilityResult`` the router actually reads.
 
     Defined as a structural type so ``memory_core`` does not need to
-    import ``ai_layer`` at runtime — the layer wall is enforced by
-    ``test_v11_layer_separation``.
+    import ``ai_layer`` at runtime.
     """
 
     answerable: bool

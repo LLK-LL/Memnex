@@ -11,7 +11,7 @@ have two new signals:
   a contradiction probability.
 
 We combine them here. The routing is deliberately **permissive** —
-LoCoMo failure analysis (``benchmarks/results/baseline-failure-analysis.md``)
+LoCoMo-style failure analysis
 shows 30% of errors are "over_cautious", i.e. abstaining when the
 evidence does support an answer. The router must not make that worse.
 

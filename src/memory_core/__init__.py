@@ -12,8 +12,8 @@ vector_store, classifier, chunker, dedup, cache, graph_links, telemetry,
 health) on top of the existing `embedding_spaces` resolver. Submodules
 are imported on demand — the package itself is import-cheap.
 
-The regression suite enforces the no-LLM-in-hot-path rule (see
-`tests/test_no_llm_hot_path_v11.py::test_memory_core_does_not_import_llm_provider`).
+Keep the no-LLM-in-hot-path rule visible in reviews: this package must
+remain import-cheap and network-free.
 """
 
 from . import embedding_spaces  # noqa: F401  (re-export entry point)

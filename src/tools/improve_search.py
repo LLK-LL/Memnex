@@ -6,11 +6,9 @@ Provides:
   2. Query expansion (multilingual + keyword extraction)
   3. Reciprocal Rank Fusion (RRF) for hybrid search
   4. Re-embedding with the best model
-  5. Before/after benchmark
 
 Usage:
     python src/tools/improve_search.py --reembed          # re-embed all with best model
-    python src/tools/improve_search.py --test             # run before/after comparison
     python src/tools/improve_search.py --install-model    # install best embedding model
     python src/tools/improve_search.py --show-models      # show available embedding models
 """
@@ -505,218 +503,7 @@ def reembed_all(db_path: str | Path = DB_PATH, model: str = "auto") -> dict[str,
 
 
 # ---------------------------------------------------------------------------
-# 6. Benchmark / Test
-# ---------------------------------------------------------------------------
-
-# Test queries covering different scenarios
-TEST_QUERIES = [
-    # (query, expected_keywords_in_results)
-    ("embedding semantic search reembed", ["embed", "search", "semantic"]),
-    ("docker compose deployment", ["docker", "compose", "deploy"]),
-    ("git commit push workflow", ["git", "commit"]),
-    ("ошибка авторизации JWT token", ["auth", "JWT", "token"]),
-    ("PostgreSQL migration index", ["postgres", "migration", "index"]),
-    ("memory save recall session", ["memory", "session", "save"]),
-    ("Vue Nuxt component composable", ["vue", "nuxt", "component"]),
-    ("Symfony controller service DTO", ["symfony", "controller", "service"]),
-    ("Go gRPC handler interceptor", ["go", "grpc", "handler"]),
-    ("hooks session-start recovery", ["hook", "session", "recovery"]),
-]
-
-
-def _search_fts(conn: sqlite3.Connection, query: str, limit: int = 10) -> list[int]:
-    """Perform FTS5 search, return ranked IDs."""
-    words = re.split(r"\s+", query)
-    fts_q = " OR ".join(f'"{w}"' for w in words if len(w) > 2) or f'"{query}"'
-    try:
-        rows = conn.execute(
-            """SELECT k.id, bm25(knowledge_fts) AS score
-               FROM knowledge_fts f JOIN knowledge k ON k.id=f.rowid
-               WHERE knowledge_fts MATCH ? AND k.status='active'
-               ORDER BY bm25(knowledge_fts) LIMIT ?""",
-            (fts_q, limit),
-        ).fetchall()
-        return [r[0] for r in rows]
-    except Exception:
-        return []
-
-
-def _search_semantic(
-    conn: sqlite3.Connection, query: str, model: str, limit: int = 10
-) -> list[int]:
-    """Perform binary+cosine semantic search, return ranked IDs."""
-    q_emb = embed_text(query, model)
-    if q_emb is None:
-        return []
-
-    # Load all binary vectors
-    rows = conn.execute(
-        """SELECT e.knowledge_id, e.binary_vector
-           FROM embeddings e JOIN knowledge k ON e.knowledge_id = k.id
-           WHERE k.status='active'"""
-    ).fetchall()
-    if not rows:
-        return []
-
-    kid_list = [r[0] for r in rows]
-    bin_vecs = np.array([np.frombuffer(r[1], dtype=np.uint8) for r in rows])
-
-    # Hamming pre-filter
-    q_binary = np.frombuffer(quantize_binary(q_emb), dtype=np.uint8)
-    popcount_lut = np.array([bin(i).count("1") for i in range(256)], dtype=np.int32)
-    xor_result = np.bitwise_xor(bin_vecs, q_binary)
-    hamming = popcount_lut[xor_result].sum(axis=1)
-
-    n_cand = min(50, len(kid_list))
-    top_idx = np.argpartition(hamming, n_cand)[:n_cand]
-
-    # Cosine re-rank
-    candidate_kids = [int(kid_list[i]) for i in top_idx]
-    placeholders = ",".join("?" * len(candidate_kids))
-    f32_rows = conn.execute(
-        f"SELECT knowledge_id, float32_vector FROM embeddings WHERE knowledge_id IN ({placeholders})",
-        candidate_kids,
-    ).fetchall()
-
-    q_vec = np.array(q_emb, dtype=np.float32)
-    q_norm = np.linalg.norm(q_vec)
-
-    scored = []
-    for kid, f32_blob in f32_rows:
-        vec = np.frombuffer(f32_blob, dtype=np.float32)
-        cos_sim = float(np.dot(q_vec, vec) / (q_norm * np.linalg.norm(vec) + 1e-10))
-        scored.append((kid, cos_sim))
-
-    scored.sort(key=lambda x: -x[1])
-    return [s[0] for s in scored[:limit]]
-
-
-def _search_expanded_semantic(
-    conn: sqlite3.Connection, query: str, model: str, limit: int = 10
-) -> list[int]:
-    """Semantic search with query expansion + RRF fusion."""
-    variants = expand_query(query)
-
-    ranked_lists: dict[str, list[int]] = {}
-    for i, variant in enumerate(variants):
-        ids = _search_semantic(conn, variant, model, limit=limit)
-        if ids:
-            ranked_lists[f"sem_{i}"] = ids
-
-    if not ranked_lists:
-        return []
-
-    fused = rrf_fusion(ranked_lists)
-    return [item_id for item_id, _ in fused[:limit]]
-
-
-def _search_hybrid_rrf(
-    conn: sqlite3.Connection, query: str, model: str, limit: int = 10
-) -> list[int]:
-    """Full hybrid search: FTS + expanded semantic + RRF."""
-    variants = expand_query(query)
-
-    ranked_lists: dict[str, list[int]] = {}
-
-    # FTS for each variant
-    for i, variant in enumerate(variants):
-        ids = _search_fts(conn, variant, limit=limit * 2)
-        if ids:
-            ranked_lists[f"fts_{i}"] = ids
-
-    # Semantic for each variant
-    for i, variant in enumerate(variants):
-        ids = _search_semantic(conn, variant, model, limit=limit * 2)
-        if ids:
-            ranked_lists[f"sem_{i}"] = ids
-
-    if not ranked_lists:
-        return []
-
-    fused = rrf_fusion(ranked_lists)
-    return [item_id for item_id, _ in fused[:limit]]
-
-
-def run_benchmark(db_path: Path = DB_PATH) -> None:
-    """Run search quality benchmark comparing different strategies."""
-    if not db_path.exists():
-        print(f"ERROR: {db_path} not found", file=sys.stderr)
-        sys.exit(1)
-
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-
-    # Check current model
-    model_row = conn.execute("SELECT embed_model FROM embeddings LIMIT 1").fetchone()
-    if not model_row:
-        print("ERROR: No embeddings found. Run --reembed first.", file=sys.stderr)
-        sys.exit(1)
-    model = model_row[0]
-    emb_count = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
-    total_records = conn.execute(
-        "SELECT COUNT(*) FROM knowledge WHERE status='active'"
-    ).fetchone()[0]
-
-    print(f"Benchmark: {total_records} records, {emb_count} embeddings, model={model}")
-    print(f"{'=' * 70}")
-
-    strategies = {
-        "FTS only": lambda q: _search_fts(conn, q),
-        "Semantic only": lambda q: _search_semantic(conn, q, model),
-        "Semantic+Expand": lambda q: _search_expanded_semantic(conn, q, model),
-        "Hybrid RRF": lambda q: _search_hybrid_rrf(conn, q, model),
-    }
-
-    # Run all queries through all strategies
-    results: dict[str, dict[str, float]] = {name: {"hits": 0, "total": 0, "time": 0.0} for name in strategies}
-
-    for query, expected_kw in TEST_QUERIES:
-        print(f"\nQuery: {query!r}")
-        print(f"  Expected keywords: {expected_kw}")
-
-        for name, search_fn in strategies.items():
-            t0 = time.time()
-            ids = search_fn(query)
-            elapsed = time.time() - t0
-
-            # Check if any results contain expected keywords
-            hits = 0
-            if ids:
-                # Load content for result IDs
-                placeholders = ",".join("?" * len(ids[:10]))
-                rows = conn.execute(
-                    f"SELECT content FROM knowledge WHERE id IN ({placeholders})",
-                    ids[:10],
-                ).fetchall()
-                combined = " ".join(r[0].lower() for r in rows)
-                for kw in expected_kw:
-                    if kw.lower() in combined:
-                        hits += 1
-
-            relevance = hits / len(expected_kw) if expected_kw else 0
-            results[name]["hits"] += hits
-            results[name]["total"] += len(expected_kw)
-            results[name]["time"] += elapsed
-
-            marker = "+" if relevance >= 0.5 else "-"
-            print(f"  [{marker}] {name:20s}: {len(ids):2d} results, "
-                  f"{hits}/{len(expected_kw)} keywords, {elapsed:.2f}s")
-
-    # Summary
-    print(f"\n{'=' * 70}")
-    print(f"{'Strategy':20s} {'Recall':>8s} {'Avg Time':>10s}")
-    print(f"{'-' * 40}")
-    for name, stats in results.items():
-        recall = stats["hits"] / max(stats["total"], 1)
-        avg_time = stats["time"] / len(TEST_QUERIES)
-        bar = "#" * int(recall * 20)
-        print(f"{name:20s} {recall:>7.1%}  {avg_time:>8.3f}s  {bar}")
-
-    conn.close()
-
-
-# ---------------------------------------------------------------------------
-# 7. Install Model
+# 6. Install Model
 # ---------------------------------------------------------------------------
 
 def install_best_model() -> None:
@@ -771,7 +558,7 @@ def show_models() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. Integration Guide
+# 7. Integration Guide
 # ---------------------------------------------------------------------------
 
 INTEGRATION_GUIDE = """
@@ -843,7 +630,6 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--reembed", action="store_true", help="Re-embed all records with best model")
-    parser.add_argument("--test", action="store_true", help="Run before/after search benchmark")
     parser.add_argument("--install-model", action="store_true", help="Install best embedding model")
     parser.add_argument("--show-models", action="store_true", help="Show available embedding models")
     parser.add_argument("--integration-guide", action="store_true", help="Print server.py integration guide")
@@ -852,7 +638,7 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if not any([args.reembed, args.test, args.install_model, args.show_models, args.integration_guide]):
+    if not any([args.reembed, args.install_model, args.show_models, args.integration_guide]):
         parser.print_help()
         sys.exit(0)
 
@@ -865,9 +651,6 @@ def main() -> None:
     if args.reembed:
         stats = reembed_all(db_path=Path(args.db), model=args.model)
         print(f"\nStats: {json.dumps(stats, indent=2)}")
-
-    if args.test:
-        run_benchmark(db_path=Path(args.db))
 
     if args.integration_guide:
         print(INTEGRATION_GUIDE)

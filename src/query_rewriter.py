@@ -2,7 +2,7 @@
 Query rewriter for Claude Total Memory v8 retrieval pipeline.
 
 Calls Anthropic Haiku to produce three query variants for multi-query RRF
-fusion on LoCoMo-style long-term memory benchmarks:
+fusion on LoCoMo-style long-term memory questions:
 
   - canonical  : single-fact lookup reformulation
   - decomposed : 1-3 sub-queries for multi-hop questions

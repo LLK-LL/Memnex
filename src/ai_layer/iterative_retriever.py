@@ -1,4 +1,4 @@
-"""Iterative retrieval (IRCoT-style) for multi-hop LoCoMo queries.
+"""Iterative retrieval (IRCoT-style) for multi-hop memory queries.
 
 A single retrieval pass can't follow chains of 2-3 facts. This module
 implements an iterative loop:
@@ -66,8 +66,8 @@ class SearchFn(Protocol):
 class LLMClientProtocol(Protocol):
     """Minimal contract the planner needs from an LLM client.
 
-    ``benchmarks._llm_adapter.LLMClient`` satisfies this directly. Tests
-    pass a tiny fake whose ``complete()`` returns queued strings.
+    ``ai_layer.llm_adapter.LLMClient`` satisfies this directly. Callers can
+    also pass a tiny fake whose ``complete()`` returns queued strings.
     """
 
     def complete(  # pragma: no cover - protocol signature
@@ -345,7 +345,7 @@ def iterative_retrieve(
     llm_model
         Alias accepted by the LLM adapter (``haiku``, ``sonnet``, ``gpt-4o``...).
     llm_client
-        Injectable client. If ``None``, constructs a ``benchmarks._llm_adapter.LLMClient``
+        Injectable client. If ``None``, constructs an ``ai_layer.llm_adapter.LLMClient``
         on first use.
 
     Returns
@@ -364,7 +364,7 @@ def iterative_retrieve(
     # Lazy-construct the LLM client so callers don't pay for it when only
     # search_fn is exercised (and tests can always inject a fake).
     if llm_client is None:
-        from benchmarks._llm_adapter import LLMClient  # noqa: PLC0415
+        from .llm_adapter import LLMClient  # noqa: PLC0415
 
         llm_client = LLMClient(provider="auto", default_model=llm_model)
 

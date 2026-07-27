@@ -137,7 +137,7 @@ def _strip_fences(s: str) -> str:
 
 def _call_llm(client, system: str, user: str, max_tokens: int = 200,
               model: str | None = None) -> tuple[str, int, int]:
-    """Delegate to the benchmarks/_llm_adapter.LLMClient which supports both
+    """Delegate to the shared LLMClient adapter which supports both
     Anthropic and OpenAI. The legacy _call_haiku signature is preserved as a
     thin alias so any external callers keep working."""
     resolved = model or getattr(client, "_default_model", None) or HAIKU_MODEL
@@ -281,10 +281,11 @@ def main() -> int:
             tlocal.conn = c
         return c
 
-    # Unified provider client (OpenAI or Anthropic) via benchmarks/_llm_adapter.
-    _bench_dir = Path(__file__).resolve().parent.parent / "benchmarks"
-    sys.path.insert(0, str(_bench_dir))
-    from _llm_adapter import LLMClient  # noqa: PLC0415
+    # Unified provider client (OpenAI or Anthropic).
+    try:
+        from ai_layer.llm_adapter import LLMClient  # noqa: PLC0415
+    except ImportError:  # package import path when installed as ``src.*``
+        from src.ai_layer.llm_adapter import LLMClient  # type: ignore  # noqa: PLC0415
     client = LLMClient(provider=args.provider, default_model=args.model)
     # Stash default model for _call_llm helpers that don't receive it explicitly.
     client._default_model = args.model  # type: ignore[attr-defined]

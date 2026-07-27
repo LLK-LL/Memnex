@@ -148,7 +148,7 @@ def build_prompt(row: sqlite3.Row) -> str:
         "\"relation_type\":\"caused_by|causes|leads_to|because_of|blocks|blocked_by|fixed_by|resolved_by|step_after|step_before|workflow_depends_on|validated_by|tested_by\","
         "\"confidence\":0.0,\"context\":\"brief evidence\"}]}\n"
         "Use fix for resolved solutions, incident for failures, procedure for reusable steps, "
-        "decision for design choices, verification for tests/checks.\n\n"
+        "decision for design choices, verification for validation checks.\n\n"
         f"Memory id: {row['id']}\nType: {row['type']}\nProject: {row['project']}\nContent:\n{text}"
     )
 

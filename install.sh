@@ -16,20 +16,20 @@
 #   bash install.sh --uninstall           # remove background services (per OS)
 #
 # Env:
-#   INSTALL_TEST_MODE=1   skip pip install, model pre-download, dashboard
-#                         service, LaunchAgents (for test harness)
+#   INSTALL_LIGHT_MODE=1  skip pip install, model pre-download, dashboard
+#                         service, LaunchAgents
 #   TAM_MEMORY_DIR=... override memory directory (default: ~/.tam).
 #                         Legacy CLAUDE_MEMORY_DIR still respected.
 #   OLLAMA_URL=...        override Ollama probe URL
 #   MEMORY_LLM_MODEL=...  override expected model name
-#   FAKE_UNAME=Linux      override uname() for tests (Linux|Darwin)
+#   FAKE_UNAME=Linux      override uname() for scripted installs (Linux|Darwin)
 #   XDG_CONFIG_HOME=...   override systemd --user target dir
 #   INSTALL_OVERWRITE_HOOKS=1   force-overwrite existing files in ~/.claude/hooks/
 #                               (default: skip existing, preserve user customizations)
 #
 set -e
 
-# Allow tests to override uname without faking binaries
+# Allow scripted installs to override uname without faking binaries.
 OS_NAME="${FAKE_UNAME:-$(uname)}"
 
 # -- Parse CLI args --
@@ -98,8 +98,8 @@ fi
 VENV_DIR="$INSTALL_DIR/.venv"
 DASHBOARD_SERVICE="$INSTALL_DIR/scripts/dashboard-service.sh"
 
-# Test mode: skip heavy steps (pip, model DL, launchctl, dashboard install)
-TEST_MODE="${INSTALL_TEST_MODE:-0}"
+# Light mode: skip heavy steps (pip, model DL, launchctl, dashboard install)
+LIGHT_MODE="${INSTALL_LIGHT_MODE:-0}"
 
 # -----------------------------------------------------------------
 # Linux helpers: WSL detection + systemd --user services setup
@@ -289,7 +289,7 @@ echo "  Python $PY_VERSION found"
 # a separate `python3-venv` package. Without it `python3 -m venv` errors on
 # ensurepip with a cryptic message that does not mention the actual fix.
 # Detect and surface a clear, actionable hint before failing.
-if [ "$TEST_MODE" != "1" ] && ! [ -d "$VENV_DIR" ]; then
+if [ "$LIGHT_MODE" != "1" ] && ! [ -d "$VENV_DIR" ]; then
     if ! python3 -c "import ensurepip" >/dev/null 2>&1; then
         echo "  ERROR: python3 venv module is missing (ensurepip unavailable)."
         echo "  Install it first, then re-run this script:"
@@ -302,22 +302,22 @@ if [ "$TEST_MODE" != "1" ] && ! [ -d "$VENV_DIR" ]; then
     fi
 fi
 
-if [ "$TEST_MODE" = "1" ]; then
-    echo "  SKIP (test mode): venv creation and pip install"
+if [ "$LIGHT_MODE" = "1" ]; then
+    echo "  SKIP (light mode): venv creation and pip install"
     PY_PATH="$(command -v python3)"
 else
     if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/python" ]; then
         echo "  Existing venv found, updating dependencies..."
         # shellcheck disable=SC1091
         source "$VENV_DIR/bin/activate"
-        pip install -q --upgrade -r "$INSTALL_DIR/requirements.txt" -r "$INSTALL_DIR/requirements-dev.txt" 2>&1 | tail -1
+        pip install -q --upgrade -r "$INSTALL_DIR/requirements.txt" 2>&1 | tail -1
     else
         python3 -m venv "$VENV_DIR"
         # shellcheck disable=SC1091
         source "$VENV_DIR/bin/activate"
         pip install -q --upgrade pip
         echo "  Installing dependencies (this may take 2-3 minutes on first run)..."
-        pip install -q -r "$INSTALL_DIR/requirements.txt" -r "$INSTALL_DIR/requirements-dev.txt" 2>&1 | tail -1
+        pip install -q -r "$INSTALL_DIR/requirements.txt" 2>&1 | tail -1
     fi
     # v9 — editable install registers `[project.scripts]` entry-points
     # (total-agent-memory, tam, tam-lookup, lookup-memory + legacy:
@@ -332,8 +332,8 @@ SRV_PATH="$INSTALL_DIR/src/server.py"
 
 # -- 3. Pre-download embedding model --
 echo "-> Step 3: Loading embedding model (first time only)..."
-if [ "$TEST_MODE" = "1" ]; then
-    echo "  SKIP (test mode): embedding model pre-download"
+if [ "$LIGHT_MODE" = "1" ]; then
+    echo "  SKIP (light mode): embedding model pre-download"
 else
     python3 -c "
 from sentence_transformers import SentenceTransformer
@@ -466,7 +466,7 @@ register_mcp_claude_code() {
     local settings="$HOME/.claude/settings.json"
     echo "-> Step 4: Configuring Claude Code MCP server..."
     # Try `claude mcp add-json` CLI first (preferred by official tool)
-    if command -v claude >/dev/null 2>&1 && [ "$TEST_MODE" != "1" ]; then
+    if command -v claude >/dev/null 2>&1 && [ "$LIGHT_MODE" != "1" ]; then
         local payload
         payload=$(python3 -c "
 import json, os
@@ -832,8 +832,8 @@ echo "-> Step 4c: Checking Ollama (optional but strongly recommended)..."
 OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 MEMORY_LLM_MODEL="${MEMORY_LLM_MODEL:-qwen2.5-coder:7b}"
 
-if [ "$TEST_MODE" = "1" ]; then
-    echo "  SKIP (test mode): Ollama probe"
+if [ "$LIGHT_MODE" = "1" ]; then
+    echo "  SKIP (light mode): Ollama probe"
 elif curl -sf --max-time 2 "$OLLAMA_URL/api/tags" >/dev/null 2>&1; then
     echo "  OK: Ollama is running at $OLLAMA_URL"
     if curl -sf --max-time 2 "$OLLAMA_URL/api/tags" | grep -q "\"$MEMORY_LLM_MODEL\""; then
@@ -872,7 +872,7 @@ fi
 # the canonical `com.total-agent-memory.dashboard.plist` shipped under
 # launchagents/. Both fought for port 37737. dashboard-service.sh remains
 # in scripts/ for manual use but isn't invoked automatically anymore.
-if [ "$TEST_MODE" != "1" ] && [ "$IDE" = "claude-code" ] && [ "$OS_NAME" = "Darwin" ] && [ -d "$INSTALL_DIR/launchagents" ]; then
+if [ "$LIGHT_MODE" != "1" ] && [ "$IDE" = "claude-code" ] && [ "$OS_NAME" = "Darwin" ] && [ -d "$INSTALL_DIR/launchagents" ]; then
     echo "-> Step 5: Installing background LaunchAgents (dashboard, reflection, orphan-backfill, check-updates)..."
     LA_DIR="$HOME/Library/LaunchAgents"
     mkdir -p "$LA_DIR"
@@ -1007,7 +1007,7 @@ else
     echo "  FAIL: Memory directory issue"
 fi
 
-if [ "$TEST_MODE" != "1" ]; then
+if [ "$LIGHT_MODE" != "1" ]; then
     "$PY_PATH" -c "
 import sys
 sys.path.insert(0, '$INSTALL_DIR/src')
@@ -1076,7 +1076,7 @@ echo ""
 echo "  Web dashboard:"
 echo "    http://localhost:37737"
 echo ""
-if [ "$TEST_MODE" != "1" ]; then
+if [ "$LIGHT_MODE" != "1" ]; then
     "$DASHBOARD_SERVICE" print-management 2>/dev/null || true
 fi
 echo ""

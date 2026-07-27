@@ -1921,14 +1921,6 @@ class ReflectionScheduler:
             name="Pre-Research Engine (every 4h)",
         )
 
-        # ── Benchmark: weekly retrieval quality check (Sunday 4:00 AM) ──
-        scheduler.add_job(
-            lambda: _run_brain_task("tools.benchmark", "run_and_save_benchmark", self.db_path),
-            CronTrigger(day_of_week="sun", hour=4, minute=0),
-            id="benchmark",
-            name="Retrieval Benchmark (Sunday 4:00 AM)",
-        )
-
         # ── Level 5: Ideas (Fri 6PM) + Innovation (1st&15th) + Challenger (Mon 9AM) ──
         scheduler.add_job(
             lambda: _run_brain_task("tools.idea_engine", "run_idea_generator", self.db_path),

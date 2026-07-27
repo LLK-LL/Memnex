@@ -163,4 +163,4 @@ Or leave it unset and let the fallback resolve to `codex`.
 
 - [.mcp.json](../.mcp.json)
 - [src/server.py](../src/server.py)
-- [agent-namespaced-memory-galaxies-design.md](../docs/superpowers/specs/2026-06-29-agent-namespaced-memory-galaxies-design.md)
+- [v12.7.0 recall and galaxy release notes](v12.7.0-recall-galaxy-release.md)

@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Claude Total Memory — Codex CLI Installer (Windows)
+    Memnex - Codex CLI Installer (Windows)
 
 .DESCRIPTION
     Creates Python venv, installs dependencies, downloads embedding model,
@@ -16,13 +16,13 @@ $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "=======================================================" -ForegroundColor Cyan
-Write-Host "  Claude Total Memory v5.0 — Codex CLI Installer"       -ForegroundColor Cyan
+Write-Host "  Memnex - Codex CLI Installer"                          -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # -- Config --
 $InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$MemoryDir = if ($env:CLAUDE_MEMORY_DIR) { $env:CLAUDE_MEMORY_DIR } else { Join-Path $env:USERPROFILE ".claude-memory" }
+$MemoryDir = if ($env:TAM_MEMORY_DIR) { $env:TAM_MEMORY_DIR } elseif ($env:CLAUDE_MEMORY_DIR) { $env:CLAUDE_MEMORY_DIR } else { Join-Path $env:USERPROFILE ".tam" }
 $VenvDir = Join-Path $InstallDir ".venv"
 $CodexDir = Join-Path $env:USERPROFILE ".codex"
 $CodexConfig = Join-Path $CodexDir "config.toml"
@@ -67,7 +67,7 @@ $VenvPip = Join-Path $VenvDir "Scripts" "pip.exe"
 
 if (Test-Path $VenvPython) {
     Write-Host "  Existing venv found, updating dependencies..."
-    & $VenvPip install -q --upgrade -r (Join-Path $InstallDir "requirements.txt") -r (Join-Path $InstallDir "requirements-dev.txt") 2>&1 | Select-Object -Last 1
+    & $VenvPip install -q --upgrade -r (Join-Path $InstallDir "requirements.txt") 2>&1 | Select-Object -Last 1
 } else {
     Write-Host "  Creating virtual environment..."
     & $pythonCmd -m venv $VenvDir
@@ -77,7 +77,7 @@ if (Test-Path $VenvPython) {
     }
     & $VenvPip install -q --upgrade pip 2>$null
     Write-Host "  Installing dependencies (this may take 2-3 minutes on first run)..."
-    & $VenvPip install -q -r (Join-Path $InstallDir "requirements.txt") -r (Join-Path $InstallDir "requirements-dev.txt") 2>&1 | Select-Object -Last 1
+    & $VenvPip install -q -r (Join-Path $InstallDir "requirements.txt") 2>&1 | Select-Object -Last 1
 }
 Write-Host "  OK: Dependencies installed" -ForegroundColor Green
 
@@ -124,14 +124,14 @@ srv_path = toml_escape(os.environ['_CTM_SRV'])
 memory_dir = toml_escape(os.environ['_CTM_MEM'])
 
 toml_block = f'''
-# --- Claude Total Memory MCP Server (Streamable HTTP for Codex Desktop) ---
+# --- Memnex MCP Server (Streamable HTTP for Codex Desktop) ---
 [mcp_servers.memory]
 url = "http://127.0.0.1:3747/mcp/"
 type = "http"
 required = false
 startup_timeout_sec = 5.0
 tool_timeout_sec = 20.0
-# --- End Claude Total Memory ---
+# --- End Memnex ---
 '''
 
 content = ''
@@ -140,7 +140,7 @@ if os.path.exists(config_path):
         content = f.read()
 
 if '[mcp_servers.memory]' in content:
-    pattern = r'# --- Claude Total Memory MCP Server(?: \(Streamable HTTP for Codex Desktop\))? ---.*?# --- End Claude Total Memory ---'
+    pattern = r'# --- (Claude Total Memory|Memnex) MCP Server(?: \(Streamable HTTP for Codex Desktop\))? ---.*?# --- End (Claude Total Memory|Memnex) ---'
     if re.search(pattern, content, re.DOTALL):
         content = re.sub(pattern, toml_block.strip(), content, flags=re.DOTALL)
     else:
@@ -213,7 +213,7 @@ set DASHBOARD_PORT=37737
         -Action $Action `
         -Trigger $Trigger `
         -Settings $Settings `
-        -Description "Claude Total Memory web dashboard on port 37737" `
+        -Description "Memnex web dashboard on port 37737" `
         -RunLevel Limited | Out-Null
 
     Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue

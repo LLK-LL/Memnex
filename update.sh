@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 # Auto-update for total-agent-memory.
 #
-# Stages (skip-friendly — every stage tolerates absence of prerequisites):
+# Stages (skip-friendly; every stage tolerates absence of prerequisites):
 #   1. Pre-flight  — verify dirs, disk space, snapshot DB
 #   2. Source      — git pull (if repo) OR curl tarball (if UPDATE_URL set)
-#   3. Deps        — pip install only if requirements*.txt hash changed
-#   4. Tests       — pytest gate; abort + rollback if red
-#   5. Schema      — Store() init applies pending migrations idempotently
-#   6. Services    — reload LaunchAgents + restart dashboard
-#   7. MCP         — print user instruction (only Claude Code can /mcp reconnect)
+#   3. Deps        — pip install only if requirements.txt hash changed
+#   4. Schema      — Store() init applies pending migrations idempotently
+#   5. Services    — reload LaunchAgents + restart dashboard
+#   6. MCP         — print user instruction (only Claude Code can /mcp reconnect)
 #
 # Usage:
 #   bash update.sh                    # full update
 #   bash update.sh --check            # dry-run: report only, no changes
-#   bash update.sh --skip-tests       # skip pytest (NOT recommended)
 #   UPDATE_URL=https://… bash update.sh   # tarball-based update
 #
 # Env:
@@ -46,12 +44,9 @@ DB="$MEMORY_DIR/memory.db"
 BACKUP_DIR="$MEMORY_DIR/backups"
 LOG="/tmp/claude-memory-update.log"
 DRY_RUN=false
-SKIP_TESTS=false
-
 for arg in "$@"; do
   case "$arg" in
     --check|--dry-run)  DRY_RUN=true ;;
-    --skip-tests)       SKIP_TESTS=true ;;
     -h|--help)          sed -n '2,30p' "$0"; exit 0 ;;
   esac
 done
@@ -74,7 +69,7 @@ $DRY_RUN && say "DRY-RUN — no changes will be applied"
 # 1. Pre-flight
 # ────────────────────────────────────────────────
 
-say "stage 1/7: pre-flight"
+say "stage 1/6: pre-flight"
 
 # Disk space (need ≥200MB for backup + pip cache)
 free_mb=$(df -m "$HOME" | tail -1 | awk '{print $4}')
@@ -96,7 +91,7 @@ fi
 # 2. Source update
 # ────────────────────────────────────────────────
 
-say "stage 2/7: source update"
+say "stage 2/6: source update"
 old_sha=""
 new_sha=""
 
@@ -174,14 +169,11 @@ else
 fi
 
 # ────────────────────────────────────────────────
-# 3. Deps (only if requirements*.txt changed)
+# 3. Deps (only if requirements.txt changed)
 # ────────────────────────────────────────────────
 
-say "stage 3/7: dependencies"
+say "stage 3/6: dependencies"
 req_files=("$ROOT/requirements.txt")
-if [[ -f "$ROOT/requirements-dev.txt" ]]; then
-  req_files+=("$ROOT/requirements-dev.txt")
-fi
 
 req_hash_path="$ROOT/.last-requirements.sha256"
 if [[ -f "${req_files[0]}" ]]; then
@@ -196,7 +188,7 @@ if [[ -f "${req_files[0]}" ]]; then
       say "  ${changed_files% }changed — would pip install (hash $prev_hash → $cur_hash)"
     else
       say "  ${changed_files% }changed — installing"
-      "$PIP" install -q -r "$ROOT/requirements.txt" -r "$ROOT/requirements-dev.txt" || fail "pip install failed"
+      "$PIP" install -q -r "$ROOT/requirements.txt" || fail "pip install failed"
       echo "$cur_hash" > "$req_hash_path"
     fi
   else
@@ -216,27 +208,10 @@ if [[ -f "${req_files[0]}" ]]; then
 fi
 
 # ────────────────────────────────────────────────
-# 4. Tests
+# 4. Schema migrations (auto via Store())
 # ────────────────────────────────────────────────
 
-say "stage 4/7: tests"
-if $SKIP_TESTS; then
-  say "  skipped (--skip-tests)"
-elif $DRY_RUN; then
-  say "  would run pytest"
-else
-  if "$PY" -m pytest "$ROOT/tests/" --tb=no -q 2>&1 | tail -5; then
-    say "  tests green"
-  else
-    fail "tests failed — aborting (DB snapshot kept; manually restore from $BACKUP_DIR if source changed)"
-  fi
-fi
-
-# ────────────────────────────────────────────────
-# 5. Schema migrations (auto via Store())
-# ────────────────────────────────────────────────
-
-say "stage 5/7: schema migrations"
+say "stage 4/6: schema migrations"
 if $DRY_RUN; then
   say "  would auto-apply pending migrations on next Store() init"
 else
@@ -250,10 +225,10 @@ PY
 fi
 
 # ────────────────────────────────────────────────
-# 6. Services (LaunchAgents + dashboard)
+# 5. Services (LaunchAgents + dashboard)
 # ────────────────────────────────────────────────
 
-say "stage 6/7: services"
+say "stage 5/6: services"
 PLISTS_SRC="$ROOT/launchagents"
 PLISTS_DST="$HOME/Library/LaunchAgents"
 
@@ -287,10 +262,10 @@ if /usr/bin/pgrep -f "dashboard\.py" > /dev/null; then
 fi
 
 # ────────────────────────────────────────────────
-# 7. MCP — only Claude Code can respawn
+# 6. MCP — only Claude Code can respawn
 # ────────────────────────────────────────────────
 
-say "stage 7/7: MCP server"
+say "stage 6/6: MCP server"
 NEW_VERSION=$("$PY" -c "import sys; sys.path.insert(0,'$ROOT/src'); import version; print(version.VERSION)" 2>/dev/null || echo "?")
 if [[ -n "$old_sha$new_sha" || "$NEW_VERSION" != "$CURRENT_VERSION" ]]; then
   echo

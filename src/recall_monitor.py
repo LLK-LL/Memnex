@@ -65,7 +65,7 @@ def record_recall_event(
 ) -> dict[str, Any] | None:
     """Append one recall-monitor event.
 
-    Returns the event for tests/diagnostics. Runtime callers may ignore it.
+    Returns the event for diagnostics. Runtime callers may ignore it.
     """
     if not monitor_enabled():
         return None

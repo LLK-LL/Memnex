@@ -32,12 +32,11 @@ Design notes
 ------------
 
 * **Layer wall.** This module lives in ``memory_core`` and therefore
-  must not import :mod:`ai_layer.*` (enforced by
-  ``tests/test_v11_layer_separation``). All collaborators are passed in
-  as ``Protocol`` typed callables: ``search_fn``, ``contradiction_fn``,
-  and an optional ``llm_client``. ``AnswerabilityResult`` is *not* a
-  parameter — the upstream caller decides whether to invoke the
-  negative pass at all and supplies the positives directly.
+  must not import :mod:`ai_layer.*`. All collaborators are passed in as
+  ``Protocol`` typed callables: ``search_fn``, ``contradiction_fn``, and
+  an optional ``llm_client``. ``AnswerabilityResult`` is *not* a
+  parameter — the upstream caller decides whether to invoke the negative
+  pass at all and supplies the positives directly.
 
 * **One LLM call.** Producing the inverted query is a small Haiku
   prompt; we retry once on bad output (empty / multi-line garbage /
@@ -97,7 +96,7 @@ class SearchFn(Protocol):
 
 
 class LLMLike(Protocol):
-    """Minimum LLM interface — same shape as ``benchmarks._llm_adapter``."""
+    """Minimum LLM interface; same shape as ``ai_layer.llm_adapter``."""
 
     def complete(
         self,

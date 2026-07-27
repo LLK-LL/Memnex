@@ -31,7 +31,7 @@ Design notes
   round-trip and removes one class of LLM-noise failures.
 
 The module deliberately exposes ``llm_client`` as an injection point so
-unit tests can pass a fake without monkeypatching ``_llm_adapter``.
+callers can pass a fake or custom client without monkeypatching the adapter.
 """
 
 from __future__ import annotations
@@ -42,8 +42,8 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 
-# Resolved model id for tests/operators that want the canonical name —
-# matches the alias in benchmarks/_llm_adapter.MODEL_ALIASES.
+# Resolved model id for callers that want the canonical name; aliases are
+# handled by ``ai_layer.llm_adapter.MODEL_ALIASES``.
 DEFAULT_MODEL = "haiku"
 
 # Cap on evidence chars per snippet sent to the LLM. Real LoCoMo
@@ -75,7 +75,7 @@ class AnswerabilityResult:
 class _LLMLike(Protocol):
     """Minimal protocol the classifier needs from a client.
 
-    Matches ``benchmarks._llm_adapter.LLMClient.complete`` — anything
+    Matches ``ai_layer.llm_adapter.LLMClient.complete`` — anything
     callable with the same kwargs and returning either a string or an
     object with a ``.text`` attribute is acceptable. The protocol stays
     duck-typed so test fakes do not have to subclass anything.
@@ -267,12 +267,11 @@ def _parse_response(raw: Any) -> AnswerabilityResult | None:
 def _default_llm_client() -> _LLMLike:
     """Build the shared adapter once per process.
 
-    Importing the bench adapter eagerly would force ``anthropic`` /
-    ``openai`` into every test that touches answerability, even when a
-    fake client is injected. We import lazily so unit tests stay
-    offline.
+    Importing the provider adapter eagerly would force ``anthropic`` /
+    ``openai`` into every process that touches answerability. Keep it lazy
+    so pure-retrieval paths stay offline unless a caller asks for LLM help.
     """
-    from benchmarks._llm_adapter import LLMClient  # noqa: PLC0415
+    from .llm_adapter import LLMClient  # noqa: PLC0415
     return LLMClient(provider="auto", default_model=DEFAULT_MODEL)
 
 
@@ -300,7 +299,7 @@ def classify_answerability(
         without an LLM call.
     llm_model:
         Model alias passed to the client (default: Haiku, see
-        ``benchmarks._llm_adapter.MODEL_ALIASES``).
+        ``ai_layer.llm_adapter.MODEL_ALIASES``).
     llm_client:
         Optional dependency-injection hook. Anything with a
         ``.complete(system=, user=, model=, max_tokens=, temperature=)``

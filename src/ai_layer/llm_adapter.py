@@ -1,8 +1,7 @@
-"""Thin LLM provider adapter used by LoCoMo bench + fact_synthesizer.
+"""Thin LLM provider adapter used by AI-layer utilities.
 
-Goal: same call-site regardless of backend, so we can flip between Claude
-(anthropic.Anthropic) and OpenAI (gpt-4o / gpt-4o-mini / o-series) with a
-single --provider flag. No other changes needed in the bench loop.
+Goal: same call-site regardless of backend, so runtime enrichment and recall
+helpers can flip between Anthropic and OpenAI with one provider flag.
 
 Deliberately tiny — token accounting normalised, retry/backoff uniform,
 system prompt handled both as Anthropic ``system=`` and OpenAI

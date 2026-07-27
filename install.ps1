@@ -15,9 +15,9 @@
 .PARAMETER Uninstall
     Remove scheduled tasks and MCP entries (leaves venv and memory.db).
 
-.PARAMETER TestMode
+.PARAMETER LightMode
     Skip pip install, embedding model download, Task Scheduler registration
-    and dashboard service. Used by test harness.
+    and dashboard service.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1
@@ -29,21 +29,21 @@ param(
     [ValidateSet("claude-code", "cursor", "gemini-cli", "opencode", "codex")]
     [string]$Ide = "claude-code",
     [switch]$Uninstall,
-    [switch]$TestMode
+    [switch]$LightMode
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# TestMode can also be forced via env (parity with INSTALL_TEST_MODE=1 in bash)
-if (-not $TestMode -and $env:INSTALL_TEST_MODE -eq "1") {
-    $TestMode = $true
+# LightMode can also be forced via env.
+if (-not $LightMode -and $env:INSTALL_LIGHT_MODE -eq "1") {
+    $LightMode = $true
 }
 
 Write-Host ""
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host "  total-agent-memory v8.0.0 - Installer (Windows)"       -ForegroundColor Cyan
-Write-Host "  IDE: $Ide$(if ($TestMode) {' [TEST MODE]'})"            -ForegroundColor Cyan
+Write-Host "  IDE: $Ide$(if ($LightMode) {' [LIGHT MODE]'})"           -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -165,8 +165,8 @@ if (-not $pythonCmd) {
 $VenvPython = [System.IO.Path]::Combine($VenvDir, "Scripts", "python.exe")
 $VenvPip = [System.IO.Path]::Combine($VenvDir, "Scripts", "pip.exe")
 
-if ($TestMode) {
-    Write-Host "  SKIP (test mode): venv creation and pip install" -ForegroundColor DarkYellow
+if ($LightMode) {
+    Write-Host "  SKIP (light mode): venv creation and pip install" -ForegroundColor DarkYellow
     # Use system python so downstream config steps still resolve a path
     try {
         $VenvPython = (Get-Command $pythonCmd -ErrorAction Stop).Source
@@ -185,8 +185,7 @@ if ($TestMode) {
     & $VenvPython -m pip install -q --upgrade pip 2>$null
     Write-Host "  Installing dependencies (this may take 2-3 minutes on first run)..."
     $req = [System.IO.Path]::Combine($InstallDir, "requirements.txt")
-    $reqDev = [System.IO.Path]::Combine($InstallDir, "requirements-dev.txt")
-    & $VenvPip install -q -r $req -r $reqDev 2>&1 | Select-Object -Last 1
+    & $VenvPip install -q -r $req 2>&1 | Select-Object -Last 1
     Write-Host "  OK: Dependencies installed" -ForegroundColor Green
 }
 
@@ -196,8 +195,8 @@ $SrvPath = [System.IO.Path]::Combine($InstallDir, "src", "server.py")
 # 3. Pre-download embedding model
 # ===================================================================
 Write-Host "-> Step 3: Loading embedding model (first time only)..." -ForegroundColor Yellow
-if ($TestMode) {
-    Write-Host "  SKIP (test mode): embedding model pre-download" -ForegroundColor DarkYellow
+if ($LightMode) {
+    Write-Host "  SKIP (light mode): embedding model pre-download" -ForegroundColor DarkYellow
 } else {
     try {
         & $VenvPython -c @"
@@ -585,8 +584,8 @@ set DASHBOARD_PORT=37737
     }
 }
 
-if ($TestMode) {
-    Write-Host "-> Step 5: SKIP (test mode) scheduled tasks + dashboard service" -ForegroundColor DarkYellow
+if ($LightMode) {
+    Write-Host "-> Step 5: SKIP (light mode) scheduled tasks + dashboard service" -ForegroundColor DarkYellow
 } else {
     try {
         Install-BackgroundTasks

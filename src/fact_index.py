@@ -26,7 +26,7 @@ pre-filter that lifts single-hop recall where the retriever currently
 returns the raw turn instead of the fact.
 
 Not wired into server.py yet (A2 lane owns server.py edits in Phase 1).
-Consumed by ``benchmarks/locomo_bench_llm.py`` behind ``--fact-index`` and
+Consumed by subject-aware retrieval and offline analysis utilities and
 exported for future server integration.
 """
 
@@ -489,7 +489,7 @@ class FactIndex:
 
 
 def open_readonly(db_path: str) -> sqlite3.Connection:
-    """Open a shared, read-only connection. Useful for benchmarks that
+    """Open a shared, read-only connection. Useful for analysis utilities that
     don't want to mutate the index."""
     uri = f"file:{db_path}?mode=ro"
     conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
