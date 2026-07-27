@@ -44,6 +44,32 @@ class RepresentationsQueue:
         self.max_attempts = max(1, max_attempts)
         self.store = MultiReprStore(db)
         self.validator = ContentValidator()
+        self._knowledge_has_status_cache: bool | None = None
+
+    def _knowledge_has_status(self) -> bool:
+        if self._knowledge_has_status_cache is None:
+            rows = self.db.execute("PRAGMA table_info(knowledge)").fetchall()
+            self._knowledge_has_status_cache = any(
+                (row["name"] if hasattr(row, "keys") else row[1]) == "status"
+                for row in rows
+            )
+        return self._knowledge_has_status_cache
+
+    def _failed_retry_ready(
+        self,
+        processed_at: str | None,
+        retry_after_seconds: int,
+    ) -> bool:
+        if retry_after_seconds <= 0 or not processed_at:
+            return True
+        try:
+            ts = datetime.fromisoformat(str(processed_at).replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - ts).total_seconds()
+        return age >= retry_after_seconds
 
     def enqueue(self, knowledge_id: int) -> bool:
         existing = self.db.execute(
@@ -85,14 +111,21 @@ class RepresentationsQueue:
         return deleted + updated
 
     def repair_inconsistent_done(self, limit: int = 1000) -> int:
+        status_filter = (
+            "AND COALESCE(k.status, 'active')='active'"
+            if self._knowledge_has_status()
+            else ""
+        )
         rows = self.db.execute(
-            """
+            f"""
             SELECT q.id, q.knowledge_id
             FROM representations_queue q
             JOIN knowledge k ON k.id=q.knowledge_id
             LEFT JOIN knowledge_representations r
               ON r.knowledge_id=q.knowledge_id AND r.representation='raw'
-            WHERE q.status='done' AND r.knowledge_id IS NULL
+            WHERE q.status='done'
+              {status_filter}
+              AND r.knowledge_id IS NULL
             ORDER BY q.id ASC LIMIT ?
             """,
             (max(1, int(limit)),),
@@ -121,6 +154,101 @@ class RepresentationsQueue:
         if repaired:
             self.db.commit()
         return repaired
+
+    def repair_missing_raw(
+        self,
+        limit: int = 1000,
+        failed_retry_after_seconds: int = 3600,
+    ) -> int:
+        status_filter = (
+            "AND COALESCE(k.status, 'active')='active'"
+            if self._knowledge_has_status()
+            else ""
+        )
+        rows = self.db.execute(
+            f"""
+            SELECT k.id AS knowledge_id
+            FROM knowledge k
+            LEFT JOIN knowledge_representations r
+              ON r.knowledge_id=k.id AND r.representation='raw'
+            WHERE 1=1
+              {status_filter}
+              AND r.knowledge_id IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM representations_queue q
+                WHERE q.knowledge_id=k.id
+                  AND q.status IN ('pending', 'processing')
+              )
+            ORDER BY k.id ASC LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+        repaired = 0
+        for row in rows:
+            kid = row["knowledge_id"]
+            existing = self.db.execute(
+                "SELECT id, status, processed_at FROM representations_queue "
+                "WHERE knowledge_id=? AND status IN ('failed', 'done') "
+                "ORDER BY CASE status WHEN 'failed' THEN 0 ELSE 1 END, id ASC "
+                "LIMIT 1",
+                (kid,),
+            ).fetchone()
+            if existing:
+                if (
+                    existing["status"] == "failed"
+                    and not self._failed_retry_ready(
+                        existing["processed_at"],
+                        failed_retry_after_seconds,
+                    )
+                ):
+                    continue
+                self.db.execute(
+                    "UPDATE representations_queue "
+                    "SET status='pending', attempts=0, claimed_at=NULL, "
+                    "processed_at=NULL, "
+                    "last_error='requeued: missing raw representation' "
+                    "WHERE id=?",
+                    (existing["id"],),
+                )
+            else:
+                self.db.execute(
+                    "INSERT INTO representations_queue "
+                    "(knowledge_id, status, created_at, last_error) "
+                    "VALUES (?, 'pending', ?, 'requeued: missing raw representation')",
+                    (kid, _now()),
+                )
+            repaired += 1
+        if repaired:
+            self.db.commit()
+        return repaired
+
+    def prune_obsolete_failed(self, limit: int = 1000) -> int:
+        obsolete_filter = (
+            "COALESCE(k.status, '<missing>') <> 'active'"
+            if self._knowledge_has_status()
+            else "k.id IS NULL"
+        )
+        rows = self.db.execute(
+            f"""
+            SELECT q.id
+            FROM representations_queue q
+            LEFT JOIN knowledge k ON k.id=q.knowledge_id
+            WHERE q.status='failed'
+              AND {obsolete_filter}
+            ORDER BY q.id ASC LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+        if not rows:
+            return 0
+        ids = [row["id"] for row in rows]
+        placeholders = ",".join("?" for _ in ids)
+        deleted = self.db.execute(
+            f"DELETE FROM representations_queue WHERE id IN ({placeholders})",
+            ids,
+        ).rowcount or 0
+        self.db.commit()
+        return deleted
 
     def claim_next(self) -> dict | None:
         self.reclaim_stale()
@@ -190,7 +318,10 @@ class RepresentationsQueue:
         limit: int = 10,
     ) -> dict[str, int]:
         stats = {"processed": 0, "failed": 0, "skipped": 0}
+        self.reclaim_stale()
+        self.prune_obsolete_failed()
         self.repair_inconsistent_done()
+        self.repair_missing_raw()
 
         for _ in range(limit):
             item = self.claim_next()

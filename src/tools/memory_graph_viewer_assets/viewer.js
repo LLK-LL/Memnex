@@ -4,7 +4,7 @@ import { buildCometOverlayLayout, buildGalaxyOverviewLayout, buildPlanetSatellit
 import { createMemoryGalaxyRenderer } from "./memory-galaxy-renderer.js?v=20260706-middle-pan-1";
 import { memorySystemForData, systemColors } from "./memory-galaxy-systems.js";
 import { createGalaxyViewState, enterGalaxyView, goBackView, pauseGalaxyMotionForSelection, resumeGalaxyMotionFromBlank, selectCometOverlay, selectGalaxySystem, selectSolarPlanet } from "./memory-galaxy-view-state.js";
-import { initMemoryUniverse3DCoexistence } from "./memory-universe-bridge.js?v=20260716-solar-gesture-camera";
+import { initMemoryUniverse3DCoexistence } from "./memory-universe-bridge.js?v=20260727-galaxy-controls";
 import { copyableInline, escapeHtml, formatNodeDetails, renderInspectorList, renderMetricGrid, renderPromptText, renderTag, timelineCutoffFromPercent } from "./viewer-shared.js";
 
 const viewName = "2d-memory-galaxy";

@@ -189,12 +189,23 @@ class RepresentationWorker:
         stats = RepresentationsQueue(self.store.db).process_pending(
             generator=generate_representations,
             embedder=self._embed_one,
-            model_name=self.store._embed_mode or "auto",
+            model_name=self._active_model_name(),
             limit=self.limit,
         )
         if stats.get("processed"):
             self._heartbeat("running", last_processed_at=_now(), last_error=None)
         return stats
+
+    def _active_model_name(self) -> str:
+        resolver = getattr(self.store, "_active_embed_model_name", None)
+        if callable(resolver):
+            try:
+                name = resolver()
+                if name:
+                    return str(name)
+            except Exception:
+                pass
+        return getattr(self.store, "_embed_mode", None) or "auto"
 
     def _run(self) -> None:
         while not self._stop.is_set():

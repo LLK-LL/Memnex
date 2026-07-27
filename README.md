@@ -11,7 +11,7 @@ names remain available for compatibility.
 
 [![Repository](https://img.shields.io/badge/repository-LLK--LL%2FMemnex-181717?logo=github)](https://github.com/LLK-LL/Memnex)
 
-[![Version](https://img.shields.io/badge/version-12.6.0-8ad.svg)](https://pypi.org/project/total-agent-memory/)
+[![Version](https://img.shields.io/badge/version-12.7.0-8ad.svg)](https://pypi.org/project/total-agent-memory/)
 [![Tests](https://img.shields.io/badge/tests-1769%20passing-4a9.svg)]()
 [![IDEs](https://img.shields.io/badge/IDEs-9%20supported-4a9.svg)]()
 [![LongMemEval R@5](https://img.shields.io/badge/LongMemEval%20R@5-96.2%25-4a9.svg)](evals/longmemeval-2026-04-17.json)
@@ -28,6 +28,46 @@ names remain available for compatibility.
 [![Donate](https://img.shields.io/badge/PayPal-Donate-00457C.svg?logo=paypal&logoColor=white)](https://PayPal.Me/vbcherepanov)
 
 **Why this, not mem0 / Letta / Zep / Supermemory / Cognee?** → [docs/vs-competitors.md](docs/vs-competitors.md)
+
+---
+
+## v12.7.0 - Recall engine and Knowledge Galaxy 3D (2026-07-27)
+
+Memnex v12.7.0 ships a cleaner recall stack and a new Knowledge Galaxy 3D
+route. The memory engine now defaults to the Jina 768d Chinese multilingual
+embedding space, repairs stale multi-representation queue state before draining,
+and applies a local FastEmbed cross-encoder reranker without adding an LLM or
+network call to the hot path.
+
+![Memnex Knowledge Galaxy workspace](docs/assets/memnex-v12.7-galaxy-workspace.png)
+
+![Memnex Knowledge Galaxy observatory](docs/assets/memnex-v12.7-galaxy-observatory.png)
+
+Highlights:
+
+- **Better recall by default:** FTS, CJK FTS, semantic vectors,
+  multi-representation views, graph expansion, and reranking now share tighter
+  relevance diagnostics and project boundaries.
+- **Jina 768d migration path:** `scripts/migrate_embeddings_v127.py` re-encodes
+  active memory vectors and stored representations in place, without regenerating
+  private summaries through an LLM.
+- **Queue repair before drain:** failed, obsolete, missing-raw, and inconsistent
+  `representations_queue` rows are normalized before the background worker
+  resumes.
+- **Knowledge Galaxy route:** the 3D surface renders live graph-derived galaxies,
+  systems, planets, and satellites inside the Memory Galaxy workspace.
+- **Release-safe assets:** WebGL viewer assets are included in package data so
+  installed wheels can serve the visual workspace, not just source checkouts.
+
+```bash
+python scripts/migrate_embeddings_v127.py --dry-run
+python scripts/migrate_embeddings_v127.py
+python src/tools/memory_graph_viewer_export.py --output ./graph-viewer-output
+```
+
+Read the complete [v12.7.0 release guide](docs/v12.7.0-recall-galaxy-release.md)
+for the screenshots, recall-chain notes, migration steps, privacy boundary, and
+validation log.
 
 ---
 

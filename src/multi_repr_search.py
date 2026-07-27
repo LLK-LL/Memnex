@@ -114,9 +114,42 @@ def _score_rows(
     query_embedding: list[float],
     top_n: int,
 ) -> list[tuple[int, float]]:
-    """Pure-python cosine scoring. Safe to call from any thread (no sqlite)."""
+    """Cosine scoring. Safe to call from any thread (no sqlite).
+
+    v12.7 — vectorized via numpy (`_fetch` now returns the FULL candidate
+    set for a representation instead of an arbitrary 100-row slice, so the
+    per-row pure-python loop would be the new bottleneck). Falls back to
+    the original loop when numpy is unavailable.
+    """
     if not rows:
         return []
+    if np is not None:
+        qdim = len(query_embedding)
+        kids: list[int] = []
+        vecs: list = []
+        for r in rows:
+            try:
+                if int(r["embed_dim"]) != qdim:
+                    # Dim mismatch — different embedder. Skip silently.
+                    continue
+                vecs.append(
+                    np.frombuffer(r["float32_vector"], dtype=np.float32, count=qdim)
+                )
+                kids.append(r["knowledge_id"])
+            except (KeyError, IndexError, TypeError, ValueError):
+                continue
+        if not kids:
+            return []
+        mat = np.vstack(vecs)
+        q = np.asarray(query_embedding, dtype=np.float32)
+        qn = float(np.linalg.norm(q)) or 1.0
+        norms = np.linalg.norm(mat, axis=1)
+        norms = np.where(norms == 0, 1.0, norms)
+        sims = (mat @ q) / (norms * qn)
+        order = np.argsort(-sims)[:top_n]
+        return [
+            (int(kids[i]), float(sims[i])) for i in order if float(sims[i]) > 0
+        ]
     scored: list[tuple[int, float]] = []
     for r in rows:
         try:
@@ -253,7 +286,7 @@ def search(
     processed concurrently; otherwise falls back to the v8 sequential path.
     The public return contract is identical in both modes.
     """
-    fused, _ = search_with_winners(
+    fused, _, _ = search_with_winners(
         db, query_embedding, project, n_candidates, top_n
     )
     return fused
@@ -265,8 +298,8 @@ def search_with_winners(
     project: str | Iterable[str] | None = None,
     n_candidates: int = 100,
     top_n: int = 20,
-) -> tuple[list[tuple[int, float]], dict[int, str]]:
-    """Same as ``search`` but also returns ``winners``.
+) -> tuple[list[tuple[int, float]], dict[int, str], dict[int, float]]:
+    """Same as ``search`` but also returns ``winners`` and ``winner_sims``.
 
     ``winners[knowledge_id] = best_repr_name`` — the representation type
     (summary / keywords / questions / compressed) that produced the highest
@@ -274,10 +307,14 @@ def search_with_winners(
     per-representation staleness decay: a hit via ``summary`` ages faster
     than a hit via ``raw`` because LLM-generated views encode dated context.
 
-    Empty winners dict when no representations matched.
+    v12.7 — ``winner_sims[knowledge_id] = best_cosine`` exposes the winning
+    view's raw cosine so callers can use it as absolute semantic evidence
+    (additive scoring + relevance gate) instead of the internal RRF scale.
+
+    Empty dicts when no representations matched.
     """
     if not query_embedding:
-        return [], {}
+        return [], {}, {}
 
     if _config.is_v9_parallel_retrieval_enabled():
         per_repr = _run_coroutine(
@@ -291,7 +328,7 @@ def search_with_winners(
         )
 
     if not per_repr:
-        return [], {}
+        return [], {}, {}
 
     fused = rrf_fuse(per_repr, k=60, top_n=top_n)
 
@@ -303,7 +340,11 @@ def search_with_winners(
             if current is None or sim > current[1]:
                 winners[kid] = (repr_name, sim)
 
-    return fused, {kid: name for kid, (name, _) in winners.items()}
+    return (
+        fused,
+        {kid: name for kid, (name, _) in winners.items()},
+        {kid: float(sim) for kid, (_, sim) in winners.items()},
+    )
 
 
 def _fetch(
@@ -312,6 +353,15 @@ def _fetch(
     project: str | Iterable[str] | None,
     limit: int,
 ) -> list[sqlite3.Row]:
+    """Fetch candidate representation vectors for brute-force scoring.
+
+    v12.7 — the query previously had `LIMIT ?` with NO ORDER BY: SQLite was
+    free to return an arbitrary subset, so once a representation exceeded
+    `limit` rows the tier silently scored a random ~fraction of the corpus
+    (both missing true matches and surfacing arbitrary ones). The cap is now
+    a deterministic freshness-ordered safety bound; callers pass a value
+    sized to cover the whole table (server.py uses 10000).
+    """
     if project:
         projects = [project] if isinstance(project, str) else list(project)
         placeholders = ",".join("?" for _ in projects)
@@ -322,6 +372,7 @@ def _fetch(
                 WHERE kr.representation = ?
                   AND k.status = 'active'
                   AND k.project IN ({placeholders})
+                ORDER BY kr.created_at DESC, kr.knowledge_id DESC
                 LIMIT ?""",
             (representation, *projects, limit),
         ).fetchall()
@@ -331,6 +382,7 @@ def _fetch(
              JOIN knowledge k ON k.id = kr.knowledge_id
             WHERE kr.representation = ?
               AND k.status = 'active'
+            ORDER BY kr.created_at DESC, kr.knowledge_id DESC
             LIMIT ?""",
         (representation, limit),
     ).fetchall()

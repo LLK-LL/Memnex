@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "total-agent-memory"
-version = "12.6.0"
-description = "Persistent memory MCP server for Claude Code, Codex CLI, Cursor and any MCP client: 46 tools — knowledge graph, temporal facts, procedural memory, episodic memory, AST ingest, pre-edit guard, auto-consolidating error capture"
+version = "12.7.0"
+description = "Local-first memory MCP server for Claude Code, Codex CLI, Cursor and any MCP client: project-safe recall, multi-representation retrieval, temporal knowledge graph, and 2D/3D Memory Galaxy visualization"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -81,6 +81,14 @@ src = [
     "**/*.yaml",
     "**/*.yml",
     "**/*.txt",
+    "**/*.html",
+    "**/*.css",
+    "**/*.js",
+    "**/*.png",
+    "**/*.jpg",
+    "**/*.jpeg",
+    "**/*.webp",
+    "**/*.svg",
 ]
 
 [tool.pytest.ini_options]

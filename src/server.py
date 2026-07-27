@@ -138,7 +138,11 @@ except ImportError:
     HAS_CACHE = False
 
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-FASTEMBED_MODEL = os.environ.get("FASTEMBED_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+# v12.7 — default upgraded MiniLM-L12 (384d) → jina-v2-base-zh (768d).
+# Same save-path latency on the target box (17ms vs 18ms single text),
+# far better zh-en cross-lingual retrieval. Existing vectors must be
+# rebuilt after switching (scripts/migrate_embeddings_v127.py).
+FASTEMBED_MODEL = os.environ.get("FASTEMBED_MODEL", "jinaai/jina-embeddings-v2-base-zh")
 FASTEMBED_CACHE_DIR = os.environ.get("FASTEMBED_CACHE_DIR")
 OLLAMA_EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -390,6 +394,7 @@ class Store:
         self._migrate()
         self._apply_sql_migrations()
         self._check_fts()
+        self._ensure_cjk_fts()
 
         self.chroma = None
         # v11 §J — per-space Chroma collections so different embedding-space
@@ -492,6 +497,17 @@ class Store:
                 kwargs = {"cache_dir": FASTEMBED_CACHE_DIR} if FASTEMBED_CACHE_DIR else {}
                 self._fastembed_model = TextEmbedding(FASTEMBED_MODEL, **kwargs)
                 LOG(f"FastEmbed: loaded {FASTEMBED_MODEL}")
+            except TypeError as e:
+                if not FASTEMBED_CACHE_DIR or "cache_dir" not in str(e):
+                    LOG(f"FastEmbed: init failed ({e})")
+                    self._fastembed_model = False  # sentinel to avoid retries
+                else:
+                    try:
+                        self._fastembed_model = TextEmbedding(FASTEMBED_MODEL)
+                        LOG(f"FastEmbed: loaded {FASTEMBED_MODEL}")
+                    except Exception as retry_e:
+                        LOG(f"FastEmbed: init failed ({retry_e})")
+                        self._fastembed_model = False  # sentinel to avoid retries
             except Exception as e:
                 LOG(f"FastEmbed: init failed ({e})")
                 self._fastembed_model = False  # sentinel to avoid retries
@@ -969,8 +985,15 @@ class Store:
         import numpy as np
 
         # 1. Load binary vectors for active records.
-        conds = ["k.status='active'"]
-        params: list = []
+        # v12.7 — hard filters on embed_model + embed_dim: the query vector
+        # comes from the ACTIVE model, so rows from any other model are not
+        # comparable — same-dim different-model rows silently score garbage
+        # (e.g. jina-code vs jina-zh, both 768d), and mixed-dim rows make
+        # np.array() throw over ragged binary blobs, killing the whole
+        # semantic tier (callers swallow the error). The dim filter stays as
+        # a belt against legacy rows with drifted/NULL model labels.
+        conds = ["k.status='active'", "e.embed_model = ?", "e.embed_dim = ?"]
+        params: list = [self._active_embed_model_name(), len(query_embedding)]
         if project:
             project_filter = [project] if isinstance(project, str) else list(project)
             ph = ",".join("?" * len(project_filter))
@@ -1321,6 +1344,51 @@ class Store:
                 )
                 self.db.commit()
                 LOG("FTS5 recreated from scratch: OK")
+
+    def _ensure_cjk_fts(self):
+        """CJK-capable FTS5 shadow index (trigram tokenizer).
+
+        The main `knowledge_fts` table uses the default unicode61 tokenizer,
+        which does NOT segment CJK text — a run of Han characters is a single
+        token, so Chinese queries never hit the BM25 tier. This companion
+        table indexes the same external content with `tokenize='trigram'`
+        (SQLite >= 3.34) so any >=3-char CJK (or latin) substring becomes
+        matchable. Queries containing CJK route here (see `_search_impl`).
+
+        Sets `self.has_cjk_fts`. Fails soft: on older SQLite the flag stays
+        False and search falls back to the unicode61 table only.
+        """
+        self.has_cjk_fts = False
+        try:
+            existed = self.db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='knowledge_fts_cjk'"
+            ).fetchone() is not None
+            self.db.executescript("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts_cjk USING fts5(
+                    content, context, tags, content='knowledge', content_rowid='id',
+                    tokenize='trigram'
+                );
+                CREATE TRIGGER IF NOT EXISTS k_ftsc_i AFTER INSERT ON knowledge BEGIN
+                    INSERT INTO knowledge_fts_cjk(rowid,content,context,tags)
+                    VALUES (new.id,new.content,new.context,new.tags);
+                END;
+                CREATE TRIGGER IF NOT EXISTS k_ftsc_u AFTER UPDATE ON knowledge BEGIN
+                    INSERT INTO knowledge_fts_cjk(knowledge_fts_cjk,rowid,content,context,tags)
+                    VALUES ('delete',old.id,old.content,old.context,old.tags);
+                    INSERT INTO knowledge_fts_cjk(rowid,content,context,tags)
+                    VALUES (new.id,new.content,new.context,new.tags);
+                END;
+            """)
+            if not existed:
+                # First creation on an existing DB — backfill from source table.
+                self.db.execute(
+                    "INSERT INTO knowledge_fts_cjk(knowledge_fts_cjk) VALUES('rebuild')"
+                )
+                LOG("CJK trigram FTS: created + backfilled")
+            self.db.commit()
+            self.has_cjk_fts = True
+        except Exception as e:
+            LOG(f"CJK trigram FTS unavailable (needs SQLite >= 3.34): {e}")
 
     def _apply_sql_migrations(self):
         """Idempotently apply all migrations/*.sql in sorted order.
@@ -3293,7 +3361,7 @@ class Store:
             return RepresentationsQueue(self.db).process_pending(
                 generator=generate_representations,
                 embedder=_embed_one,
-                model_name=self._embed_mode,
+                model_name=self._active_embed_model_name() or self._embed_mode,
                 limit=1,
             )
         except Exception as e:
@@ -3494,6 +3562,7 @@ class Recall:
         "fts": 1.0,
         "semantic": 1.2,
         "hyde": 1.0,
+        "multi_repr": 1.0,
         "fuzzy": 0.5,
         "graph": 0.8,
         "episode": 0.9,
@@ -3680,6 +3749,7 @@ class Recall:
             "graph_expand": os.environ.get("MEMORY_GRAPH_EXPAND", "0"),
             "relevance_gate": os.environ.get("MEMORY_RECALL_RELEVANCE_GATE", "1"),
             "min_coverage": os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25"),
+            "min_cosine": os.environ.get("MEMORY_MIN_COSINE", "0.45"),
             # v11 Phase 6b — embedding_space affects candidate pool, must be in cache key.
             "embedding_space": ",".join(_v11_spaces) if _v11_spaces else None,
             "agent_namespaces": ",".join(namespace_filter) if namespace_filter else "*",
@@ -3702,6 +3772,7 @@ class Recall:
                                                graph_expand=os.environ.get("MEMORY_GRAPH_EXPAND", "0"),
                                                relevance_gate=os.environ.get("MEMORY_RECALL_RELEVANCE_GATE", "1"),
                                                min_coverage=os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25"),
+                                               min_cosine=os.environ.get("MEMORY_MIN_COSINE", "0.45"),
                                                embedding_space=",".join(_v11_spaces) if _v11_spaces else None,
                                                agent_namespaces=",".join(namespace_filter) if namespace_filter else "*")
             cached = self.s.cache.get(cache_key)
@@ -3732,6 +3803,45 @@ class Recall:
 
         use_rrf = (fusion == "rrf")
 
+        # v12.7 — coverage terms are shared by the fuzzy tier, the expansion
+        # relevance check and the final relevance gate. Compute once up front.
+        coverage_terms: list[str] = []
+        _cov_query_coverage = None
+        _cov_term_matches = None
+        try:
+            from recall_modes import (
+                _query_coverage,
+                _query_coverage_term_matches,
+                _query_coverage_terms,
+            )
+            _cov_query_coverage = _query_coverage
+            _cov_term_matches = _query_coverage_term_matches
+            coverage_terms = _query_coverage_terms(original_query)
+            _project_term_keys = {
+                term.lower()
+                for alias in (project_aliases or [project])
+                for term in _query_coverage_terms(str(alias or ""))
+            }
+            if _project_term_keys:
+                coverage_terms = [
+                    term for term in coverage_terms
+                    if term.lower() not in _project_term_keys
+                ]
+        except Exception as e:
+            LOG(f"coverage terms unavailable: {e}")
+
+        def _row_matches_any_term(row) -> bool:
+            """True when the record shares >=1 high-signal query term."""
+            if not coverage_terms or _cov_term_matches is None:
+                return False
+            try:
+                hay = " ".join(
+                    str(row.get(k, "") or "") for k in ("content", "context", "tags")
+                ).lower()
+            except Exception:
+                return False
+            return any(_cov_term_matches(t, hay) for t in coverage_terms)
+
         # Collect results per doc_id and per-tier ranked lists for RRF
         results = {}          # doc_id -> {"r": row, "score": legacy_score, "via": [tiers]}
         tier_rankings = {}    # tier_name -> [doc_id, ...] ordered by tier-specific score desc
@@ -3740,50 +3850,88 @@ class Recall:
         # can show them separately from the merged additive `score`.
         tier_scores: dict[str, dict[int, float]] = {} if _explain else {}
 
-        # Tier 1: FTS5 keyword search with BM25 scoring
-        fts_q = " OR ".join(Store._fts_escape(w) for w in re.split(r'\s+', query) if len(w) > 2) or Store._fts_escape(query)
+        # Tier 1: FTS5 keyword search with BM25 scoring.
+        # Precision hardening (v12.7):
+        #   * implicit-AND first; OR only as a fallback when AND finds nothing
+        #     (any-single-common-word OR admission was a major noise source);
+        #   * no artificial 0.5 score floor — weak BM25 hits stay weak;
+        #   * queries containing CJK route to the trigram shadow index
+        #     (`knowledge_fts_cjk`) — the unicode61 main table cannot
+        #     segment Chinese, which starved this tier for CJK queries.
+        _has_cjk_query = bool(re.search(r'[一-鿿]', query))
+        _use_cjk_fts = _has_cjk_query and getattr(self.s, "has_cjk_fts", False)
+        if _use_cjk_fts:
+            fts_table = "knowledge_fts_cjk"
+            # trigram tokenizer cannot match terms shorter than 3 chars
+            fts_tokens = [
+                Store._fts_escape(t)
+                for t in re.findall(r'[一-鿿]{3,}|[A-Za-z0-9_\-\.]{3,}', query)
+            ]
+        else:
+            fts_table = "knowledge_fts"
+            fts_tokens = [
+                Store._fts_escape(w) for w in re.split(r'\s+', query) if len(w) > 2
+            ]
+        fts_variants: list[str] = []
+        if fts_tokens:
+            fts_variants.append(" ".join(fts_tokens))         # implicit AND
+            if len(fts_tokens) > 1:
+                fts_variants.append(" OR ".join(fts_tokens))  # recall fallback
+        elif not _use_cjk_fts:
+            fts_variants.append(Store._fts_escape(query))
         try:
-            conds = ["knowledge_fts MATCH ?", "k.status='active'"]
-            params = [fts_q]
-            joins = ""
-            if project_aliases:
-                ph = ",".join("?" * len(project_aliases))
-                conds.append(f"k.project IN ({ph})")
-                params.extend(project_aliases)
-            if ktype != "all":
-                conds.append("k.type=?")
-                params.append(ktype)
-            if branch:
-                conds.append("(k.branch=? OR k.branch='')")
-                params.append(branch)
-            if namespace_filter:
-                ph = ",".join("?" * len(namespace_filter))
-                conds.append(f"k.agent_namespace IN ({ph})")
-                params.extend(namespace_filter)
-            # v11 Phase 6b — restrict FTS results to records whose
-            # embedding row carries one of the requested spaces. Records
-            # without an embedding row are admitted only when no space
-            # filter was set (otherwise we'd leak unclassified rows).
-            if _v11_spaces:
-                joins += " JOIN embeddings e ON e.knowledge_id=k.id"
-                ph = ",".join("?" * len(_v11_spaces))
-                conds.append(f"e.embedding_space IN ({ph})")
-                params.extend(_v11_spaces)
-            params.append(limit * 3)
-            fts_rows = self.s.db.execute(f"""
-                SELECT k.*, bm25(knowledge_fts) AS _bm25
-                FROM knowledge_fts f JOIN knowledge k ON k.id=f.rowid{joins}
-                WHERE {' AND '.join(conds)} ORDER BY bm25(knowledge_fts) LIMIT ?
-            """, params).fetchall()
-            # Proper BM25 normalization: relative to max in batch
+            fts_rows = []
+            for fts_q in fts_variants:
+                conds = [f"{fts_table} MATCH ?", "k.status='active'"]
+                params = [fts_q]
+                joins = ""
+                if project_aliases:
+                    ph = ",".join("?" * len(project_aliases))
+                    conds.append(f"k.project IN ({ph})")
+                    params.extend(project_aliases)
+                if ktype != "all":
+                    conds.append("k.type=?")
+                    params.append(ktype)
+                if branch:
+                    conds.append("(k.branch=? OR k.branch='')")
+                    params.append(branch)
+                if namespace_filter:
+                    ph = ",".join("?" * len(namespace_filter))
+                    conds.append(f"k.agent_namespace IN ({ph})")
+                    params.extend(namespace_filter)
+                # v11 Phase 6b — restrict FTS results to records whose
+                # embedding row carries one of the requested spaces. Records
+                # without an embedding row are admitted only when no space
+                # filter was set (otherwise we'd leak unclassified rows).
+                if _v11_spaces:
+                    joins += " JOIN embeddings e ON e.knowledge_id=k.id"
+                    ph = ",".join("?" * len(_v11_spaces))
+                    conds.append(f"e.embedding_space IN ({ph})")
+                    params.extend(_v11_spaces)
+                params.append(limit * 3)
+                fts_rows = self.s.db.execute(f"""
+                    SELECT k.*, bm25({fts_table}) AS _bm25
+                    FROM {fts_table} f JOIN knowledge k ON k.id=f.rowid{joins}
+                    WHERE {' AND '.join(conds)} ORDER BY bm25({fts_table}) LIMIT ?
+                """, params).fetchall()
+                if fts_rows:
+                    break
+            # Proper BM25 normalization: relative to max in batch.
+            # Degenerate batches (tiny corpora can yield bm25 == 0.0 for a
+            # legitimate exact match) get a uniform 1.0 — this is NOT the old
+            # unconditional 0.5 floor, which propped up weak hits inside
+            # normally-scored batches.
             raw_scores = [abs(dict(r).get("_bm25", 0)) for r in fts_rows]
             max_bm25 = max(raw_scores) if raw_scores else 1.0
             fts_tier = []  # collect (doc_id, score) for RRF ranking
             for r in fts_rows:
                 row = dict(r)
                 bm25_raw = abs(row.pop("_bm25", 0))
-                bm25_score = (bm25_raw / max(max_bm25, 0.01)) * 2.0
-                results[r["id"]] = {"r": row, "score": max(0.5, bm25_score), "via": ["fts"]}
+                if max_bm25 > 0:
+                    bm25_score = (bm25_raw / max_bm25) * 2.0
+                else:
+                    bm25_score = 1.0
+                results[r["id"]] = {"r": row, "score": bm25_score, "via": ["fts"]}
                 fts_tier.append(r["id"])  # already sorted by BM25 from SQL ORDER BY
                 if _explain:
                     tier_scores.setdefault("fts", {})[int(r["id"])] = float(bm25_raw)
@@ -3800,12 +3948,27 @@ class Recall:
         )
         semantic_tier = []   # (doc_id, score) for RRF
         hyde_tier = []       # (doc_id, score) for RRF
+        q_emb_main = None    # query embedding, reused by expansion gating below
+
+        def _note_cosine(kid, cos_sim):
+            """Track the best semantic evidence per doc for the relevance gate."""
+            item = results.get(kid)
+            if item is not None:
+                prev = item.get("best_cosine")
+                if prev is None or cos_sim > prev:
+                    item["best_cosine"] = float(cos_sim)
+
         if self.s._check_binary_search() and can_embed:
             embs = self.s.embed([query])
             if embs:
+                q_emb_main = embs[0]
                 try:
+                    # v12.7 — the Hamming pre-filter used to keep only 50
+                    # candidates, which both misses true neighbours and lets
+                    # quantization noise decide the pool on larger corpora.
                     candidates = self.s._binary_search(
-                        embs[0], n_candidates=50, project=project_aliases,
+                        embs[0], n_candidates=max(200, limit * 10),
+                        project=project_aliases,
                         n_results=limit * 3,
                         embedding_spaces=_v11_spaces)
                     for kid, cos_sim in candidates:
@@ -3820,6 +3983,7 @@ class Recall:
                             rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (kid,))
                             if rec and _namespace_allows(rec):
                                 results[kid] = {"r": rec, "score": score, "via": ["semantic"]}
+                        _note_cosine(kid, cos_sim)
                 except Exception:
                     pass
 
@@ -3829,7 +3993,8 @@ class Recall:
                         hyde_emb = hyde_expand(query, project)
                         if hyde_emb:
                             candidates2 = self.s._binary_search(
-                                hyde_emb, n_candidates=50, project=project_aliases,
+                                hyde_emb, n_candidates=max(200, limit * 10),
+                                project=project_aliases,
                                 n_results=limit * 2,
                                 embedding_spaces=_v11_spaces)
                             for kid, cos_sim in candidates2:
@@ -3845,6 +4010,7 @@ class Recall:
                                     rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (kid,))
                                     if rec and _namespace_allows(rec):
                                         results[kid] = {"r": rec, "score": score, "via": ["hyde"]}
+                                _note_cosine(kid, cos_sim)
                     except Exception as e:
                         LOG(f"HyDE search failed: {e}")
 
@@ -3852,6 +4018,7 @@ class Recall:
             # Fallback: ChromaDB semantic search
             embs = self.s.embed([query])
             if embs:
+                q_emb_main = embs[0]
                 # Build where filter — merge project + embedding_space when set.
                 # v11 Phase 6b — Chroma uses {"$in": [...]} for multi-value filters.
                 _w_clauses: list[dict] = [{"status": "active"}]
@@ -3880,6 +4047,7 @@ class Recall:
                             rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (rid,))
                             if rec and _namespace_allows(rec):
                                 results[rid] = {"r": rec, "score": score, "via": ["semantic"]}
+                        _note_cosine(rid, score)
                 except Exception:
                     pass
 
@@ -3905,6 +4073,7 @@ class Recall:
                                     rec = self.s.q1("SELECT * FROM knowledge WHERE id=?", (rid,))
                                     if rec and _namespace_allows(rec):
                                         results[rid] = {"r": rec, "score": score, "via": ["hyde"]}
+                                _note_cosine(rid, score)
                     except Exception as e:
                         LOG(f"HyDE search failed: {e}")
 
@@ -3929,18 +4098,23 @@ class Recall:
                     q_emb_list = self.s.embed([query])
                     q_emb = q_emb_list[0] if q_emb_list else None
                 if q_emb:
-                    repr_hits, repr_winners = search_with_winners(
+                    if q_emb_main is None:
+                        q_emb_main = q_emb
+                    repr_hits, repr_winners, repr_sims = search_with_winners(
                         self.s.db, q_emb, project=project_aliases,
-                        n_candidates=100, top_n=limit * 3
+                        n_candidates=10000, top_n=limit * 3
                     )
                     if repr_hits:
                         repr_tier: list[tuple[int, float]] = []
                         for kid, score in repr_hits:
                             repr_tier.append((kid, score))
                             winner = repr_winners.get(kid)
+                            # v12.7 — additive contribution is the winning
+                            # view's raw cosine (same scale as the semantic
+                            # tier), not the old `internal_rrf * 20` hack.
+                            add_score = max(0.0, float(repr_sims.get(kid, 0.0)))
                             if kid in results:
-                                # RRF scores are small (~0.016) — scale to align with cosine tiers
-                                results[kid]["score"] += score * 20.0
+                                results[kid]["score"] += add_score
                                 if "multi_repr" not in results[kid]["via"]:
                                     results[kid]["via"].append("multi_repr")
                                 # Remember the freshest repr-type winner across passes
@@ -3952,17 +4126,27 @@ class Recall:
                                 if rec and _namespace_allows(rec):
                                     results[kid] = {
                                         "r": rec,
-                                        "score": score * 20.0,
+                                        "score": add_score,
                                         "via": ["multi_repr"],
                                         "matched_repr": winner,
                                     }
+                            _note_cosine(kid, repr_sims.get(kid, 0.0))
                         repr_tier.sort(key=lambda x: x[1], reverse=True)
                         tier_rankings["multi_repr"] = [doc_id for doc_id, _ in repr_tier]
         except Exception as e:
             LOG(f"multi_repr tier error: {e}")
 
         # ── Tier 3: Fuzzy search (catches typos and partial matches) ──
+        # v12.7 — tightened. This tier fires exactly when the other tiers
+        # found little, i.e. when the store likely has nothing relevant, so
+        # the old 0.35 SequenceMatcher bar mostly manufactured filler. Now:
+        # ratio must clear MEMORY_FUZZY_MIN_RATIO (default 0.6) AND, when the
+        # query yields coverage terms, the record must share at least one.
         if len(results) < limit:
+            try:
+                fuzzy_min = float(os.environ.get("MEMORY_FUZZY_MIN_RATIO", "0.6"))
+            except (TypeError, ValueError):
+                fuzzy_min = 0.6
             try:
                 conds2 = ["k.status='active'"]
                 params2 = []
@@ -3991,16 +4175,62 @@ class Recall:
                     if r["id"] in results:
                         continue
                     ratio = SequenceMatcher(None, ql, r["content"][:200].lower()).ratio()
-                    if ratio > 0.35:
-                        results[r["id"]] = {"r": r, "score": ratio * 0.6, "via": ["fuzzy"]}
-                        fuzzy_tier.append((r["id"], ratio))
-                        if _explain:
-                            tier_scores.setdefault("fuzzy", {})[int(r["id"])] = float(ratio)
+                    if ratio <= fuzzy_min:
+                        continue
+                    if coverage_terms and not _row_matches_any_term(r):
+                        continue
+                    results[r["id"]] = {"r": r, "score": ratio * 0.6, "via": ["fuzzy"]}
+                    fuzzy_tier.append((r["id"], ratio))
+                    if _explain:
+                        tier_scores.setdefault("fuzzy", {})[int(r["id"])] = float(ratio)
                 if fuzzy_tier:
                     fuzzy_tier.sort(key=lambda x: x[1], reverse=True)
                     tier_rankings["fuzzy"] = [doc_id for doc_id, _ in fuzzy_tier]
             except Exception:
                 pass
+
+        # ── v12.7: relevance check for expansion-injected rows ──
+        # Graph neighbours / episode members / relational-router rows enter
+        # the pool because of their *link* to a hit, not because of any
+        # evidence against the query. Require cheap query evidence before
+        # they may join the main ranked list: stored-vector cosine when the
+        # query embedding is available, else a shared coverage term. Fails
+        # open only when neither signal exists (no embedder AND no terms).
+        try:
+            _expansion_min_cos = float(
+                os.environ.get("MEMORY_EXPANSION_MIN_COSINE", "0.30")
+            )
+        except (TypeError, ValueError):
+            _expansion_min_cos = 0.30
+
+        def _expansion_check(row) -> tuple[bool, float | None]:
+            """(admit?, cosine_evidence_or_None) for an expansion candidate."""
+            rid = row.get("id") if isinstance(row, dict) else row["id"]
+            if q_emb_main is not None:
+                try:
+                    vec_row = self.s.db.execute(
+                        "SELECT float32_vector, embed_dim FROM embeddings WHERE knowledge_id=?",
+                        (rid,),
+                    ).fetchone()
+                    if vec_row is not None and int(vec_row["embed_dim"]) == len(q_emb_main):
+                        import numpy as _np
+                        a = _np.asarray(q_emb_main, dtype=_np.float32)
+                        b = _np.frombuffer(
+                            vec_row["float32_vector"], dtype=_np.float32,
+                            count=len(q_emb_main),
+                        )
+                        denom = float(_np.linalg.norm(a) * _np.linalg.norm(b)) or 1.0
+                        cos_sim = float(a @ b) / denom
+                        return (cos_sim >= _expansion_min_cos), cos_sim
+                except Exception:
+                    pass
+            if coverage_terms:
+                try:
+                    hay_row = dict(row) if not isinstance(row, dict) else row
+                except Exception:
+                    return True, None
+                return _row_matches_any_term(hay_row), None
+            return True, None
 
         # ── Tier 4: Graph expansion ──
         top5 = sorted(results, key=lambda x: results[x]["score"], reverse=True)[:5]
@@ -4010,7 +4240,15 @@ class Recall:
             before_ids = set(results.keys())
             multi_hop_expand(self.s, top5, results, depth=2)
             _drop_namespace_disallowed()
-            # Collect newly added graph results for RRF tier ranking
+            # v12.7 — gate the newly injected nodes on query relevance.
+            for did in [d for d in results if d not in before_ids]:
+                ok, cos_ev = _expansion_check(results[did]["r"])
+                if not ok:
+                    results.pop(did, None)
+                    continue
+                if cos_ev is not None:
+                    _note_cosine(did, cos_ev)
+            # Collect surviving graph results for RRF tier ranking
             for did in results:
                 if did not in before_ids:
                     sc = results[did]["score"]
@@ -4028,9 +4266,14 @@ class Recall:
                     if not _namespace_allows(r):
                         continue
                     if r["id"] not in results:
+                        ok, cos_ev = _expansion_check(r)
+                        if not ok:
+                            continue
                         graph_score = results[kid]["score"] * 0.4
                         results[r["id"]] = {"r": r, "score": graph_score, "via": ["graph"]}
                         graph_tier.append((r["id"], graph_score))
+                        if cos_ev is not None:
+                            _note_cosine(r["id"], cos_ev)
                         if _explain:
                             tier_scores.setdefault("graph", {})[int(r["id"])] = float(graph_score)
 
@@ -4071,9 +4314,17 @@ class Recall:
                             if (row is None or not _namespace_allows(row)
                                     or not _project_allows(row)):
                                 continue
+                            row_d = dict(row)
+                            # v12.7 — episode members are expansion rows too:
+                            # require query evidence before they join the pool.
+                            ep_ok, ep_cos = _expansion_check(row_d)
+                            if not ep_ok:
+                                continue
                             ep_score = base * (1.0 / (1 + rank))
-                            results[fid] = {"r": dict(row), "score": ep_score, "via": ["episode"]}
+                            results[fid] = {"r": row_d, "score": ep_score, "via": ["episode"]}
                             episode_tier.append((fid, ep_score))
+                            if ep_cos is not None:
+                                _note_cosine(fid, ep_cos)
                             if _explain:
                                 tier_scores.setdefault("episode", {})[int(fid)] = float(ep_score)
                         else:
@@ -4353,26 +4604,29 @@ class Recall:
         except (TypeError, ValueError):
             relevance_gate_threshold = 0.25
         relevance_gate_threshold = min(1.0, max(0.0, relevance_gate_threshold))
-        coverage_terms: list[str] = []
+        # v12.7 — absolute relevance gate. RRF fusion is rank-only: without a
+        # floor the "least irrelevant" candidates always fill `limit`, even
+        # when the store holds nothing relevant. A candidate now needs at
+        # least ONE positive signal to survive:
+        #   * literal query substring match, OR
+        #   * lexical coverage >= MEMORY_RECALL_MIN_COVERAGE, OR
+        #   * best per-tier cosine >= MEMORY_MIN_COSINE.
+        # Empty result sets are a legitimate outcome. The old gate was
+        # lexical-only and skipped entirely when the query produced no
+        # coverage terms (typical for short Chinese queries).
+        try:
+            min_cosine = float(os.environ.get("MEMORY_MIN_COSINE", "0.45"))
+        except (TypeError, ValueError):
+            min_cosine = 0.40
 
         try:
-            from recall_modes import _query_coverage, _query_coverage_terms
-
-            coverage_terms = _query_coverage_terms(original_query)
-            project_term_keys = {
-                term.lower()
-                for alias in (project_aliases or [project])
-                for term in _query_coverage_terms(str(alias or ""))
-            }
-            if project_term_keys:
-                coverage_terms = [
-                    term for term in coverage_terms
-                    if term.lower() not in project_term_keys
-                ]
-
             def _attach_raw_relevance(item):
                 row = item.get("r") or {}
-                coverage, matched_terms = _query_coverage(
+                if _cov_query_coverage is None or not coverage_terms:
+                    item.setdefault("query_coverage", 0.0)
+                    item.setdefault("matched_query_terms", [])
+                    return item["query_coverage"]
+                coverage, matched_terms = _cov_query_coverage(
                     row,
                     content=str(row.get("content", "") or ""),
                     summary="",
@@ -4386,8 +4640,6 @@ class Recall:
                 relevance_gate_reason = "skipped_disabled"
             elif not ranked:
                 relevance_gate_reason = "skipped_no_candidates"
-            elif not coverage_terms:
-                relevance_gate_reason = "skipped_no_terms"
             else:
                 relevance_gate_applied = True
                 kept = []
@@ -4396,7 +4648,36 @@ class Recall:
                     relevance_gate_best_coverage = max(
                         relevance_gate_best_coverage, coverage
                     )
-                    if coverage >= relevance_gate_threshold:
+                    best_cos = item.get("best_cosine")
+                    # Gate policy (v12.7, calibrated on jina-v2-base-zh):
+                    #   * >=2 coverage terms — a technical multi-term query;
+                    #     term coverage is authoritative. Cosine cannot
+                    #     arbitrate here: a same-project generic "报告" doc
+                    #     scores ~0.65 against such a query via surface-token
+                    #     echo, right in the range of true paraphrase pairs.
+                    #   * exactly 1 term — typically a whole short CJK phrase
+                    #     (the extractor keeps contiguous CJK runs intact).
+                    #     Exact-substring match of the full phrase is far too
+                    #     strict and kills cross-lingual recall (relevant
+                    #     zh->en pairs sit at cosine 0.51-0.66 with ZERO
+                    #     lexical overlap) — allow the cosine floor to rescue.
+                    #   * 0 terms — cosine floor alone (these queries used to
+                    #     skip the gate entirely and fill the limit with the
+                    #     least-irrelevant leftovers).
+                    if float(item.get("literal_match_boost", 1.0)) > 1.0:
+                        keep = True
+                    elif coverage_terms and coverage >= relevance_gate_threshold:
+                        keep = True
+                    elif len(coverage_terms) >= 2:
+                        keep = False
+                    elif best_cos is not None:
+                        keep = best_cos >= min_cosine
+                    else:
+                        # No usable lexical signal AND no semantic evidence
+                        # for this candidate — nothing to judge by; keep the
+                        # legacy fail-open behaviour (degraded environments).
+                        keep = True
+                    if keep:
                         kept.append(item)
                 relevance_gate_filtered_count = len(ranked) - len(kept)
                 ranked = kept
@@ -4444,6 +4725,12 @@ class Recall:
                     for row in graph_rows:
                         rid_g = row.get("id")
                         if rid_g in existing_ids:
+                            continue
+                        # v12.7 — router-injected rows bypass the relevance
+                        # gate (they are appended after it), so they must
+                        # carry their own query evidence to be admitted.
+                        rr_ok, _rr_cos = _expansion_check(row)
+                        if not rr_ok:
                             continue
                         ranked.append({
                             "r": row,
@@ -4519,6 +4806,14 @@ class Recall:
                         max_ratio = min(1.0, max(0.0, max_ratio))
                         score_ceiling = max_primary * max_ratio
                         for row in rows:
+                            # v12.7 — graph-expand rows are appended after the
+                            # relevance gate; demand their own query evidence.
+                            # Exception: the caller explicitly asked for the
+                            # neighbourhood (expand_context=True) — honour it.
+                            if not expand_context:
+                                ge_ok, _ge_cos = _expansion_check(row)
+                                if not ge_ok:
+                                    continue
                             graph_score = graph_scores.get(row.get("id"), 0.0)
                             boosted_score = max_primary * (graph_score / max_graph) * boost
                             fused_score = max(0.0, min(boosted_score, score_ceiling))
@@ -4700,6 +4995,7 @@ class Recall:
                                                graph_expand=os.environ.get("MEMORY_GRAPH_EXPAND", "0"),
                                                relevance_gate=os.environ.get("MEMORY_RECALL_RELEVANCE_GATE", "1"),
                                                min_coverage=os.environ.get("MEMORY_RECALL_MIN_COVERAGE", "0.25"),
+                                               min_cosine=os.environ.get("MEMORY_MIN_COSINE", "0.45"),
                                                embedding_space=",".join(_v11_spaces) if _v11_spaces else None,
                                                agent_namespaces=",".join(namespace_filter) if namespace_filter else "*")
             self.s.cache.put(cache_key, result, project=project)
@@ -6758,6 +7054,7 @@ def _cleanup_eval_records(record_ids: list[int]) -> int:
             [*ids, *ids],
         )
         _delete("knowledge_fts", f"rowid IN ({qmarks})", ids)
+        _delete("knowledge_fts_cjk", f"rowid IN ({qmarks})", ids)
         cur = store.db.execute(
             f"DELETE FROM knowledge WHERE id IN ({qmarks})", ids,
         )
@@ -6826,10 +7123,18 @@ async def _do(name, a):
         if mode_param == "rag":
             search_limit = max(requested_limit * 4, 20)
 
+        # v12.7 — rerank defaults to the mode-level flag (fast mode ships
+        # MEMORY_RERANK_ENABLED=true with the local ONNX cross-encoder);
+        # an explicit rerank= in the call always wins.
+        try:
+            from config import is_rerank_enabled as _is_rerank_enabled
+            _rerank_default = _is_rerank_enabled()
+        except Exception:
+            _rerank_default = False
         result = recall.search(a["query"], a.get("project"), a.get("type", "all"),
                                search_limit, search_detail,
                                a.get("branch"), a.get("fusion", "rrf"),
-                               a.get("rerank", False), a.get("diverse", False),
+                               a.get("rerank", _rerank_default), a.get("diverse", False),
                                agent_namespace=a.get("agent_namespace"),
                                agent_namespaces=a.get("agent_namespaces"),
                                scope=a.get("scope"),

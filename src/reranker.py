@@ -166,6 +166,9 @@ _BACKEND_TO_MODEL = {
     "ce-marco": "cross-encoder/ms-marco-MiniLM-L-6-v2",
     "bge-v2-m3": "BAAI/bge-reranker-v2-m3",
     "bge-large": "BAAI/bge-reranker-large",
+    # v12.7 — ONNX cross-encoder via fastembed (no torch / sentence-transformers
+    # import). bge-reranker-base is zh+en; ~250ms per 20 pairs on CPU.
+    "fastembed-ce": "BAAI/bge-reranker-base",
 }
 
 # {backend_key: (model_obj_or_False, kind)}; kind ∈ {"ce", "flag"}
@@ -316,6 +319,22 @@ def _bge_rerank_scores(query: str, passages: list[str]) -> list[float]:
     return [float(s) for s in scores]
 
 
+def _load_fastembed_reranker(model_name: str):
+    """ONNX cross-encoder via fastembed — importable even where torch is broken."""
+    try:
+        from fastembed.rerank.cross_encoder import TextCrossEncoder
+        # Honour the same cache-dir override Store.fastembed uses so the
+        # server finds models wherever its embedding models already live.
+        cache_dir = os.environ.get("FASTEMBED_CACHE_DIR")
+        kwargs = {"cache_dir": cache_dir} if cache_dir else {}
+        ce = TextCrossEncoder(model_name, **kwargs)
+        LOG(f"fastembed TextCrossEncoder loaded: {model_name}")
+        return ce
+    except Exception as e:  # noqa: BLE001
+        LOG(f"fastembed TextCrossEncoder load failed ({model_name}): {e}")
+        return None
+
+
 def _get_reranker(backend: str | None = None):
     """Lazy-load the configured reranker. Returns (model, kind) or (None, None)."""
     backend = backend or _resolve_reranker_backend()
@@ -326,7 +345,10 @@ def _get_reranker(backend: str | None = None):
         return cached if cached[0] is not False else (None, None)
 
     model_name = _resolve_reranker_model(backend)
-    if backend == "ce-marco":
+    if backend == "fastembed-ce":
+        obj = _load_fastembed_reranker(model_name)
+        kind = "fastembed"
+    elif backend == "ce-marco":
         obj = _load_ce_reranker(model_name)
         kind = "ce"
     else:  # bge-v2-m3, bge-large
@@ -360,29 +382,56 @@ def rerank_results(query: str, results: list, top_k: int = 10) -> list:
     if not results:
         return results
 
-    candidates = results[:min(len(results), top_k * 2)]
-
     backend = _resolve_reranker_backend()
     if backend == "off":
         return results[:top_k]
 
     model, kind = _get_reranker(backend)
     if model is not None:
-        ranked = _rerank_with_model(model, kind, query, candidates, top_k)
-    else:
-        ranked = _rerank_llm(query, candidates, top_k)
+        # v12.7 — CE latency on CPU scales linearly with pair count (~50-110ms
+        # per pair for real-length records), and rag-mode over-fetch can push
+        # top_k*2 to 40+. Cap scored pairs; the unscored tail keeps its
+        # original (already gate-filtered) order below the scored head.
+        try:
+            max_pairs = int(os.environ.get("MEMORY_CE_MAX_PAIRS", "8"))
+        except (TypeError, ValueError):
+            max_pairs = 8
+        max_pairs = max(2, max_pairs)
+        head = results[:min(len(results), min(top_k * 2, max_pairs))]
+        tail = [item for item in results if id(item) not in {id(h) for h in head}]
+        # The model path may legitimately return FEWER than len(head) items
+        # (CE cutoff). Do NOT backfill the removed ones from the unscored
+        # tail-of-head: that would resurrect exactly the noise the cutoff
+        # removed. The never-scored tail is appended after the scored head.
+        ranked_head = _rerank_with_model(model, kind, query, head, top_k)
+        return (ranked_head + tail)[:top_k]
 
-    # Combine reranked + remaining
+    candidates = results[:min(len(results), top_k * 2)]
+
+    ranked = _rerank_llm(query, candidates, top_k)  # noqa: F841 — legacy path
+    # Combine reranked + remaining (legacy LLM-fallback behaviour).
     reranked_ids = {id(item) for item in ranked}
     remaining = [item for item in results if id(item) not in reranked_ids]
     return ranked[:top_k] + remaining[:max(0, top_k - len(ranked))]
 
 
 def _rerank_with_model(model, kind: str, query: str, candidates: list, top_k: int) -> list:
-    """Score candidates with the loaded model; CE-boost-only blend with original."""
+    """Score candidates with the loaded model; true demote-capable blend.
+
+    v12.7 — the old behaviour was boost-only (`max(orig, blend)`): the
+    reranker could promote results but never demote them, so it was unable
+    to push noise below relevant hits. Now the blended score replaces the
+    original outright (weight via MEMORY_CE_BLEND_WEIGHT, default 0.5).
+
+    Optional hard cutoff: candidates with sigmoid(CE) < MEMORY_CE_CUTOFF are
+    dropped entirely. Default 0.0 (off) — measured on this stack,
+    bge-reranker-base reliably scores irrelevant pairs ~0.0 but can also
+    score RELEVANT cross-lingual pairs (zh query → en doc) near 0.0, so a
+    global cutoff is only safe on monolingual corpora. Opt in deliberately.
+    """
     pairs = []
     for item in candidates:
-        content = item["r"].get("content", "")[:300]
+        content = item["r"].get("content", "")[:200]
         project = item["r"].get("project", "")
         tags = item["r"].get("tags", "")
         doc = f"[{project}] {content}"
@@ -397,27 +446,57 @@ def _rerank_with_model(model, kind: str, query: str, candidates: list, top_k: in
     # All paths return logits/raw; sigmoid → [0,1] for stable blending.
     scores_norm = 1.0 / (1.0 + np.exp(-np.array(raw_scores, dtype=np.float32)))
 
-    # CE boost-only: reranker can promote results, never demote them.
-    # Conservative because rerankers (esp. ce-marco trained on web search)
-    # may misjudge conversational LoCoMo data. Keep original ordering as
-    # a soft prior; reranker contributes 40% weight.
+    try:
+        ce_weight = float(os.environ.get("MEMORY_CE_BLEND_WEIGHT", "0.5"))
+    except (TypeError, ValueError):
+        ce_weight = 0.5
+    ce_weight = min(1.0, max(0.0, ce_weight))
+    try:
+        ce_cutoff = float(os.environ.get("MEMORY_CE_CUTOFF", "0.0"))
+    except (TypeError, ValueError):
+        ce_cutoff = 0.0
+
+    # Blend in normalized space, then write the blended ordering back to
+    # BOTH score fields at their own scales. Downstream consumers differ:
+    # detail-formatting sorts by the additive "score", while rag_response
+    # (the default memory_recall mode) re-sorts by "rrf_score" — updating
+    # only "score" would silently discard the CE ordering there.
     max_orig = max(item["score"] for item in candidates) or 1.0
+    rrf_values = [item.get("rrf_score", 0.0) for item in candidates]
+    max_rrf = max(rrf_values) or 1.0
+    kept = []
     for i, item in enumerate(candidates):
         if i < len(scores_norm):
             ce_score = float(scores_norm[i])
-            orig_norm = item["score"] / max_orig
-            ce_blend = ce_score * 0.4 + orig_norm * 0.6
-            item["score"] = max(orig_norm, ce_blend) * max_orig  # restore scale
+            if "rrf_score" in item:
+                orig_norm = item["rrf_score"] / max_rrf
+            else:
+                orig_norm = item["score"] / max_orig
+            blended = ce_score * ce_weight + orig_norm * (1.0 - ce_weight)
+            item["score"] = blended * max_orig  # restore additive scale
+            if "rrf_score" in item:
+                item["rrf_score"] = blended * max_rrf  # restore RRF scale
             item["reranked"] = True
             item["ce_score"] = round(ce_score, 4)
+            if ce_cutoff > 0.0 and ce_score < ce_cutoff:
+                continue
+        kept.append(item)
 
-    candidates.sort(key=lambda x: x["score"], reverse=True)
-    return candidates
+    kept.sort(key=lambda x: x.get("rrf_score", x["score"]), reverse=True)
+    return kept
 
 
 def _score_pairs(model, kind: str, pairs: list[list[str]]):
     """Backend-specific scoring. Returns list[float] of raw scores or None."""
     try:
+        if kind == "fastembed":
+            # fastembed TextCrossEncoder scores one query against N docs.
+            # All pairs share the same query in our pipeline.
+            if not pairs:
+                return []
+            q = pairs[0][0]
+            docs = [p[1] for p in pairs]
+            return [float(s) for s in model.rerank(q, docs)]
         if kind == "flag" and hasattr(model, "compute_score"):
             # FlagReranker accepts list[[q,p]]; returns list[float] of logits.
             scores = model.compute_score(pairs)

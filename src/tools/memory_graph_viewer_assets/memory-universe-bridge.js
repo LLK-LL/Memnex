@@ -1,5 +1,6 @@
-const bundlePath = "./memory-universe-3d/memory-universe-viewer.js?v=20260712-solar-surface-switch";
+const bundlePath = "./memory-universe-3d/memory-universe-viewer.js?v=20260726-galaxy-surface";
 const knowledgeSolarPath = "./knowledge-solar-system/index.html?viewerBase=";
+const knowledgeGalaxyPath = "./knowledge-galaxy-system/index.html?viewerBase=";
 const max3DRenderEdges = 400;
 const supportedMemoryCategories = new Set([
   "rule",
@@ -31,6 +32,7 @@ export function initMemoryUniverse3DCoexistence(options) {
   const threeDStage = document.getElementById("memoryUniverse3d");
   const twoDButton = document.getElementById("viewMode2d");
   const threeDButton = document.getElementById("viewMode3d");
+  const galaxyButton = document.getElementById("universe3dGalaxy");
   const solarButton = document.getElementById("universe3dSolar");
   const observatoryButton = document.getElementById("universe3dObservatory");
   const spaceshipButton = document.getElementById("universe3dSpaceship");
@@ -41,11 +43,13 @@ export function initMemoryUniverse3DCoexistence(options) {
   }
 
   let activeView = "2d";
-  let activeSurface = "knowledgeSolar";
+  let activeSurface = "memoryUniverse";
   let activeSolarMode = "observatory";
+  let activeGalaxyMode = "orbit";
   let viewer = null;
   let viewerModule = null;
   let solarFrame = null;
+  let galaxyFrame = null;
   let latestGraph = convertGalaxyToMemoryUniverseGraph(options.getGraph());
   let latestRenderGraph = graphFor3DRender(latestGraph);
   let hoverPreview = null;
@@ -65,23 +69,12 @@ export function initMemoryUniverse3DCoexistence(options) {
 
   sync3DGraphDiagnostics();
   twoDButton.addEventListener("click", () => setActiveView("2d"));
-  threeDButton.addEventListener("click", activateKnowledgeSolar);
-  solarButton?.addEventListener("click", activateKnowledgeSolar);
-  observatoryButton?.addEventListener("click", async () => {
-    const mounted = await activateKnowledgeSolar();
-    if (!mounted) return;
-    postKnowledgeSolarCommand({ type: "knowledgeSolar:setMode", mode: "observatory" });
-  });
-  spaceshipButton?.addEventListener("click", async () => {
-    const mounted = await activateKnowledgeSolar();
-    if (!mounted) return;
-    postKnowledgeSolarCommand({ type: "knowledgeSolar:setMode", mode: "flyThrough" });
-  });
-  resetButton?.addEventListener("click", async () => {
-    const mounted = await activateKnowledgeSolar();
-    if (!mounted) return;
-    postKnowledgeSolarCommand({ type: "knowledgeSolar:centerReset" });
-  });
+  threeDButton.addEventListener("click", () => activateSurface(activeSurface));
+  galaxyButton?.addEventListener("click", () => activateSurface("memoryUniverse"));
+  solarButton?.addEventListener("click", () => activateSurface("knowledgeSolar"));
+  observatoryButton?.addEventListener("click", () => applyModeForActiveSurface("observatory"));
+  spaceshipButton?.addEventListener("click", () => applyModeForActiveSurface("spaceship"));
+  resetButton?.addEventListener("click", () => resetActiveSurfaceView());
 
   syncViewChrome();
   window.addEventListener("message", handleKnowledgeSolarMessage);
@@ -132,11 +125,9 @@ export function initMemoryUniverse3DCoexistence(options) {
   async function setActiveView(view) {
     activeView = view;
     if (view === "3d") {
-      const mounted = activeSurface === "knowledgeSolar" ? mountKnowledgeSolar() : await mount3D();
+      const mounted = activeSurface === "knowledgeSolar" ? mountKnowledgeSolar() : mountKnowledgeGalaxy();
       if (!mounted) {
         activeView = "2d";
-      } else if (activeSurface === "memoryUniverse") {
-        applyCurrent2DFocusTo3D();
       }
     }
     syncViewChrome();
@@ -152,18 +143,91 @@ export function initMemoryUniverse3DCoexistence(options) {
     return true;
   }
 
+  function activateSurface(surface) {
+    return surface === "memoryUniverse" ? activateMemoryUniverse() : activateKnowledgeSolar();
+  }
+
+  async function activateMemoryUniverse() {
+    activeSurface = "memoryUniverse";
+    const mounted = await setActiveView("3d");
+    if (!mounted) return false;
+    syncSurfaceButtons("memoryUniverse");
+    return true;
+  }
+
+  async function applyModeForActiveSurface(mode) {
+    if (activeSurface === "memoryUniverse") {
+      const mounted = await activateMemoryUniverse();
+      if (!mounted) return;
+      postKnowledgeGalaxyCommand({
+        type: "knowledgeGalaxy:setMode",
+        mode: mode === "spaceship" ? "flight" : "orbit",
+      });
+      return;
+    }
+    const mounted = await activateKnowledgeSolar();
+    if (!mounted) return;
+    postKnowledgeSolarCommand({
+      type: "knowledgeSolar:setMode",
+      mode: mode === "spaceship" ? "flyThrough" : "observatory",
+    });
+  }
+
+  async function resetActiveSurfaceView() {
+    if (activeSurface === "memoryUniverse") {
+      const mounted = await activateMemoryUniverse();
+      if (!mounted) return;
+      postKnowledgeGalaxyCommand({ type: "knowledgeGalaxy:centerReset" });
+      return;
+    }
+    const mounted = await activateKnowledgeSolar();
+    if (!mounted) return;
+    postKnowledgeSolarCommand({ type: "knowledgeSolar:centerReset" });
+  }
+
+  function postKnowledgeGalaxyCommand(command) {
+    if (command.type === "knowledgeGalaxy:setMode") {
+      activeGalaxyMode = command.mode;
+    }
+    if (command.type === "knowledgeGalaxy:centerReset") {
+      activeGalaxyMode = "orbit";
+    }
+    syncSurfaceButtons("memoryUniverse");
+    galaxyFrame?.contentWindow?.postMessage(command, window.location.origin);
+  }
+
   function mountKnowledgeSolar() {
     if (solarFrame?.isConnected) {
       return true;
     }
     destroyMemoryUniverseViewer();
+    galaxyFrame?.remove();
+    galaxyFrame = null;
     threeDStage.replaceChildren();
     solarFrame = document.createElement("iframe");
     solarFrame.className = "knowledge-solar-frame";
     solarFrame.title = "Knowledge Solar System";
-    solarFrame.src = `${knowledgeSolarPath}${encodeURIComponent("../..")}`;
+    solarFrame.src = `${knowledgeSolarPath}${encodeURIComponent("/")}`;
     solarFrame.setAttribute("allow", "camera; fullscreen");
     threeDStage.append(solarFrame);
+    unavailableReason = null;
+    return true;
+  }
+
+  function mountKnowledgeGalaxy() {
+    if (galaxyFrame?.isConnected) {
+      return true;
+    }
+    destroyMemoryUniverseViewer();
+    solarFrame?.remove();
+    solarFrame = null;
+    threeDStage.replaceChildren();
+    galaxyFrame = document.createElement("iframe");
+    galaxyFrame.className = "knowledge-solar-frame knowledge-galaxy-frame";
+    galaxyFrame.title = "Knowledge Galaxy System";
+    galaxyFrame.src = `${knowledgeGalaxyPath}${encodeURIComponent("/")}`;
+    galaxyFrame.setAttribute("allow", "camera; fullscreen");
+    threeDStage.append(galaxyFrame);
     unavailableReason = null;
     return true;
   }
@@ -270,15 +334,18 @@ export function initMemoryUniverse3DCoexistence(options) {
     options.onActiveViewChange?.(activeView);
   }
 
-  function syncModeButtons(mode) {
-    observatoryButton?.classList.toggle("is-active", activeSurface === "knowledgeSolar" && activeSolarMode === "observatory");
-    spaceshipButton?.classList.toggle("is-active", activeSurface === "knowledgeSolar" && activeSolarMode === "flyThrough");
+  function syncModeButtons() {
+    const flightActive = activeSurface === "memoryUniverse"
+      ? activeGalaxyMode === "flight"
+      : activeSolarMode === "flyThrough";
+    observatoryButton?.classList.toggle("is-active", !flightActive);
+    spaceshipButton?.classList.toggle("is-active", flightActive);
   }
 
   function syncSurfaceButtons(surface = "memoryUniverse") {
+    galaxyButton?.classList.toggle("is-active", surface === "memoryUniverse");
     solarButton?.classList.toggle("is-active", surface === "knowledgeSolar");
-    observatoryButton?.classList.toggle("is-active", surface === "knowledgeSolar" && activeSolarMode === "observatory");
-    spaceshipButton?.classList.toggle("is-active", surface === "knowledgeSolar" && activeSolarMode === "flyThrough");
+    syncModeButtons();
   }
 
   function setPendingMode(mode) {

@@ -444,7 +444,9 @@ _DEFAULT_LLM_API_BASE_BY_PROVIDER = {
 }
 
 _DEFAULT_EMBED_MODEL_BY_PROVIDER = {
-    "fastembed": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    # v12.7 — keep in sync with server.FASTEMBED_MODEL (see get_embed_model:
+    # the fastembed entry also honours the FASTEMBED_MODEL env var).
+    "fastembed": "jinaai/jina-embeddings-v2-base-zh",
     "openai": "text-embedding-3-small",
     "cohere": "embed-multilingual-v3.0",
 }
@@ -576,6 +578,13 @@ def get_embed_model(provider: str | None = None) -> str:
     override = os.environ.get("MEMORY_EMBED_MODEL")
     if override:
         return override
+    if p == "fastembed":
+        # Same resolution as server.FASTEMBED_MODEL — a FASTEMBED_MODEL env
+        # override must reach the provider too, or Store and EmbedProvider
+        # disagree on dim and _check_embed_dim_compat refuses to boot.
+        return os.environ.get(
+            "FASTEMBED_MODEL", _DEFAULT_EMBED_MODEL_BY_PROVIDER["fastembed"]
+        )
     return _DEFAULT_EMBED_MODEL_BY_PROVIDER.get(p, "")
 
 
@@ -720,15 +729,19 @@ def get_v9_locomo_tuned_path() -> str:
 #              regresses on conversational data per LoCoMo ablations (-1.2pp).
 #   bge-v2-m3  BAAI/bge-reranker-v2-m3 — multilingual, conversation-friendly.
 #   bge-large  BAAI/bge-reranker-large — English-only, higher accuracy on long ctx.
+#   fastembed-ce  ONNX cross-encoder via fastembed.TextCrossEncoder (no torch).
+#                 Default model BAAI/bge-reranker-base — zh+en, ~250ms/20 pairs
+#                 on CPU. v12.7 default: the torch-based backends fail to load
+#                 in torch/torchcodec-broken environments; ONNX always works.
 #   off        skip reranking entirely.
-_SUPPORTED_RERANKER_BACKENDS = ("ce-marco", "bge-v2-m3", "bge-large", "off")
+_SUPPORTED_RERANKER_BACKENDS = ("ce-marco", "bge-v2-m3", "bge-large", "fastembed-ce", "off")
 
 
 def get_v9_reranker_backend() -> str:
-    raw = (os.environ.get("V9_RERANKER_BACKEND", "ce-marco") or "ce-marco").strip().lower()
+    raw = (os.environ.get("V9_RERANKER_BACKEND", "fastembed-ce") or "fastembed-ce").strip().lower()
     if raw in _SUPPORTED_RERANKER_BACKENDS:
         return raw
-    return "ce-marco"
+    return "fastembed-ce"
 
 
 def get_v9_reranker_model_override() -> str | None:
@@ -805,8 +818,11 @@ def is_enrichment_enabled() -> bool:
 # log + config inherit the text model (still tagged with their own space).
 # The user can override any of these to a different FastEmbed model, an ST
 # model, or empty (= force fallback to the text model).
-_DEFAULT_TEXT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 384d, 0.22GB
-_DEFAULT_CODE_MODEL = "jinaai/jina-embeddings-v2-base-code"                          # 768d, 0.64GB
+# v12.7: text model upgraded MiniLM-L12 → jina-v2-base-zh. Benchmarked on the
+# target box: same single-text latency (17ms vs 18ms — save path unaffected),
+# zh-en cross-lingual alignment 0.77 vs 0.64, pos/neg contrast 0.88 vs 0.74.
+_DEFAULT_TEXT_MODEL = "jinaai/jina-embeddings-v2-base-zh"    # 768d, 0.64GB
+_DEFAULT_CODE_MODEL = "jinaai/jina-embeddings-v2-base-code"  # 768d, 0.64GB
 
 
 def get_text_embed_model() -> str:
@@ -863,6 +879,9 @@ _MODE_DEFAULTS: dict[str, dict[str, str]] = {
     },
     # Hot path = 0 LLM. FastEmbed only. Async enrichment off by default
     # (user opts in with MEMORY_ENRICHMENT_ENABLED=true to drain queues).
+    # v12.7: reranking is ON by default — the fastembed-ce backend is a
+    # local ONNX cross-encoder (~250ms/20 pairs, no LLM, no network), which
+    # fits the fast-mode contract while restoring precision.
     "fast": {
         "MEMORY_QUALITY_GATE_ENABLED": "false",
         "MEMORY_CONTRADICTION_DETECT_ENABLED": "false",
@@ -870,7 +889,7 @@ _MODE_DEFAULTS: dict[str, dict[str, str]] = {
         "MEMORY_COREF_ENABLED": "false",
         "USE_ADVANCED_RAG": "false",
         "MEMORY_QUERY_REWRITE": "0",
-        "MEMORY_RERANK_ENABLED": "false",
+        "MEMORY_RERANK_ENABLED": "true",
         "MEMORY_CROSS_ENCODER_ENABLED": "false",
         "MEMORY_USE_LLM_IN_HOT_PATH": "false",
         "MEMORY_ALLOW_OLLAMA_IN_HOT_PATH": "false",
@@ -885,7 +904,7 @@ _MODE_DEFAULTS: dict[str, dict[str, str]] = {
         "MEMORY_COREF_ENABLED": "false",
         "USE_ADVANCED_RAG": "false",
         "MEMORY_QUERY_REWRITE": "0",
-        "MEMORY_RERANK_ENABLED": "false",
+        "MEMORY_RERANK_ENABLED": "true",
         "MEMORY_CROSS_ENCODER_ENABLED": "false",
         "MEMORY_USE_LLM_IN_HOT_PATH": "false",
         "MEMORY_ALLOW_OLLAMA_IN_HOT_PATH": "true",

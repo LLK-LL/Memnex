@@ -70,6 +70,8 @@ _FASTEMBED_DIM = {
     "BAAI/bge-small-en-v1.5": 384,
     "BAAI/bge-base-en-v1.5": 768,
     "BAAI/bge-large-en-v1.5": 1024,
+    "jinaai/jina-embeddings-v2-base-zh": 768,
+    "jinaai/jina-embeddings-v2-base-code": 768,
 }
 
 
@@ -171,6 +173,17 @@ class FastEmbedProvider:
         try:
             kwargs = {"cache_dir": self._cache_dir} if self._cache_dir else {}
             self._model = TextEmbedding(self._model_name, **kwargs)
+        except TypeError as exc:
+            if not kwargs or "cache_dir" not in str(exc):
+                LOG(f"FastEmbed init failed: {exc}")
+                self._model = False
+                return None
+            try:
+                self._model = TextEmbedding(self._model_name)
+            except Exception as retry_exc:  # noqa: BLE001
+                LOG(f"FastEmbed init failed: {retry_exc}")
+                self._model = False
+                return None
         except Exception as exc:  # noqa: BLE001
             LOG(f"FastEmbed init failed: {exc}")
             self._model = False

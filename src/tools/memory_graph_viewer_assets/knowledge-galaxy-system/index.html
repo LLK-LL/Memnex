@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <meta
+      name="description"
+      content="Knowledge Galaxy 3D observatory route for live codex memory systems."
+    />
+    <title>Knowledge Galaxy System</title>
+    <style>
+      :root {
+        --galaxy-surface-base: #02030a;
+        --galaxy-surface-base-rgb: 2 3 10;
+        --galaxy-surface-depth: #090822;
+        --galaxy-surface-depth-rgb: 9 8 34;
+        --galaxy-surface-halo: #130a2f;
+        --galaxy-text-primary: #f8fbff;
+        --galaxy-text-secondary: #aab8c9;
+        --galaxy-center-core: #fff0ba;
+        --galaxy-center-core-rgb: 255 240 186;
+        --galaxy-ionized-warm: #f5a45a;
+        --galaxy-ionized-warm-rgb: 245 164 90;
+        --galaxy-arm-ivory: #f4ead6;
+        --galaxy-arm-cyan: #78dcff;
+        --galaxy-arm-cyan-rgb: 120 220 255;
+        --galaxy-dust-lane: #372418;
+        --galaxy-failure: #ffb28c;
+        --galaxy-panel-border: rgb(var(--galaxy-arm-cyan-rgb) / 0.26);
+        --galaxy-type-label: 0.75rem;
+        --galaxy-type-body: 0.875rem;
+        --galaxy-type-title: 1.125rem;
+        --galaxy-type-readout: 0.8125rem;
+        --galaxy-space-xs: 0.25rem;
+        --galaxy-space-sm: 0.5rem;
+        --galaxy-space-md: 0.75rem;
+        --galaxy-space-lg: 1rem;
+        --galaxy-space-xl: 1.5rem;
+        --galaxy-radius-control: 0.375rem;
+        --galaxy-stage-min: 100dvh;
+        --galaxy-panel-width: min(24rem, calc(100vw - 2rem));
+        --galaxy-control-size: 2.5rem;
+        --galaxy-panel-blur: 14px;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-width: 320px;
+        min-height: var(--galaxy-stage-min);
+        overflow: hidden;
+        background: var(--galaxy-surface-base);
+        color: var(--galaxy-text-primary);
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .knowledge-galaxy-stage {
+        position: relative;
+        min-height: var(--galaxy-stage-min);
+        overflow: hidden;
+        isolation: isolate;
+        background:
+          radial-gradient(circle at 50% 50%, rgb(var(--galaxy-center-core-rgb) / 0.22), transparent 9rem),
+          radial-gradient(ellipse at 52% 48%, rgb(var(--galaxy-ionized-warm-rgb) / 0.18), transparent 20rem),
+          radial-gradient(ellipse at 28% 24%, rgb(var(--galaxy-arm-cyan-rgb) / 0.12), transparent 26rem),
+          radial-gradient(ellipse at 76% 78%, rgb(var(--galaxy-arm-cyan-rgb) / 0.08), transparent 24rem),
+          linear-gradient(135deg, var(--galaxy-surface-base), var(--galaxy-surface-depth) 58%, var(--galaxy-surface-halo));
+      }
+
+      .knowledge-galaxy-stage::before,
+      .knowledge-galaxy-stage::after {
+        position: absolute;
+        inset: -16%;
+        z-index: 0;
+        content: "";
+        pointer-events: none;
+      }
+
+      .knowledge-galaxy-stage::before {
+        background:
+          radial-gradient(ellipse at 50% 50%, rgb(var(--galaxy-center-core-rgb) / 0.2), transparent 17%),
+          linear-gradient(118deg, transparent 14%, rgb(var(--galaxy-arm-cyan-rgb) / 0.1) 36%, rgb(var(--galaxy-ionized-warm-rgb) / 0.12) 48%, transparent 74%),
+          linear-gradient(64deg, transparent 18%, rgb(var(--galaxy-arm-cyan-rgb) / 0.08) 40%, rgb(var(--galaxy-ionized-warm-rgb) / 0.1) 52%, transparent 78%);
+        opacity: 0.82;
+        filter: blur(var(--galaxy-panel-blur)) saturate(1.12);
+      }
+
+      .knowledge-galaxy-stage::after {
+        background:
+          repeating-radial-gradient(ellipse at 50% 50%, rgb(var(--galaxy-arm-cyan-rgb) / 0.08) 0 1px, transparent 1px 17px),
+          radial-gradient(ellipse 96% 24% at 50% 52%, rgb(var(--galaxy-ionized-warm-rgb) / 0.14), transparent 62%);
+        opacity: 0.58;
+        mask-image: radial-gradient(ellipse at 50% 50%, black, transparent 76%);
+      }
+
+      .knowledge-galaxy-canvas-host {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+      }
+
+      .knowledge-galaxy-label-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .knowledge-galaxy-map-label {
+        position: absolute;
+        box-sizing: border-box;
+        max-width: 14rem;
+        padding: var(--galaxy-space-sm) var(--galaxy-space-md);
+        border: 1px solid rgb(var(--galaxy-arm-cyan-rgb) / 0.24);
+        border-radius: var(--galaxy-radius-control);
+        background: rgb(var(--galaxy-surface-base-rgb) / 0.42);
+        color: var(--galaxy-text-primary);
+        box-shadow: 0 0 1rem rgb(var(--galaxy-arm-cyan-rgb) / 0.08);
+        font-size: var(--galaxy-type-label);
+        line-height: 1.25;
+        backdrop-filter: blur(var(--galaxy-panel-blur));
+        will-change: transform;
+      }
+
+      .knowledge-galaxy-map-label::before {
+        position: absolute;
+        top: 50%;
+        left: calc(var(--galaxy-space-xs) * -1);
+        width: var(--galaxy-space-sm);
+        height: var(--galaxy-space-sm);
+        border-radius: 50%;
+        background: var(--galaxy-arm-cyan);
+        box-shadow: 0 0 0.625rem rgb(var(--galaxy-arm-cyan-rgb) / 0.72);
+        content: "";
+        transform: translate(-50%, -50%);
+      }
+
+      .knowledge-galaxy-map-label[data-knowledge-galaxy-label="center"] {
+        border-color: rgb(var(--galaxy-center-core-rgb) / 0.42);
+        box-shadow: 0 0 1.25rem rgb(var(--galaxy-center-core-rgb) / 0.12);
+      }
+
+      .knowledge-galaxy-map-label[data-knowledge-galaxy-label="center"]::before {
+        background: var(--galaxy-center-core);
+        box-shadow: 0 0 0.75rem rgb(var(--galaxy-center-core-rgb) / 0.82);
+      }
+
+      .knowledge-galaxy-map-label strong,
+      .knowledge-galaxy-map-label span {
+        display: block;
+      }
+
+      .knowledge-galaxy-map-label strong {
+        font-size: var(--galaxy-type-readout);
+        line-height: 1.2;
+      }
+
+      .knowledge-galaxy-map-label span {
+        margin-top: var(--galaxy-space-xs);
+        color: var(--galaxy-text-secondary);
+      }
+
+      .knowledge-galaxy-map-label[data-knowledge-galaxy-label-state="compact"] span {
+        display: none;
+      }
+
+      .knowledge-galaxy-status,
+      .knowledge-galaxy-focus-readout,
+      .knowledge-galaxy-overview,
+      .knowledge-galaxy-flight {
+        position: absolute;
+        z-index: 2;
+        box-sizing: border-box;
+        border: 1px solid var(--galaxy-panel-border);
+        background: rgb(var(--galaxy-surface-base-rgb) / 0.74);
+        color: var(--galaxy-text-primary);
+        backdrop-filter: blur(var(--galaxy-panel-blur));
+      }
+
+      .knowledge-galaxy-status {
+        top: var(--galaxy-space-lg);
+        left: var(--galaxy-space-lg);
+        width: var(--galaxy-panel-width);
+        padding: var(--galaxy-space-lg);
+        pointer-events: none;
+      }
+
+      .knowledge-galaxy-kicker {
+        margin: 0 0 var(--galaxy-space-xs);
+        color: var(--galaxy-arm-cyan);
+        font-size: var(--galaxy-type-label);
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+
+      .knowledge-galaxy-status h1 {
+        margin: 0;
+        color: var(--galaxy-text-primary);
+        font-size: var(--galaxy-type-title);
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 1.2;
+      }
+
+      .knowledge-galaxy-status p {
+        margin: var(--galaxy-space-sm) 0 0;
+        color: var(--galaxy-text-secondary);
+        font-size: var(--galaxy-type-body);
+        line-height: 1.45;
+      }
+
+      .knowledge-galaxy-status[data-knowledge-galaxy-status="failed"] p {
+        color: var(--galaxy-failure);
+      }
+
+      .knowledge-galaxy-overview {
+        top: var(--galaxy-space-lg);
+        right: var(--galaxy-space-lg);
+      }
+
+      .knowledge-galaxy-flight {
+        top: calc(var(--galaxy-space-lg) + var(--galaxy-control-size) + var(--galaxy-space-sm));
+        right: var(--galaxy-space-lg);
+      }
+
+      .knowledge-galaxy-overview,
+      .knowledge-galaxy-flight {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--galaxy-space-sm);
+        min-width: var(--galaxy-control-size);
+        min-height: var(--galaxy-control-size);
+        padding: 0 var(--galaxy-space-md);
+        border-radius: var(--galaxy-radius-control);
+        font: inherit;
+        font-size: var(--galaxy-type-readout);
+        font-weight: 700;
+        letter-spacing: 0;
+        cursor: pointer;
+      }
+
+      .knowledge-galaxy-overview:hover:not(:disabled),
+      .knowledge-galaxy-flight:hover:not(:disabled),
+      .knowledge-galaxy-overview:focus-visible {
+        border-color: rgb(var(--galaxy-arm-cyan-rgb) / 0.82);
+        background: rgb(var(--galaxy-arm-cyan-rgb) / 0.16);
+        outline: none;
+      }
+
+      .knowledge-galaxy-overview:focus-visible,
+      .knowledge-galaxy-flight:focus-visible {
+        box-shadow: 0 0 0 3px rgb(var(--galaxy-arm-cyan-rgb) / 0.24);
+      }
+
+      .knowledge-galaxy-overview:disabled,
+      .knowledge-galaxy-flight:disabled {
+        color: var(--galaxy-text-secondary);
+        cursor: wait;
+        opacity: 0.68;
+      }
+
+      .knowledge-galaxy-viewfinder {
+        width: 0.875rem;
+        height: 0.875rem;
+        border: 1px solid var(--galaxy-center-core);
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 3px rgb(var(--galaxy-arm-cyan-rgb) / 0.2);
+      }
+
+      .knowledge-galaxy-focus-readout {
+        left: var(--galaxy-space-lg);
+        bottom: var(--galaxy-space-lg);
+        max-width: var(--galaxy-panel-width);
+        padding: var(--galaxy-space-md);
+        border-radius: var(--galaxy-radius-control);
+        color: var(--galaxy-text-secondary);
+        font-size: var(--galaxy-type-readout);
+        font-variant-numeric: tabular-nums;
+        line-height: 1.35;
+      }
+
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="false"] .knowledge-galaxy-status,
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="false"] .knowledge-galaxy-overview,
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="false"] .knowledge-galaxy-flight,
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="false"] .knowledge-galaxy-focus-readout,
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="false"] .knowledge-galaxy-gesture-panel,
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="false"] .knowledge-galaxy-label-layer {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .knowledge-galaxy-gesture-panel {
+        position: absolute;
+        right: var(--galaxy-space-lg);
+        bottom: var(--galaxy-space-lg);
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        gap: var(--galaxy-space-sm);
+        box-sizing: border-box;
+        width: 11.5rem;
+        padding: var(--galaxy-space-md);
+        border: 1px solid var(--galaxy-panel-border);
+        border-radius: var(--galaxy-radius-control);
+        background: rgb(var(--galaxy-surface-base-rgb) / 0.74);
+        color: var(--galaxy-text-secondary);
+        font-size: var(--galaxy-type-label);
+        backdrop-filter: blur(var(--galaxy-panel-blur));
+      }
+
+      .knowledge-galaxy-gesture-preview {
+        position: relative;
+        overflow: hidden;
+        aspect-ratio: 4 / 3;
+        border-radius: var(--galaxy-radius-control);
+        background: rgb(0 0 0 / 0.6);
+      }
+
+      .knowledge-galaxy-gesture-preview video,
+      .knowledge-galaxy-gesture-preview canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .knowledge-galaxy-gesture-toggle {
+        min-height: 2rem;
+        padding: 0 var(--galaxy-space-md);
+        border: 1px solid var(--galaxy-panel-border);
+        border-radius: var(--galaxy-radius-control);
+        background: transparent;
+        color: var(--galaxy-text-primary);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .knowledge-galaxy-gesture-toggle:hover:not(:disabled),
+      .knowledge-galaxy-gesture-toggle:focus-visible {
+        border-color: rgb(var(--galaxy-arm-cyan-rgb) / 0.82);
+        background: rgb(var(--galaxy-arm-cyan-rgb) / 0.16);
+        outline: none;
+      }
+
+      .knowledge-galaxy-gesture-panel p {
+        margin: 0;
+        line-height: 1.35;
+      }
+
+      .knowledge-galaxy-loading {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: grid;
+        place-items: center;
+        padding: var(--galaxy-space-lg);
+        background:
+          radial-gradient(circle at 50% 45%, rgb(var(--galaxy-arm-cyan-rgb) / 0.18), transparent 28rem),
+          linear-gradient(180deg, rgb(var(--galaxy-space-deep-rgb) / 0.58), rgb(var(--galaxy-surface-base-rgb) / 0.84));
+        opacity: 1;
+        pointer-events: auto;
+        transition: opacity 260ms ease;
+      }
+
+      .knowledge-galaxy-shell[data-knowledge-galaxy-ready="true"] .knowledge-galaxy-loading {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .knowledge-galaxy-loading[hidden] {
+        display: none;
+      }
+
+      .knowledge-galaxy-loading-card {
+        width: min(28rem, 100%);
+        padding: var(--galaxy-space-lg);
+        border: 1px solid rgb(var(--galaxy-arm-cyan-rgb) / 0.36);
+        border-radius: var(--galaxy-radius-panel);
+        background: rgb(var(--galaxy-surface-base-rgb) / 0.72);
+        box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 0.36), inset 0 1px 0 rgb(255 255 255 / 0.08);
+        color: var(--galaxy-text-primary);
+        backdrop-filter: blur(var(--galaxy-panel-blur));
+      }
+
+      .knowledge-galaxy-loading-card h2 {
+        margin: 0;
+        font-size: var(--galaxy-type-title);
+        line-height: 1.2;
+      }
+
+      .knowledge-galaxy-loading-card p {
+        margin: var(--galaxy-space-sm) 0 0;
+        color: var(--galaxy-text-secondary);
+        font-size: var(--galaxy-type-body);
+        line-height: 1.45;
+      }
+
+      .knowledge-galaxy-loading-track {
+        overflow: hidden;
+        height: 0.625rem;
+        margin-top: var(--galaxy-space-lg);
+        border: 1px solid rgb(var(--galaxy-arm-cyan-rgb) / 0.28);
+        border-radius: 999px;
+        background: rgb(255 255 255 / 0.08);
+      }
+
+      .knowledge-galaxy-loading-bar {
+        width: calc(var(--knowledge-galaxy-progress, 0) * 1%);
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--galaxy-arm-cyan), var(--galaxy-center-core));
+        box-shadow: 0 0 1.5rem rgb(var(--galaxy-arm-cyan-rgb) / 0.48);
+        transition: width 220ms ease;
+      }
+
+      @media (max-width: 48rem) {
+        .knowledge-galaxy-status,
+        .knowledge-galaxy-focus-readout {
+          width: var(--galaxy-panel-width);
+        }
+
+        .knowledge-galaxy-overview {
+          top: auto;
+          right: var(--galaxy-space-lg);
+          bottom: var(--galaxy-space-lg);
+        }
+
+        .knowledge-galaxy-flight {
+          top: auto;
+          right: var(--galaxy-space-lg);
+          bottom: calc(var(--galaxy-space-lg) + var(--galaxy-control-size) + var(--galaxy-space-sm));
+        }
+
+        .knowledge-galaxy-focus-readout {
+          bottom: calc(var(--galaxy-space-lg) + var(--galaxy-control-size) * 2 + var(--galaxy-space-sm) + var(--galaxy-space-md));
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="/knowledge-galaxy-system/assets/.scratch/knowledge-galaxy-system/index-D2izT_G0.js"></script>
+  </head>
+  <body>
+    <main class="knowledge-galaxy-stage" data-knowledge-galaxy-shell="true" data-knowledge-galaxy-ready="false" aria-label="Knowledge Galaxy 3D observatory">
+      <div class="knowledge-galaxy-canvas-host" data-knowledge-galaxy-stage="true" aria-hidden="true"></div>
+      <section class="knowledge-galaxy-loading" data-knowledge-galaxy-loading="true" aria-label="Knowledge Galaxy loading progress" aria-live="polite">
+        <div class="knowledge-galaxy-loading-card">
+          <p class="knowledge-galaxy-kicker">Milky Way observatory</p>
+          <h2>Loading live codex galaxy</h2>
+          <p data-knowledge-galaxy-loading-message="true">Reading live memory systems.</p>
+          <div class="knowledge-galaxy-loading-track">
+            <div class="knowledge-galaxy-loading-bar" data-knowledge-galaxy-loading-progress="true" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+          </div>
+        </div>
+      </section>
+      <section class="knowledge-galaxy-status" data-knowledge-galaxy-status="loading" aria-label="Knowledge Galaxy route status" aria-live="polite">
+        <p class="knowledge-galaxy-kicker">Milky Way observatory</p>
+        <h1>Knowledge Galaxy System</h1>
+        <p data-knowledge-galaxy-status-message="true">Loading live codex galaxy.</p>
+      </section>
+      <button class="knowledge-galaxy-overview" type="button" data-knowledge-galaxy-overview="true" aria-label="Return to galaxy overview">
+        <span class="knowledge-galaxy-viewfinder" aria-hidden="true"></span>
+        <span>Overview</span>
+      </button>
+      <button class="knowledge-galaxy-flight" type="button" data-knowledge-galaxy-flight="true" aria-label="Enter flight view" aria-pressed="false">Fly</button>
+      <p class="knowledge-galaxy-focus-readout" data-knowledge-galaxy-focus-readout="true">View: Overview</p>
+      <section class="knowledge-galaxy-gesture-panel" aria-label="Gesture control">
+        <div class="knowledge-galaxy-gesture-preview" aria-hidden="true">
+          <video data-knowledge-solar-gesture-camera-preview="true" playsinline muted></video>
+          <canvas data-knowledge-solar-gesture-landmark-overlay="true"></canvas>
+        </div>
+        <button type="button" class="knowledge-galaxy-gesture-toggle" data-knowledge-solar-gesture-control-start="true">
+          Start gesture control
+        </button>
+        <p data-knowledge-solar-gesture-control-status="true">Idle. Camera is off.</p>
+      </section>
+    </main>
+    <script>
+      window.__knowledgeSolarViewerBasePath = new URLSearchParams(window.location.search).get("viewerBase") ?? "/memory-viewer";
+    </script>
+  </body>
+</html>

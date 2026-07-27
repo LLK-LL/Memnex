@@ -5,6 +5,46 @@ package and CLI name `total-agent-memory` remains for compatibility.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and versions use [Semantic Versioning](https://semver.org/).
 
+## [12.7.0] - 2026-07-27 - Recall engine and Knowledge Galaxy 3D
+
+### Added
+- Knowledge Galaxy 3D route under
+  `src/tools/memory_graph_viewer_assets/knowledge-galaxy-system/`, with
+  graph-derived galaxies, systems, planets, satellites, observatory mode,
+  fly-through mode, and gesture-control chrome.
+- `scripts/migrate_embeddings_v127.py` for idempotent MiniLM 384d to Jina
+  768d migration across active `embeddings`, stored
+  `knowledge_representations`, and CJK trigram FTS.
+- Package data now includes viewer HTML, CSS, JavaScript, images, and WebGL
+  assets so the visual workspace ships with installed packages.
+- New release guide and real UI screenshots under `docs/assets/`.
+
+### Changed
+- Default FastEmbed text model is now
+  `jinaai/jina-embeddings-v2-base-zh` with a 768-dimensional vector space.
+- Fast mode enables reranking by default through the local
+  `fastembed-ce` backend instead of a torch/LLM-dependent reranker.
+- Multi-representation search scores the full deterministic candidate set and
+  exposes winning representation cosine evidence to the recall scorer.
+- Memory Galaxy launchers validate the current 3D Galaxy/Solar routes, viewer
+  bundles, gesture worker assets, and graph API before opening the browser.
+
+### Fixed
+- Representation queue draining now repairs stale `processing`, obsolete
+  `failed`, inconsistent `done`, and missing raw representation rows before
+  claiming new work.
+- Recall relevance gating now treats semantic evidence, graph expansion rows,
+  episode expansion rows, and reranked scores consistently after fusion.
+- FastEmbed provider initialization tolerates versions that do not accept
+  `cache_dir`.
+
+### Privacy
+- Release screenshots are captured from the real local viewer but do not include
+  live database files, WAL/SHM files, transcripts, logs, tokens, or exported
+  private graph JSON.
+- The embedding migration reuses existing stored representation text and does
+  not call an LLM to regenerate private summaries.
+
 ## [12.6.0] - 2026-07-16 - Visual memory workspace and recall-chain hardening
 
 ### Added

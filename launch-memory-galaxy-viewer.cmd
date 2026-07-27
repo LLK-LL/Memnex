@@ -12,5 +12,6 @@ if not exist "%VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1" (
 
 cd /d "%VIEWER_ROOT%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%VIEWER_ROOT%scripts\launch-memory-galaxy-viewer.ps1"
+set "LAUNCH_EXIT=%ERRORLEVEL%"
 
-endlocal
+endlocal & exit /b %LAUNCH_EXIT%

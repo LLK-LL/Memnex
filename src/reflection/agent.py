@@ -71,6 +71,7 @@ class ReflectionAgent:
         self.digest = DigestPhase(db)
         self.synthesize = SynthesizePhase(db)
         self._injected_embedder = embedder
+        self._embed_model_name: str | None = None
 
     async def run(self, scope: str = "full") -> dict:
         """
@@ -289,6 +290,9 @@ class ReflectionAgent:
 
         q = RepresentationsQueue(self.db)
         q.reclaim_stale()
+        q.prune_obsolete_failed()
+        q.repair_inconsistent_done()
+        q.repair_missing_raw()
         if q.stats().get("pending", 0) == 0:
             return {"processed": 0, "failed": 0, "skipped": 0}
 
@@ -300,7 +304,7 @@ class ReflectionAgent:
             return q.process_pending(
                 generator=lambda content, project=None: generate_representations(content, project),
                 embedder=embedder,
-                model_name="auto",
+                model_name=self._embed_model_name or "auto",
                 limit=limit,
             )
         except Exception as e:  # noqa: BLE001
@@ -318,6 +322,11 @@ class ReflectionAgent:
             import server as _srv
 
             store = _srv.Store()
+            resolver = getattr(store, "_active_embed_model_name", None)
+            if callable(resolver):
+                self._embed_model_name = resolver() or None
+            if not self._embed_model_name:
+                self._embed_model_name = getattr(store, "_embed_mode", None) or "auto"
             def embed(text: str) -> list[float]:
                 embs = store.embed([text])
                 return embs[0] if embs else []
